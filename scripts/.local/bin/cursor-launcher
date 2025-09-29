@@ -7,5 +7,10 @@ if ! command -v cursor &> /dev/null; then
     exit 1
 fi
 
+# Load API keys if requested
+if [[ -n "${LOAD_API_KEYS:-}" ]] && [[ -f "$HOME/.local/bin/load-api-keys.sh" ]]; then
+    source "$HOME/.local/bin/load-api-keys.sh"
+fi
+
 # Launch with arguments
 exec cursor "$@"
