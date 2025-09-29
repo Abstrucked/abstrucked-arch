@@ -1,36 +1,31 @@
--- since this is just an example spec, don't actually load anything here and return an empty spec
 -- stylua: ignore
- if true then return {} end
+
+-- every spec file under the "plugins" directory will be loaded automatically by lazy.nvim
 --
--- -- every spec file under the "plugins" directory will be loaded automatically by lazy.nvim
--- --
--- -- In your plugin files, you can:
--- -- * add extra plugins
--- -- * disable/enabled LazyVim plugins
--- -- * override the configuration of LazyVim plugins
--- return {
---   -- THEMES --
---   { "rockerBOO/boo-colorscheme-nvim" },
---   -- add gruvbox
---   { "ellisonleao/gruvbox.nvim" },
---   -- add night-owl
---   { "oxfist/night-owl.nvim" },
---   -- add modus-themes
---   { "miikanissi/modus-themes.nvim" },
---   -- add poimandres
---   { "olivercederborg/poimandres.nvim" },
---   -- add cyberdream
---   { "scottmckendry/cyberdream.nvim" },
---   -- Configure LazyVim to load a different theme
---   --[[
---   {
---     "LazyVim/LazyVim",
---     opts = {
---       colorscheme = "poimandres",
---     },
---   },
--- --]]
---   -- END THEMES --
+-- In your plugin files, you can:
+-- * add extra plugins
+-- * disable/enabled LazyVim plugins
+-- * override the configuration of LazyVim plugins
+return {
+  -- THEMES --
+  {
+    "catppuccin/nvim",
+    name = "catppuccin",
+    priority = 1000,
+    config = function()
+      vim.g.catppuccin_flavour = os.getenv("THEME_FLAVOUR") or "mocha"
+      require("catppuccin").setup()
+      vim.cmd.colorscheme("catppuccin")
+    end,
+  },
+  -- Configure LazyVim to load catppuccin
+  {
+    "LazyVim/LazyVim",
+    opts = {
+      colorscheme = "catppuccin",
+    },
+  },
+  -- END THEMES --
 --
 --   { "akinsho/toggleterm.nvim", version = "*", config = true },
 --   -- change trouble config
