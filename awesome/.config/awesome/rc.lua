@@ -15,49 +15,11 @@ require("awful.autofocus")
 local wibox = require("wibox")
 local beautiful = require("beautiful")
 local naughty = require("naughty")
-
--- Optional: disable LGI-based widgets for testing if you suspect GLib2/LGI issues
--- You can enable by setting environment variable AWESOME_DISABLE_LGI=1 before starting Awesome.
-local disable_lgi = (os.getenv("AWESOME_DISABLE_LGI") == "1")
-
-local function startup_diag()
-	-- Lightweight startup diagnostics for triaging GLib2/LGI/Awesome issues
-
-	local function safe_run(cmd)
-		local f = io.popen(cmd)
-		if f then
-			local out = f:read("*a")
-			f:close()
-			-- Fix: properly strip trailing newlines
-			return (out or ""):gsub("\n+$", "")
-		end
-		return "N/A"
-	end
-
-	local glib2_ver = safe_run("pacman -Q glib2 2>/dev/null || true")
-	local gi_ver = safe_run("pacman -Q gobject-introspection 2>/dev/null || true")
-	local lua_ver = _G._LOADED and (package.loaded and package.loaded["lua"] or _VERSION) or _VERSION
-	local lgi_load = safe_run("lua -e 'print(require(\"lgi\"))' 2>&1 | head -n 1 2>/dev/null || true")
-
-	naughty.notify({
-		preset = naughty.config.presets.normal,
-		title = "Startup Diagnostics",
-		text = string.format(
-			"glib2: %s | gobject-introspection: %s | Lua: %s | Awesome: %s | LGI: %s",
-			glib2_ver or "unknown",
-			gi_ver or "unknown",
-			lua_ver or _VERSION,
-			(awesome and awesome.version) or "unknown",
-			lgi_load or "not loaded"
-		),
-	})
-end
-
 local lain = require("lain")
 local menubar = require("menubar")
 local freedesktop = require("freedesktop")
 --local run_shell = require("awesome-wm-widgets.run_shell-3.run_shell")
-local run_shell = (disable_lgi == true) and nil or require("awesome-wm-widgets.run-shell-3.run-shell")
+local run_shell = require("awesome-wm-widgets.run-shell-3.run-shell")
 local logout = require("awesome-wm-widgets.logout-widget.logout")
 local hotkeys_popup = require("awful.hotkeys_popup").widget
 require("awful.hotkeys_popup.keys")
@@ -94,32 +56,27 @@ do
 		in_error = false
 	end)
 end
-
-if not disable_lgi then
-	startup_diag()
-end
-
 -- }}}
 
 -- {{{ Autostart windowless processes
 
 -- This function will run once every time Awesome is started
--- local function run_once(cmd_arr)
--- 	for _, cmd in ipairs(cmd_arr) do
--- 		awful.spawn.with_shell(string.format("pgrep -u $USER -fx '%s' > /dev/null || (%s)", cmd, cmd))
--- 	end
--- end
+local function run_once(cmd_arr)
+	for _, cmd in ipairs(cmd_arr) do
+		awful.spawn.with_shell(string.format("pgrep -u $USER -fx '%s' > /dev/null || (%s)", cmd, cmd))
+	end
+end
 
 -- run_once({ "=alacritty", "unclutter -root" }) -- entries must be separated by commas
 
 -- This function implements the XDG autostart specification
---
--- awful.spawn.with_shell(
--- 	'if (xrdb -query | grep -q "^awesome\\.started:\\s*true$"); then exit; fi;'
--- 		.. 'xrdb -merge <<< "awesome.started:true";'
--- 		-- list each of your autostart commands, followed by ; inside single quotes, followed by ..
--- 		.. 'dex --environment Awesome --autostart --search-paths "$XDG_CONFIG_DIRS/autostart:$XDG_CONFIG_HOME/autostart"' -- https://github.com/jceb/dex
--- )
+
+awful.spawn.with_shell(
+	'if (xrdb -query | grep -q "^awesome\\.started:\\s*true$"); then exit; fi;'
+		.. 'xrdb -merge <<< "awesome.started:true";'
+		-- list each of your autostart commands, followed by ; inside single quotes, followed by ..
+		.. 'dex --environment Awesome --autostart --search-paths "$XDG_CONFIG_DIRS/autostart:$XDG_CONFIG_HOME/autostart"' -- https://github.com/jceb/dex
+)
 
 -- }}}
 
@@ -132,13 +89,13 @@ local themes = {
 	"holo", -- 4
 	"multicolor", -- 5
 	"powerarrow", -- 6
-	"arch", -- 7
+	"powerarrow-dark", -- 7
 	"rainbow", -- 8
 	"steamburn", -- 9
 	"mxh", -- 10
 }
 
-local chosen_theme = themes[7]
+local chosen_theme = themes[6]
 local modkey = "Mod4"
 local altkey = "Mod1"
 local terminal = "alacritty"
@@ -617,19 +574,32 @@ globalkeys = my_table.join(
 	end, { description = "run gui editor", group = "launcher" }),
 	awful.key({ modkey, "Shift" }, "w", function()
 		awful.spawn(ide)
-	end, { description = "run Webstorm", group = "launcher" }),
+	end, { dewscription = "run Webstorm", group = "launcher" }),
 	-- Default
 	--[[ Menubar
     -- awful.key({ modkey }, "p", function() menubar.show() end,
     --          {description = "show the menubar", group = "launcher"}),
     --]]
-
+	--[[ dmenu
+    awful.key({ modkey }, "x", function ()
+            os.execute(string.format("dmenu_run -i -fn 'Monospace' -nb '%s' -nf '%s' -sb '%s' -sf '%s'",
+            beautiful.bg_normal, beautiful.fg_normal, beautiful.bg_focus, beautiful.fg_focus))
+        end,
+        {description = "show dmenu", group = "launcher"}),
+    --]]
+	-- alternatively use rofi, a dmenu-like application with more features
+	-- check https://github.com/DaveDavenport/rofi for more details
 	-- rofi
 	awful.key({ modkey }, "x", function()
 		os.execute(
-			"rofi -combi-modi window,drun,ssh -theme Arc-Dark -font 'hack 10' -show combi -icon-theme 'Papirus' -show-icons"
+			string.format(
+				"rofi -combi-modi window,drun,ssh -theme Arc-Dark -font 'hack 10' -show combi -icon-theme 'Papirus' -show-icons",
+				"run",
+				"dmenu"
+			)
 		)
 	end, { description = "show rofi", group = "launcher" }),
+	--]]
 	-- Prompt
 	--awful.key({ modkey }, "r", function () awful.screen.focused().mypromptbox:run() end,
 	awful.key({ modkey }, "r", function()

@@ -60,15 +60,92 @@ echo -e "${YELLOW}Setting up symlinks with GNU Stow...${NC}"
 stow_packages=("tmux" "awesome" "ssh" "alacritty" "btop" "nvim" "picom" "zsh" "pcmanfm" "scripts")
 
 for package in "${stow_packages[@]}"; do
-    if [[ -d "$DOTFILES_DIR/$package" ]]; then
-        echo -e "${BLUE}Stowing $package...${NC}"
-        stow -d "$DOTFILES_DIR" -t "$HOME" "$package"
-    else
-        echo -e "${YELLOW}Warning: $package directory not found, skipping...${NC}"
-    fi
-done
+     if [[ -d "$DOTFILES_DIR/$package" ]]; then
+         echo -e "${BLUE}Stowing $package...${NC}"
+         stow -d "$DOTFILES_DIR" -t "$HOME" "$package"
+     else
+         echo -e "${YELLOW}Warning: $package directory not found, skipping...${NC}"
+     fi
+ done
 
-# Handle ghossty if it exists
+ # Setup theme
+ echo -e "${YELLOW}Setting up theme...${NC}"
+ if [[ -f "$DOTFILES_DIR/themes/theme.sh" ]]; then
+     source "$DOTFILES_DIR/themes/theme.sh"
+     echo -e "${BLUE}Generating Alacritty theme.toml...${NC}"
+     cat > "$HOME/.config/alacritty/theme.toml" << EOF
+[colors.primary]
+background = "$PRIMARY_BACKGROUND"
+foreground = "$PRIMARY_FOREGROUND"
+dim_foreground = "$PRIMARY_DIM_FOREGROUND"
+bright_foreground = "$PRIMARY_BRIGHT_FOREGROUND"
+
+[colors.cursor]
+text = "$CURSOR_TEXT"
+cursor = "$CURSOR_CURSOR"
+
+[colors.vi_mode_cursor]
+text = "$VI_MODE_CURSOR_TEXT"
+cursor = "$VI_MODE_CURSOR_CURSOR"
+
+[colors.search.matches]
+foreground = "$SEARCH_MATCHES_FOREGROUND"
+background = "$SEARCH_MATCHES_BACKGROUND"
+
+[colors.search.focused_match]
+foreground = "$SEARCH_FOCUSED_MATCH_FOREGROUND"
+background = "$SEARCH_FOCUSED_MATCH_BACKGROUND"
+
+[colors.footer_bar]
+foreground = "$FOOTER_BAR_FOREGROUND"
+background = "$FOOTER_BAR_BACKGROUND"
+
+[colors.hints.start]
+foreground = "$HINTS_START_FOREGROUND"
+background = "$HINTS_START_BACKGROUND"
+
+[colors.hints.end]
+foreground = "$HINTS_END_FOREGROUND"
+background = "$HINTS_END_BACKGROUND"
+
+[colors.selection]
+text = "$SELECTION_TEXT"
+background = "$SELECTION_BACKGROUND"
+
+[colors.normal]
+black = "$NORMAL_BLACK"
+red = "$NORMAL_RED"
+green = "$NORMAL_GREEN"
+yellow = "$NORMAL_YELLOW"
+blue = "$NORMAL_BLUE"
+magenta = "$NORMAL_MAGENTA"
+cyan = "$NORMAL_CYAN"
+white = "$NORMAL_WHITE"
+
+[colors.bright]
+black = "$BRIGHT_BLACK"
+red = "$BRIGHT_RED"
+green = "$BRIGHT_GREEN"
+yellow = "$BRIGHT_YELLOW"
+blue = "$BRIGHT_BLUE"
+magenta = "$BRIGHT_MAGENTA"
+cyan = "$BRIGHT_CYAN"
+white = "$BRIGHT_WHITE"
+
+[[colors.indexed_colors]]
+index = 16
+color = "$INDEXED_16"
+
+[[colors.indexed_colors]]
+index = 17
+color = "$INDEXED_17"
+EOF
+     echo -e "${GREEN}✓ Theme setup complete${NC}"
+ else
+     echo -e "${YELLOW}Warning: Theme setup script not found${NC}"
+ fi
+
+ # Handle ghossty if it exists
 if [[ -d "$DOTFILES_DIR/ghossty" ]]; then
     echo -e "${BLUE}Stowing ghossty...${NC}"
     stow -d "$DOTFILES_DIR" -t "$HOME" "ghossty"
