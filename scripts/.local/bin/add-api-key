@@ -1,0 +1,132 @@
+#!/bin/bash
+# add-api-key - Add a new API key interactively
+
+set -euo pipefail
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+# Paths
+LOAD_KEYS_SCRIPT="${LOAD_KEYS_SCRIPT:-$HOME/.local/bin/load-api-keys.sh}"
+
+check_dependencies() {
+    echo -e "${YELLOW}Checking dependencies...${NC}"
+
+    if ! command -v pass &> /dev/null; then
+        echo -e "${YELLOW}Installing pass...${NC}"
+        sudo pacman -S --noconfirm pass
+    fi
+
+    if ! command -v gpg &> /dev/null; then
+        echo -e "${YELLOW}Installing gnupg...${NC}"
+        sudo pacman -S --noconfirm gnupg
+    fi
+
+    echo -e "${GREEN}✓ Dependencies OK${NC}"
+    echo ""
+}
+
+setup_gpg_if_needed() {
+    echo -e "${YELLOW}Checking GPG setup for pass...${NC}"
+
+    if [[ -f "$HOME/.password-store/.gpg-id" ]]; then
+        echo -e "${GREEN}✓ GPG already configured for pass${NC}"
+        return
+    fi
+
+    echo -e "${RED}GPG not configured for pass. Run setup-api-keys first.${NC}"
+    exit 1
+}
+
+generate_var_name() {
+    local service="$1"
+    # Uppercase, replace spaces/hyphens with underscores, append _API_KEY
+    local var_name
+    var_name=$(echo "$service" | tr '[:lower:]' '[:upper:]' | sed 's/[- ]/_/g')
+    echo "${var_name}_API_KEY"
+}
+
+ensure_load_keys_script() {
+    if [[ ! -f "$LOAD_KEYS_SCRIPT" ]]; then
+        echo -e "${YELLOW}Creating $LOAD_KEYS_SCRIPT...${NC}"
+        cat > "$LOAD_KEYS_SCRIPT" << 'EOF'
+#!/bin/bash
+# Load API keys from pass
+
+# Add your API key exports here
+# Example: export OPENROUTER_API_KEY=$(pass ai/openrouter_api_key)
+EOF
+        chmod +x "$LOAD_KEYS_SCRIPT"
+        echo -e "${GREEN}✓ Created $LOAD_KEYS_SCRIPT${NC}"
+    fi
+}
+
+add_to_load_keys_script() {
+    local var_name="$1"
+    local pass_path="$2"
+
+    echo "export ${var_name}=\$(pass ${pass_path})" >> "$LOAD_KEYS_SCRIPT"
+    echo -e "${GREEN}✓ Added export to $LOAD_KEYS_SCRIPT${NC}"
+}
+
+insert_key() {
+    local pass_path="$1"
+
+    if pass ls "$pass_path" &> /dev/null; then
+        echo -e "${YELLOW}Key $pass_path already exists. Skipping insertion.${NC}"
+        return
+    fi
+
+    echo -e "${BLUE}Enter the API key value for $pass_path (input hidden):${NC}"
+    read -r -s value
+    echo ""
+
+    if [[ -z "$value" ]]; then
+        echo -e "${RED}Empty value. Skipping.${NC}"
+        return
+    fi
+
+    echo "$value" | pass insert --echo "$pass_path"
+    echo -e "${GREEN}✓ Inserted key into pass${NC}"
+}
+
+main() {
+    echo -e "${BLUE}➕ Add API Key${NC}"
+    echo -e "${BLUE}=============${NC}"
+    echo ""
+
+    check_dependencies
+    setup_gpg_if_needed
+
+    read -r -p "Enter API key category/prefix (e.g., ai, web3): " prefix
+    read -r -p "Enter service name (e.g., openrouter): " service
+
+    local var_name
+    var_name=$(generate_var_name "$service")
+    local pass_path="${prefix}/${service}"
+
+    echo ""
+    echo -e "${BLUE}Summary:${NC}"
+    echo -e "  Variable: ${GREEN}${var_name}${NC}"
+    echo -e "  Pass Path: ${GREEN}${pass_path}${NC}"
+    echo ""
+
+    read -r -p "Proceed? (y/N): " confirm
+    if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+        echo "Cancelled."
+        exit 0
+    fi
+
+    ensure_load_keys_script
+    add_to_load_keys_script "$var_name" "$pass_path"
+    insert_key "$pass_path"
+
+    echo ""
+    echo -e "${GREEN}🎉 API key added! Run 'source $LOAD_KEYS_SCRIPT' to load.${NC}"
+}
+
+main "$@"
