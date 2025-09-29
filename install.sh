@@ -150,9 +150,34 @@ EOF
  if [[ -d "$DOTFILES_DIR/backgrounds" ]]; then
      ln -sf "$DOTFILES_DIR/backgrounds" "$HOME/.backgrounds"
      echo -e "${GREEN}✓ Backgrounds linked to ~/.backgrounds${NC}"
- else
+  else
      echo -e "${YELLOW}Warning: Backgrounds directory not found${NC}"
  fi
+
+ # Generate Tmux theme
+ echo -e "${BLUE}Generating Tmux theme configuration...${NC}"
+ mkdir -p "$HOME/.config/tmux"
+ cat > "$HOME/.config/tmux/theme.conf" << EOF
+# Tmux theme colors from $THEME
+set -g status-bg "colour$PRIMARY_BACKGROUND"
+set -g status-fg "colour$PRIMARY_FOREGROUND"
+set -g status-left-bg "colour$PRIMARY_BACKGROUND"
+set -g status-left-fg "colour$BRIGHT_BLUE"
+set -g status-right-bg "colour$PRIMARY_BACKGROUND"
+set -g status-right-fg "colour$BRIGHT_BLUE"
+
+set -g pane-border-fg "colour$NORMAL_BLACK"
+set -g pane-active-border-fg "colour$NORMAL_BLUE"
+
+set -g window-status-current-bg "colour$BRIGHT_BLUE"
+set -g window-status-current-fg "colour$PRIMARY_BACKGROUND"
+set -g window-status-bg "colour$PRIMARY_BACKGROUND"
+set -g window-status-fg "colour$PRIMARY_FOREGROUND"
+
+set -g message-bg "colour$BRIGHT_YELLOW"
+set -g message-fg "colour$PRIMARY_BACKGROUND"
+EOF
+ echo -e "${GREEN}✓ Tmux theme generated${NC}"
 
  # Handle ghossty if it exists
 if [[ -d "$DOTFILES_DIR/ghossty" ]]; then
