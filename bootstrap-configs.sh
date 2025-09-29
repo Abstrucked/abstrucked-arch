@@ -22,7 +22,6 @@ declare -A CONFIG_MAPPINGS=(
     ["picom"]="picom/.config/picom"
     ["pcmanfm"]="pcmanfm/.config/pcmanfm"
     ["brave"]="brave/.config/BraveSoftware/Brave-Browser"
-    ["discord"]="discord/.config/discord"
     ["obs-studio"]="obs-studio/.config/obs-studio"
     ["qbittorrent"]="qbittorrent/.config/qBittorrent"
     ["vlc"]="vlc/.config/vlc"
