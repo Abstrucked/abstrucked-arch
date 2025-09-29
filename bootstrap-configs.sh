@@ -118,7 +118,7 @@ check_requirements() {
 }
 
 scan_configs() {
-    echo -e "${YELLOW}🔍 Scanning for existing configurations...${NC}"
+    echo -e "${YELLOW}🔍 Scanning for existing configurations...${NC}" >&2
 
     local found_configs=()
 
@@ -126,7 +126,7 @@ scan_configs() {
     if [[ -d "$HOME/.config" ]]; then
         for config in "${!CONFIG_MAPPINGS[@]}"; do
             if [[ -d "$HOME/.config/$config" ]]; then
-                echo -e "${CYAN}📁 Found: $config (~/.config/$config/)${NC}"
+                echo -e "${CYAN}📁 Found: $config (~/.config/$config/)${NC}" >&2
                 found_configs+=("$config:config")
             fi
         done
@@ -135,27 +135,27 @@ scan_configs() {
     # Check home directory dotfiles
     for dotfile in "${!HOME_MAPPINGS[@]}"; do
         if [[ -f "$HOME/$dotfile" ]]; then
-            echo -e "${CYAN}📄 Found: ${dotfile#.} (~/$dotfile)${NC}"
+            echo -e "${CYAN}📄 Found: ${dotfile#.} (~/$dotfile)${NC}" >&2
             found_configs+=("${dotfile}:home")
         fi
     done
 
     # Check SSH config
     if [[ -f "$SSH_CONFIG_SOURCE" ]]; then
-        echo -e "${CYAN}🔐 Found: SSH config (~/.ssh/config)${NC}"
+        echo -e "${CYAN}🔐 Found: SSH config (~/.ssh/config)${NC}" >&2
         found_configs+=("ssh:ssh")
     fi
 
     if [[ ${#found_configs[@]} -eq 0 ]]; then
-        echo -e "${YELLOW}No existing configurations found to copy.${NC}"
-        echo -e "${YELLOW}You can still manually create configurations in the dotfiles directories.${NC}"
+        echo -e "${YELLOW}No existing configurations found to copy.${NC}" >&2
+        echo -e "${YELLOW}You can still manually create configurations in the dotfiles directories.${NC}" >&2
         exit 0
     fi
 
-    echo -e "${GREEN}Found ${#found_configs[@]} configuration(s) to potentially copy.${NC}"
-    echo ""
+    echo -e "${GREEN}Found ${#found_configs[@]} configuration(s) to potentially copy.${NC}" >&2
+    echo "" >&2
 
-    # Return found configs
+    # Return found configs (to stdout)
     echo "${found_configs[@]}"
 }
 
@@ -221,14 +221,22 @@ check_sensitive_content() {
         "*secret*"
         "*password*"
         "*token*"
-        "*api*"
+        "*api_key*"
+        "*api_secret*"
+        "*access_token*"
+        "*auth_token*"
         "auth.json"
         "credentials"
+        ".env"
+        ".env.local"
+        ".env.production"
         "*.gpg"
         "secring.gpg"
         "*.ovpn"
         "cookies.sqlite"
         "places.sqlite"
+        "keyring"
+        "keyrings"
     )
 
     if [[ -d "$source" ]]; then
@@ -287,11 +295,16 @@ prompt_user() {
             sensitive_files=$(get_sensitive_files "$source")
             echo -e "${RED}❌ Skipped: $config_name (contains sensitive files: ${sensitive_files[*]})${NC}"
             echo -e "${CYAN}💡 Suggestion: Handle sensitive files separately with encryption or exclude from dotfiles${NC}"
-            ((SKIPPED_SENSITIVE_COUNT++))
+            SKIPPED_SENSITIVE_COUNT=$((SKIPPED_SENSITIVE_COUNT + 1))
             return 2  # Special return code for sensitive skip
         else
             echo -e "${YELLOW}⚠️  FORCE: $config_name contains sensitive files but proceeding due to --force-sensitive${NC}"
         fi
+    fi
+
+    # In dry-run mode, just proceed
+    if [[ "$DRY_RUN" == "true" ]]; then
+        return 0
     fi
 
     if [[ "$AUTO_YES" == "true" ]]; then
@@ -329,7 +342,8 @@ process_configs() {
     echo -e "${YELLOW}🚀 Starting copy process...${NC}"
     echo ""
 
-    for config_entry in "${found_configs[@]}"; do
+    for ((i=0; i<${#found_configs[@]}; i++)); do
+        config_entry="${found_configs[i]}"
         IFS=':' read -r config_name config_type <<< "$config_entry"
 
         case "$config_type" in
@@ -363,17 +377,17 @@ process_configs() {
         local exit_code=$?
 
         if [[ $exit_code -eq 0 ]]; then
-            if copy_config "$source" "$dest" "$config_name"; then
-                ((COPIED_COUNT++))
-            else
-                ((SKIPPED_COUNT++))
-            fi
-        elif [[ $exit_code -eq 2 ]]; then
-            # Already handled sensitive skip in prompt_user
-            ((SKIPPED_COUNT++))
+        if copy_config "$source" "$dest" "$config_name"; then
+            COPIED_COUNT=$((COPIED_COUNT + 1))
         else
+            SKIPPED_COUNT=$((SKIPPED_COUNT + 1))
+        fi
+    elif [[ $exit_code -eq 2 ]]; then
+        # Already handled sensitive skip in prompt_user
+        SKIPPED_COUNT=$((SKIPPED_COUNT + 1))
+    else
             echo -e "${YELLOW}⏭️  Skipped $config_name${NC}"
-            ((SKIPPED_COUNT++))
+            SKIPPED_COUNT=$((SKIPPED_COUNT + 1))
         fi
     done
 }
@@ -435,8 +449,15 @@ main() {
 
     check_requirements
 
-    local found_configs
-    IFS=' ' read -r -a found_configs <<< "$(scan_configs)"
+    local found_configs_string
+    found_configs_string=$(scan_configs)
+
+    if [[ -z "$found_configs_string" ]]; then
+        exit 0
+    fi
+
+    # Convert string to array
+    IFS=' ' read -r -a found_configs <<< "$found_configs_string"
 
     if [[ ${#found_configs[@]} -eq 0 ]]; then
         exit 0
