@@ -145,6 +145,15 @@ EOF
      echo -e "${YELLOW}Warning: Theme setup script not found${NC}"
  fi
 
+ # Setup backgrounds
+ echo -e "${YELLOW}Setting up backgrounds...${NC}"
+ if [[ -d "$DOTFILES_DIR/backgrounds" ]]; then
+     ln -sf "$DOTFILES_DIR/backgrounds" "$HOME/.backgrounds"
+     echo -e "${GREEN}✓ Backgrounds linked to ~/.backgrounds${NC}"
+ else
+     echo -e "${YELLOW}Warning: Backgrounds directory not found${NC}"
+ fi
+
  # Handle ghossty if it exists
 if [[ -d "$DOTFILES_DIR/ghossty" ]]; then
     echo -e "${BLUE}Stowing ghossty...${NC}"
