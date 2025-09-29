@@ -33,6 +33,7 @@ declare -A HOME_MAPPINGS=(
     [".zshrc"]="zsh/.zshrc"
     [".p10k.zsh"]="zsh/.p10k.zsh"
     [".tmux.conf"]="tmux/.tmux.conf"
+    ["load-api-keys.sh"]="scripts/load-api-keys.sh"
 )
 
 # SSH config
@@ -146,6 +147,15 @@ scan_configs() {
         found_configs+=("ssh:ssh")
     fi
 
+    # Check ~/.local/bin for specific scripts
+    local specific_scripts=("tmux-sessionizer" "screenshot" "screenshot_1" "screenshot_2" "nvim-launcher")
+    for script in "${specific_scripts[@]}"; do
+        if [[ -f "$HOME/.local/bin/$script" ]]; then
+            echo -e "${CYAN}📄 Found: $script (~/.local/bin/$script)${NC}" >&2
+            found_configs+=("$script:bin")
+        fi
+    done
+
     if [[ ${#found_configs[@]} -eq 0 ]]; then
         echo -e "${YELLOW}No existing configurations found to copy.${NC}" >&2
         echo -e "${YELLOW}You can still manually create configurations in the dotfiles directories.${NC}" >&2
@@ -241,9 +251,15 @@ check_sensitive_content() {
 
     if [[ -d "$source" ]]; then
         for pattern in "${sensitive_patterns[@]}"; do
-            if find "$source" -name "$pattern" -type f 2>/dev/null | grep -q .; then
-                return 0  # Found sensitive content
-            fi
+            for sensitive_file in $(find "$source" -name "$pattern" -type f 2>/dev/null); do
+                # Check if the file contains safe export patterns
+                if grep -qE 'export [A-Z_]+_API_KEY=\$\(pass .*\)' "$sensitive_file"; then
+                    # Whitelist: Safe export pattern, skip flagging
+                    continue
+                fi
+                # Found sensitive content
+                return 0
+            done
         done
     fi
 
@@ -275,6 +291,11 @@ get_sensitive_files() {
     if [[ -d "$source" ]]; then
         for pattern in "${sensitive_patterns[@]}"; do
             while IFS= read -r -d '' file; do
+                # Check if the file contains safe export patterns
+                if grep -qE 'export [A-Z_]+_API_KEY=\$\(pass .*\)' "$file"; then
+                    # Whitelist: Safe export pattern, skip
+                    continue
+                fi
                 found_files+=("$(basename "$file")")
             done < <(find "$source" -name "$pattern" -type f -print0 2>/dev/null)
         done
@@ -358,6 +379,10 @@ process_configs() {
             "ssh")
                 local source="$SSH_CONFIG_SOURCE"
                 local dest="$SSH_CONFIG_DEST"
+                ;;
+            "bin")
+                local source="$HOME/.local/bin/$config_name"
+                local dest="scripts/.local/bin/$config_name"
                 ;;
             *)
                 echo -e "${RED}Unknown config type: $config_type${NC}"
