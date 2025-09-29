@@ -206,7 +206,7 @@ copy_config() {
     # Copy the configuration
     if [[ -d "$source" ]]; then
         echo -e "${YELLOW}Copying directory $source to $dest...${NC}"
-        cp -r "$source" "$dest"
+        rsync -a "$source/" "$dest/"
         echo -e "${GREEN}✓ Copied directory: $source → $dest${NC}"
     elif [[ -f "$source" ]]; then
         echo -e "${YELLOW}Copying file $source to $dest...${NC}"
