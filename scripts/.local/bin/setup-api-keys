@@ -1,0 +1,182 @@
+#!/bin/bash
+# setup-api-keys - Automate API key encryption with pass
+
+set -euo pipefail
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+# Paths
+LOAD_KEYS_SCRIPT="$HOME/.local/bin/load-api-keys.sh"
+PASSWORD_STORE="$HOME/.password-store"
+
+check_dependencies() {
+    echo -e "${YELLOW}Checking dependencies...${NC}"
+
+    # Check pass
+    if ! command -v pass &> /dev/null; then
+        echo -e "${YELLOW}Installing pass...${NC}"
+        sudo pacman -S --noconfirm pass
+    fi
+
+    # Check gpg
+    if ! command -v gpg &> /dev/null; then
+        echo -e "${YELLOW}Installing gnupg...${NC}"
+        sudo pacman -S --noconfirm gnupg
+    fi
+
+    echo -e "${GREEN}✓ Dependencies OK${NC}"
+    echo ""
+}
+
+setup_gpg() {
+    echo -e "${YELLOW}Checking GPG setup for pass...${NC}"
+
+    if [[ -f "$PASSWORD_STORE/.gpg-id" ]]; then
+        echo -e "${GREEN}✓ GPG already configured for pass${NC}"
+        return
+    fi
+
+    echo -e "${BLUE}GPG setup required for pass.${NC}"
+    read -r -p "Do you have an existing GPG key? (y/N): " has_key
+
+    if [[ "$has_key" =~ ^[Yy]$ ]]; then
+        read -r -p "Enter your GPG key ID or email: " key_id
+        if ! gpg --list-keys "$key_id" &> /dev/null; then
+            echo -e "${RED}Key not found. Please verify your key.${NC}"
+            exit 1
+        fi
+    else
+        echo -e "${BLUE}Creating a new GPG key...${NC}"
+        echo -e "${YELLOW}Follow the prompts. Use default options for simplicity.${NC}"
+        gpg --full-generate-key
+        key_id=$(gpg --list-secret-keys --keyid-format LONG | grep sec | head -1 | awk '{print $2}' | cut -d'/' -f2)
+        echo -e "${GREEN}Created key: $key_id${NC}"
+    fi
+
+    echo -e "${YELLOW}Initializing pass with GPG key...${NC}"
+    pass init "$key_id"
+    echo -e "${GREEN}✓ GPG setup complete${NC}"
+    echo ""
+}
+
+parse_load_keys_script() {
+    if [[ ! -f "$LOAD_KEYS_SCRIPT" ]]; then
+        echo -e "${RED}Error: $LOAD_KEYS_SCRIPT not found.${NC}"
+        echo -e "${YELLOW}Run bootstrap first to copy load-api-keys.sh${NC}"
+        exit 1
+    fi
+
+    local paths=()
+    while IFS= read -r line; do
+        if [[ "$line" =~ \$\(pass\ ([^)]+)\) ]]; then
+            paths+=("${BASH_REMATCH[1]}")
+        fi
+    done < "$LOAD_KEYS_SCRIPT"
+
+    # Remove duplicates
+    printf '%s\n' "${paths[@]}" | sort | uniq
+}
+
+select_keys() {
+    local all_paths=("$@")
+    local selected=()
+
+    echo -e "${BLUE}Available API keys:${NC}"
+    for i in "${!all_paths[@]}"; do
+        echo -e "${GREEN}$((i+1)))${NC} ${all_paths[$i]}"
+    done
+    echo ""
+
+    read -r -p "Select keys to set up (comma-separated numbers or 'all'): " selection
+    echo ""
+
+    if [[ "$selection" == "all" ]]; then
+        selected=("${all_paths[@]}")
+        echo -e "${YELLOW}You selected all keys. Please gather the actual key values now.${NC}"
+        echo -e "${YELLOW}Press Enter when ready to proceed.${NC}"
+        read -r
+    else
+        IFS=',' read -ra nums <<< "$selection"
+        for num in "${nums[@]}"; do
+            num=$(echo "$num" | xargs)
+            if (( num >= 1 && num <= ${#all_paths[@]} )); then
+                selected+=("${all_paths[$((num-1))]}")
+            else
+                echo -e "${RED}Invalid option: $num${NC}"
+                exit 1
+            fi
+        done
+    fi
+
+    printf '%s\n' "${selected[@]}"
+}
+
+insert_key() {
+    local path="$1"
+
+    if pass ls "$path" &> /dev/null; then
+        echo -e "${GREEN}Key $path already exists. Skipping.${NC}"
+        return
+    fi
+
+    echo -e "${BLUE}Ready to enter value for $path?${NC}"
+    read -r -p "Press Enter to continue (or 'skip' to skip): " ready
+
+    if [[ "$ready" == "skip" ]]; then
+        echo -e "${YELLOW}Skipped $path${NC}"
+        return
+    fi
+
+    echo -e "${YELLOW}Enter the value for $path (input hidden):${NC}"
+    read -r -s value
+    echo ""
+
+    if [[ -z "$value" ]]; then
+        echo -e "${RED}Empty value. Skipping.${NC}"
+        return
+    fi
+
+    echo "$value" | pass insert --echo "$path"
+    echo -e "${GREEN}✓ Inserted $path${NC}"
+}
+
+main() {
+    echo -e "${BLUE}🔐 API Keys Setup${NC}"
+    echo -e "${BLUE}=================${NC}"
+    echo ""
+
+    check_dependencies
+    setup_gpg
+
+    echo -e "${YELLOW}Parsing load-api-keys.sh...${NC}"
+    mapfile -t all_paths < <(parse_load_keys_script)
+
+    if [[ ${#all_paths[@]} -eq 0 ]]; then
+        echo -e "${RED}No API keys found in load-api-keys.sh${NC}"
+        exit 1
+    fi
+
+    mapfile -t selected_paths < <(select_keys "${all_paths[@]}")
+
+    if [[ ${#selected_paths[@]} -eq 0 ]]; then
+        echo -e "${RED}No keys selected.${NC}"
+        exit 1
+    fi
+
+    echo -e "${BLUE}Setting up ${#selected_paths[@]} key(s)...${NC}"
+    echo ""
+
+    for path in "${selected_paths[@]}"; do
+        insert_key "$path"
+    done
+
+    echo ""
+    echo -e "${GREEN}🎉 Setup complete! Test with 'pass ls' and 'source load-api-keys.sh'${NC}"
+}
+
+main "$@"

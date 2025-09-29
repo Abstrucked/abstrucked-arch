@@ -1,0 +1,11 @@
+#!/bin/bash
+# cursor-launcher - Launch Cursor IDE
+
+# Check if installed
+if ! command -v cursor &> /dev/null; then
+    echo "Cursor not installed. Run the ide-chooser script to install."
+    exit 1
+fi
+
+# Launch with arguments
+exec cursor "$@"

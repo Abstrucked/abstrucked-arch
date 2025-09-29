@@ -1,0 +1,144 @@
+#!/bin/bash
+# ide-chooser - Interactive IDE installer and setup
+
+set -euo pipefail
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+# IDE options
+declare -A ides=(
+    [1]="cursor:Cursor IDE:AUR:cursor"
+    [2]="zed:Zed Editor:AUR:zed"
+    [3]="opencode:OpenCode:AUR:opencode-bin"
+    [4]="claude-code:Claude Code:NPM:@anthropic/claude-code"
+    [5]="code:VS Code:Pacman:code"
+)
+
+print_header() {
+    echo -e "${BLUE}🚀 IDE Chooser - Install and Setup${NC}"
+    echo -e "${BLUE}=================================${NC}"
+    echo -e "${CYAN}Select IDEs to install/setup (comma-separated numbers or 'all'): ${NC}"
+    echo ""
+}
+
+print_menu() {
+    for i in "${!ides[@]}"; do
+        IFS=':' read -r name desc method package <<< "${ides[$i]}"
+        echo -e "${GREEN}$i)${NC} $name - $desc ($method)"
+    done
+    echo ""
+}
+
+parse_selection() {
+    local selection="$1"
+    local selected=()
+
+    if [[ "$selection" == "all" ]]; then
+        selected=("${!ides[@]}")
+    else
+        IFS=',' read -ra nums <<< "$selection"
+        for num in "${nums[@]}"; do
+            num=$(echo "$num" | xargs)  # Trim whitespace
+            if [[ -n "${ides[$num]:-}" ]]; then
+                selected+=("$num")
+            else
+                echo -e "${RED}Invalid option: $num${NC}"
+                exit 1
+            fi
+        done
+    fi
+
+    echo "${selected[@]}"
+}
+
+install_ide() {
+    local num="$1"
+    IFS=':' read -r name desc method package <<< "${ides[$num]}"
+
+    echo -e "${YELLOW}Installing $name...${NC}"
+
+    case "$method" in
+        "AUR")
+            if ! command -v yay &> /dev/null; then
+                echo -e "${RED}yay not installed. Please install yay first.${NC}"
+                return 1
+            fi
+            yay -S --noconfirm "$package"
+            ;;
+        "Pacman")
+            sudo pacman -S --noconfirm "$package"
+            ;;
+        "NPM")
+            if ! command -v npm &> /dev/null; then
+                echo -e "${RED}npm not installed. Please install Node.js first.${NC}"
+                return 1
+            fi
+            npm install -g "$package"
+            ;;
+        *)
+            echo -e "${RED}Unknown install method for $name${NC}"
+            return 1
+            ;;
+    esac
+
+    echo -e "${GREEN}✓ $name installed${NC}"
+}
+
+verify_launcher() {
+    local name="$1"
+    local launcher_path="$HOME/.local/bin/${name}-launcher"
+
+    if [[ -x "$launcher_path" ]]; then
+        echo -e "${GREEN}✓ Launcher ready: ${name}-launcher${NC}"
+    else
+        echo -e "${YELLOW}⚠️  Launcher not found: ${name}-launcher${NC}"
+    fi
+}
+
+main() {
+    print_header
+    print_menu
+
+    read -r -p "Enter selection: " selection
+    echo ""
+
+    selected=($(parse_selection "$selection"))
+
+    if [[ ${#selected[@]} -eq 0 ]]; then
+        echo -e "${RED}No valid selections.${NC}"
+        exit 1
+    fi
+
+    echo -e "${BLUE}Selected IDEs:${NC}"
+    for num in "${selected[@]}"; do
+        IFS=':' read -r name desc _ _ <<< "${ides[$num]}"
+        echo -e "  - $name"
+    done
+    echo ""
+
+    read -r -p "Proceed with installation? (y/N): " confirm
+    if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+        echo "Cancelled."
+        exit 0
+    fi
+
+    for num in "${selected[@]}"; do
+        IFS=':' read -r name _ _ _ <<< "${ides[$num]}"
+        if command -v "$name" &> /dev/null; then
+            echo -e "${GREEN}$name already installed${NC}"
+        else
+            install_ide "$num"
+        fi
+        verify_launcher "$name"
+        echo ""
+    done
+
+    echo -e "${GREEN}🎉 Setup complete! Run 'stow scripts' if launchers aren't symlinked.${NC}"
+}
+
+main "$@"
