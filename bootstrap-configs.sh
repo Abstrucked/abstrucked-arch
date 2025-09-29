@@ -389,6 +389,8 @@ process_configs() {
                 ;;
         esac
 
+        echo -e "${BLUE}📂 Starting to copy $config_name ($config_type) from $source to $dest${NC}"
+
         # Check if source exists
         if [[ ! -e "$source" ]]; then
             echo -e "${RED}✗ Source not found: $source${NC}"
