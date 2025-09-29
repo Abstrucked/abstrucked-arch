@@ -1,0 +1,180 @@
+# Alacritty Configuration
+
+# Window configuration
+window:
+  # Window dimensions (changes require restart)
+  dimensions:
+    columns: 80
+    lines: 24
+
+  # Window position (changes require restart)
+  position:
+    x: 0
+    y: 0
+
+  # Window padding (changes require restart)
+  padding:
+    x: 12
+    y: 12
+
+  # Spread additional padding evenly around the terminal content
+  dynamic_padding: false
+
+  # Window decorations
+  decorations: full
+
+  # Startup Mode (changes require restart)
+  startup_mode: Windowed
+
+  # Window title
+  title: Alacritty
+
+  # Allow terminal applications to change Alacritty's window title
+  dynamic_title: true
+
+  # Window class (Linux/BSD only)
+  class:
+    instance: Alacritty
+    general: Alacritty
+
+# Scrolling
+scrolling:
+  # Maximum number of lines in the scrollback buffer
+  history: 10000
+
+  # Number of lines the viewport will move for every mouse wheel step
+  multiplier: 3
+
+# Font configuration
+font:
+  # Normal (roman) font face
+  normal:
+    family: monospace
+    style: Regular
+
+  # Bold font face
+  bold:
+    family: monospace
+    style: Bold
+
+  # Italic font face
+  italic:
+    family: monospace
+    style: Italic
+
+  # Bold italic font face
+  bold_italic:
+    family: monospace
+    style: Bold Italic
+
+  # Point size
+  size: 11.0
+
+  # Offset is the extra space around each character
+  offset:
+    x: 0
+    y: 0
+
+  # Glyph offset determines the locations of the glyphs within their cells
+  glyph_offset:
+    x: 0
+    y: 0
+
+  # Thin stroke font rendering
+  use_thin_strokes: true
+
+# Colors (Dracula theme)
+colors:
+  # Default colors
+  primary:
+    background: '0x282a36'
+    foreground: '0xf8f8f2'
+
+  # Normal colors
+  normal:
+    black:   '0x000000'
+    red:     '0xff5555'
+    green:   '0x50fa7b'
+    yellow:  '0xf1fa8c'
+    blue:    '0xbd93f9'
+    magenta: '0xff79c6'
+    cyan:    '0x8be9fd'
+    white:   '0xbfbfbf'
+
+  # Bright colors
+  bright:
+    black:   '0x4d4d4d'
+    red:     '0xff6e67'
+    green:   '0x5af78e'
+    yellow:  '0xf4f99d'
+    blue:    '0xcaa9fa'
+    magenta: '0xff92d0'
+    cyan:    '0x9aedfe'
+    white:   '0xe6e6e6'
+
+# Bell
+bell:
+  # Visual bell animation
+  animation: EaseOutExpo
+
+  # Duration of the visual bell animation in milliseconds
+  duration: 0
+
+  # Visual bell color
+  color: '0xffffff'
+
+# Background opacity
+background_opacity: 1.0
+
+# Mouse bindings
+mouse:
+  # Click settings
+  double_click: { threshold: 300 }
+  triple_click: { threshold: 300 }
+
+  # Hide mouse cursor when typing
+  hide_when_typing: false
+
+# Selection
+selection:
+  # This string is used to save selected text to the clipboard
+  save_to_clipboard: false
+
+# Cursor
+cursor:
+  # Cursor style
+  style: Block
+
+  # Cursor blinking
+  unfocused_hollow: true
+
+# Live config reload (changes require restart)
+live_config_reload: true
+
+# Shell
+shell:
+  program: /bin/zsh
+  args:
+    - --login
+
+# Startup directory
+working_directory: None
+
+# Send ESC (\x1b) before characters when alt is pressed
+alt_send_esc: true
+
+# Key bindings
+key_bindings:
+  - { key: Paste,                       action: Paste                            }
+  - { key: Copy,                        action: Copy                             }
+  - { key: L,        mods: Control,      action: ClearLogNotice                  }
+  - { key: L,        mods: Control,      action: ClearHistory                    }
+  - { key: Home,     mods: Alt,          action: ScrollToTop                     }
+  - { key: End,      mods: Alt,          action: ScrollToBottom                  }
+  - { key: PageUp,   mods: Shift,        action: ScrollPageUp                    }
+  - { key: PageDown, mods: Shift,        action: ScrollPageDown                  }
+  - { key: Home,     mods: Shift,        action: ScrollToTop                     }
+  - { key: End,      mods: Shift,        action: ScrollToBottom                  }
+  - { key: PageUp,                      action: ScrollPageUp                    }
+  - { key: PageDown,                    action: ScrollPageDown                  }
+  - { key: Tab,      mods: Shift,        action: Escape,                         chars: "\x1b[Z" }

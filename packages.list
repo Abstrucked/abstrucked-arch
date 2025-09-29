@@ -1,0 +1,42 @@
+# Core system packages
+stow
+git
+base-devel
+
+# Terminal and shell
+zsh
+tmux
+alacritty
+
+# Window manager and desktop
+awesome
+picom
+pcmanfm
+
+# System monitoring
+btop
+
+# Text editors and dependencies
+neovim
+ripgrep
+fd
+lazygit
+
+# Password management
+pass
+gnupg
+
+# Fonts (add specific fonts as needed)
+ttf-dejavu
+ttf-liberation
+ttf-nerd-fonts-symbols
+
+# Development tools
+curl
+wget
+unzip
+nodejs
+npm
+
+# AUR packages (install with yay)
+# zsh-theme-powerlevel10k
