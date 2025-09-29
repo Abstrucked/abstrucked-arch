@@ -98,6 +98,13 @@ Choose between two popular Node.js version managers:
 
 ```
 dotfiles/
+├── themes/                  # Global theme system
+│   ├── theme.sh             # Theme selector and mappings
+│   ├── catppuccin-mocha.sh  # Mocha color definitions
+│   ├── catppuccin-latte.sh  # Latte color definitions
+│   ├── catppuccin-frappe.sh # Frappe color definitions
+│   └── catppuccin-macchiato.sh # Macchiato color definitions
+├── backgrounds/             # Wallpaper collection
 ├── tmux/                    # Tmux configuration
 ├── awesome/                 # AwesomeWM configuration
 │   └── .config/awesome/
@@ -184,8 +191,34 @@ If you prefer to install manually:
 Add executable scripts to `scripts/.local/bin/` and they'll be available system-wide.
 
 ### Themes and Wallpapers
+- **Global Theme System**: Centralized theming for Alacritty, Neovim, Tmux, and AwesomeWM backgrounds
 - AwesomeWM themes: `awesome/.config/awesome/themes/`
-- Wallpapers: `awesome/.config/awesome/backgrounds/`
+- Wallpapers: `backgrounds/` (linked to `~/.backgrounds`)
+
+#### Switching Themes
+The dotfiles include support for Catppuccin themes (Mocha, Latte, Frappe, Macchiato). To switch themes:
+
+1. Edit `zsh/.zshrc` and change the `THEME` variable:
+   ```bash
+   export THEME=catppuccin-latte  # Options: catppuccin-mocha, catppuccin-latte, catppuccin-frappe, catppuccin-macchiato
+   ```
+
+2. Re-run the installation script:
+   ```bash
+   ./install.sh
+   ```
+
+3. Restart your applications or reload your shell:
+   ```bash
+   source ~/.zshrc
+   tmux source ~/.tmux.conf
+   ```
+
+This will automatically update:
+- Alacritty colors (via generated `theme.toml`)
+- Neovim Catppuccin plugin flavor
+- Tmux status bar colors
+- AwesomeWM background directory
 
 ## 🔄 Updating
 
