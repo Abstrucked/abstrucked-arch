@@ -1,0 +1,7 @@
+#!/bin/sh
+
+timestamp="$(date +%Y%m%d%H%M%S)"
+targetbase="$HOME/screenshots"
+mkdir -p $targetbase
+[ -d $targetbase ] || exit 1
+scrot -a "3440,0,1920,1080" $targetbase/$timestamp.png 

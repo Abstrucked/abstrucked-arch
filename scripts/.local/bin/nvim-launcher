@@ -1,0 +1,4 @@
+#!/bin/bash
+
+source ~/load-api-keys.sh
+nvim
