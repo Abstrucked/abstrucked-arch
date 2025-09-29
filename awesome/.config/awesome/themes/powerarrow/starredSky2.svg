@@ -1,0 +1,118 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg">
+  width="1000"
+  height="1000"
+  viewBox="0 0 1000 1000"
+<rect width="1000" height="1000" fill="black"/>
+  <defs>
+ <radialGradient id="myRadialGradient" cx="50%" cy="50%" r="50%" fx="50%" fy="50%">
+      <stop offset="0%"   stop-color="red"/>
+      <stop offset="100%" stop-color="blue"/>
+    </radialGradient>
+   <radialGradient id="myRadialGradient2" cx="50%" cy="50%" r="50%" fx="50%" fy="50%">
+      <stop offset="0%"   stop-color="purple"/>
+      <stop offset="100%" stop-color="blue"/>
+    </radialGradient>
+<linearGradient id="myGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%"   stop-color="red"/>
+      <stop offset="75%" stop-color="#0000ff55"/>
+    </linearGradient>
+    <clipPath id="myClip">
+      <circle cx="500" cy="500" r="500"/>
+    </clipPath>
+    <filter id="blurFilter">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="250"/>
+    </filter>
+    <filter id="blurFilter2">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="5"/>
+    </filter>
+    <filter id="noise">
+       <feTurbulence
+        type="turbulence"
+        seed="1029293"
+        baseFrequency="0.0015"
+        result="turbulence">
+          <!-- <animate
+            attributeName="baseFrequency"
+            values="0.1;0.5;0.1"
+            dur="60s"
+            repeatCount="indefinite" 
+          /> -->
+      </feTurbulence>
+    </filter>
+  </defs>
+  <g is="layer1">
+    <filter id="stars">
+      <feTurbulence
+        type="turbulence"
+        seed="200"
+        baseFrequency="0.15"
+        result="turbulence">
+          <animate
+            attributeName="baseFrequency"
+            values="0.1;0.5;0.1"
+            dur="60s"
+            repeatCount="indefinite" 
+          />
+      </feTurbulence>
+      <feColorMatrix 
+        values="0 0 0 8.7 -4
+                0 0 0 8.5 -3.8
+                0 0 0 9 -4
+                0 0 0 0.1 1"
+      />   
+    </filter>
+    <rect id="sky" width="1000" height="1000" style="filter: url(#stars)" clip-path="url(#myClip)">
+      <animateTransform
+        attributeName="transform"
+        attributeType="XML"
+        type="rotate"
+        from="0 500 500"
+        to="360 500 500"
+        dur="60s"
+        repeatCount="indefinite" 
+      />
+    </rect>
+  </g>
+  <g id="layer2">
+    <animateTransform
+      attributeName="transform"
+      attributeType="XML"
+      type="rotate"
+      from="0 500 500"
+      to="360 500 500"
+      dur="6s"
+      repeatCount="indefinite" 
+	  />
+    <circle cx="450" cy="450" r="15" fill="url(#myRadialGradient)" filter="url(#blurFilter2)"/>
+    <circle cx="450" cy="450" r="5" fill="#ffffff"/>
+	</g> 
+  <g id="layer2">
+     <animateTransform
+      attributeName="transform"
+      attributeType="XML"
+      type="rotate"
+      from="0 500 500"
+      to="360 500 500"
+      dur="7s"
+      repeatCount="indefinite" 
+	  />
+    <circle cx="410" cy="410" r="20" fill="url(#myRadialGradient2)" filter="url(#blurFilter2)"/>
+    <circle cx="410" cy="410" r="5" fill="#ffffff"/>
+	</g> 
+  <g id="layer3">
+     <!-- <animateTransform
+      attributeName="transform"
+      attributeType="XML"
+      type="rotate"
+      from="0 500 500"
+      to="360 500 500"
+      dur="7s"
+      repeatCount="indefinite" 
+	  /> -->
+    <circle cx="500" cy="500" r="20" fill="url(#myRadialGradient2)" filter="url(#blurFilter2)"/>
+    <circle cx="500" cy="500" r="6" fill="#ffffff"/>
+	</g> 
+  <circle cx="500" cy="500" r="415" fill="url(#myGradient)" filter="url(#blurFilter)"/>
+  <!-- <circle cx="450" cy="450" r="450"  filter="url(#noise)"/> -->
+</svg>
