@@ -11,7 +11,7 @@ BLUE='\033[0;34m'
 NC='\033[0m'
 
 # Paths
-LOAD_KEYS_SCRIPT="$HOME/.local/bin/load-api-keys.sh"
+LOAD_KEYS_SCRIPT="${LOAD_KEYS_SCRIPT:-$HOME/.local/bin/load-api-keys.sh}"
 PASSWORD_STORE="$HOME/.password-store"
 
 check_dependencies() {
@@ -71,15 +71,8 @@ parse_load_keys_script() {
         exit 1
     fi
 
-    local paths=()
-    while IFS= read -r line; do
-        if [[ "$line" =~ \$\(pass\ ([^)]+)\) ]]; then
-            paths+=("${BASH_REMATCH[1]}")
-        fi
-    done < "$LOAD_KEYS_SCRIPT"
-
-    # Remove duplicates
-    printf '%s\n' "${paths[@]}" | sort | uniq
+    # Extract pass paths
+    grep -oP '\$\(pass \K[^)]+' "$LOAD_KEYS_SCRIPT" | sort | uniq
 }
 
 select_keys() {
@@ -154,7 +147,12 @@ main() {
     setup_gpg
 
     echo -e "${YELLOW}Parsing load-api-keys.sh...${NC}"
-    mapfile -t all_paths < <(parse_load_keys_script)
+    if [[ ! -f "$LOAD_KEYS_SCRIPT" ]]; then
+        echo -e "${RED}Error: $LOAD_KEYS_SCRIPT not found.${NC}"
+        echo -e "${YELLOW}Run bootstrap first to copy load-api-keys.sh${NC}"
+        exit 1
+    fi
+    all_paths=($(grep -oP '\$\(pass \K[^)]+' "$LOAD_KEYS_SCRIPT"))
 
     if [[ ${#all_paths[@]} -eq 0 ]]; then
         echo -e "${RED}No API keys found in load-api-keys.sh${NC}"
