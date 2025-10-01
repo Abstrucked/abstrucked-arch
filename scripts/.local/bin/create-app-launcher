@@ -11,39 +11,39 @@ NC='\033[0m' # No Color
 
 # Function to print colored output
 print_info() {
-    echo -e "${BLUE}INFO:${NC} $1"
+  echo -e "${BLUE}INFO:${NC} $1"
 }
 
 print_success() {
-    echo -e "${GREEN}SUCCESS:${NC} $1"
+  echo -e "${GREEN}SUCCESS:${NC} $1"
 }
 
 print_warning() {
-    echo -e "${YELLOW}WARNING:${NC} $1"
+  echo -e "${YELLOW}WARNING:${NC} $1"
 }
 
 print_error() {
-    echo -e "${RED}ERROR:${NC} $1"
+  echo -e "${RED}ERROR:${NC} $1"
 }
 
 # Check if running interactively
 if [[ ! -t 0 ]]; then
-    print_error "This script must be run interactively."
-    exit 1
+  print_error "This script must be run interactively."
+  exit 1
 fi
 
 # Prompt for program name
 read -p "Enter the program name (e.g., nvim, code, cursor): " program
 if [[ -z "$program" ]]; then
-    print_error "Program name cannot be empty."
-    exit 1
+  print_error "Program name cannot be empty."
+  exit 1
 fi
 
 # Prompt for category
 read -p "Enter the category (e.g., ai, dev): " category
 if [[ -z "$category" ]]; then
-    print_error "Category cannot be empty."
-    exit 1
+  print_error "Category cannot be empty."
+  exit 1
 fi
 
 # Define paths
@@ -54,7 +54,7 @@ zshrc_file="$HOME/dotfiles/zsh/.zshrc"
 
 # Create launcher script
 print_info "Creating launcher script: $launcher_file"
-cat > "$launcher_file" << EOF
+cat >"$launcher_file" <<EOF
 #!/bin/bash
 
 source ~/load-api-keys.sh
@@ -67,32 +67,33 @@ print_success "Launcher script created and made executable."
 # Create or update aliases file
 print_info "Adding alias to: $aliases_file"
 if [[ ! -f "$aliases_file" ]]; then
-    touch "$aliases_file"
-    print_info "Created new aliases file."
+  touch "$aliases_file"
+  print_info "Created new aliases file."
 fi
 
 # Check if alias already exists
 if grep -q "alias ${program}-${category}=" "$aliases_file"; then
-    print_warning "Alias ${program}-${category} already exists in aliases file."
+  print_warning "Alias ${program}-${category} already exists in aliases file."
 else
-    echo "alias ${program}-${category}=\"\$HOME/.local/bin/${program}-launcher\"" >> "$aliases_file"
-    print_success "Alias added to aliases file."
+  echo "alias ${program}-${category}=\"\$HOME/.local/bin/${program}-launcher\"" >>"$aliases_file"
+  print_success "Alias added to aliases file."
 fi
 
 # Ensure .zshrc sources the aliases file
 print_info "Checking if .zshrc sources the aliases file..."
 if ! grep -q "source.*aliases.zsh" "$zshrc_file"; then
-    print_info "Adding source line to .zshrc..."
-    # Find a good place to add it, perhaps after the existing aliases
-    # For now, add it at the end
-    echo "" >> "$zshrc_file"
-    echo "# Source custom aliases" >> "$zshrc_file"
-    echo "source ~/dotfiles/zsh/aliases.zsh" >> "$zshrc_file"
-    print_success "Source line added to .zshrc."
+  print_info "Adding source line to .zshrc..."
+  # Find a good place to add it, perhaps after the existing aliases
+  # For now, add it at the end
+  echo "" >>"$zshrc_file"
+  echo "# Source custom aliases" >>"$zshrc_file"
+  echo "source ~/dotfiles/zsh/aliases.zsh" >>"$zshrc_file"
+  print_success "Source line added to .zshrc."
 else
-    print_info ".zshrc already sources the aliases file."
+  print_info ".zshrc already sources the aliases file."
 fi
 
 print_success "App launcher setup complete!"
 print_info "You can now use the alias '${program}-${category}' to launch $program with API keys loaded."
 print_info "Run 'stow zsh' to symlink the updated .zshrc if needed."
+
