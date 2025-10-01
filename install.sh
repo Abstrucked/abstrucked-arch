@@ -53,6 +53,14 @@ else
     exit 1
 fi
 
+# Unstow existing packages to clean up symlinks
+for package in "${stow_packages[@]}"; do
+    if [[ -d "$DOTFILES_DIR/$package" ]]; then
+        echo -e "${BLUE}Unstowing $package...${NC}"
+        stow -d "$DOTFILES_DIR" -t "$HOME" -D "$package" 2>/dev/null || true
+    fi
+done
+
 # Remove existing .config directories for packages about to be stowed
 for package in "${stow_packages[@]}"; do
     if [[ -d "$DOTFILES_DIR/$package/.config" ]]; then
