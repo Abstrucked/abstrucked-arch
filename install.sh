@@ -42,12 +42,17 @@ if [[ -f "$DOTFILES_DIR/packages.list" ]]; then
         echo "$pacman_packages" | xargs sudo pacman -S --needed --noconfirm
     fi
 
-    # Install AUR packages with yay
-    aur_packages=$(grep 'zsh-theme-powerlevel10k' "$DOTFILES_DIR/packages.list" || true)
-    if [[ -n "$aur_packages" ]]; then
+# Install AUR packages with yay
+aur_packages=$(grep 'zsh-theme-powerlevel10k' "$DOTFILES_DIR/packages.list" || true)
+if [[ -n "$aur_packages" ]]; then
+    # Check if already installed
+    if pacman -Q zsh-theme-powerlevel10k >/dev/null 2>&1; then
+        echo -e "${YELLOW}zsh-theme-powerlevel10k is already installed, skipping...${NC}"
+    else
         echo -e "${BLUE}Installing AUR packages...${NC}"
         echo "$aur_packages" | xargs yay -S --noconfirm
     fi
+fi
 else
     echo -e "${RED}Error: packages.list not found in $DOTFILES_DIR${NC}"
     exit 1
