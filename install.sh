@@ -62,7 +62,7 @@ echo -e "${YELLOW}Initializing git submodules...${NC}"
 git submodule update --init --recursive
 
 # List of packages to stow (directories in dotfiles repo)
-stow_packages=("tmux" "awesome" "ssh" "alacritty" "btop" "nvim" "picom" "zsh" "pcmanfm" "scripts")
+stow_packages=("awesome" "ssh" "alacritty" "btop" "nvim" "picom" "zsh" "pcmanfm" "scripts")
 
 # Unstow existing packages to clean up symlinks
 for package in "${stow_packages[@]}"; do
@@ -184,6 +184,7 @@ EOF
   # Generate Tmux theme
   echo -e "${BLUE}Generating Tmux theme configuration...${NC}"
   mkdir -p "$HOME/.config/tmux"
+  ln -sf "$DOTFILES_DIR/config/tmux/tmux.conf" "$HOME/.config/tmux/tmux.conf"
   cat > "$HOME/.config/tmux/theme.conf" << EOF
 # Tmux theme colors from $THEME
 set -g status-bg black
@@ -205,6 +206,10 @@ set -g message-bg brightyellow
 set -g message-fg black
 EOF
   echo -e "${GREEN}✓ Tmux theme generated${NC}"
+
+  # Symlink tmux config
+  ln -sf "$HOME/.config/tmux/tmux.conf" "$HOME/.tmux.conf"
+  echo -e "${GREEN}✓ Tmux config symlinked${NC}"
 
   # Handle ghossty if it exists
  if [[ -d "$DOTFILES_DIR/ghossty" ]]; then
