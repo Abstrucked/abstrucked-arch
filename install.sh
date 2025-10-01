@@ -35,24 +35,12 @@ fi
 # Install packages
 echo -e "${YELLOW}Installing packages from packages.list...${NC}"
 if [[ -f "$DOTFILES_DIR/packages.list" ]]; then
-    # Install official packages with pacman
-    pacman_packages=$(grep -v '^#' "$DOTFILES_DIR/packages.list" | grep -v 'zsh-theme-powerlevel10k' || true)
-    if [[ -n "$pacman_packages" ]]; then
-        echo -e "${BLUE}Installing pacman packages...${NC}"
-        echo "$pacman_packages" | xargs sudo pacman -S --needed --noconfirm
+    # Install all packages with yay (handles both official and AUR)
+    all_packages=$(grep -v '^#' "$DOTFILES_DIR/packages.list" || true)
+    if [[ -n "$all_packages" ]]; then
+        echo -e "${BLUE}Installing packages with yay...${NC}"
+        echo "$all_packages" | xargs yay -S --needed --noconfirm
     fi
-
-# Install AUR packages with yay
-aur_packages=$(grep 'zsh-theme-powerlevel10k' "$DOTFILES_DIR/packages.list" || true)
-if [[ -n "$aur_packages" ]]; then
-    # Check if already installed
-    if pacman -Q zsh-theme-powerlevel10k >/dev/null 2>&1; then
-        echo -e "${YELLOW}zsh-theme-powerlevel10k is already installed, skipping...${NC}"
-    else
-        echo -e "${BLUE}Installing AUR packages...${NC}"
-        echo "$aur_packages" | xargs yay -S --noconfirm
-    fi
-fi
 else
     echo -e "${RED}Error: packages.list not found in $DOTFILES_DIR${NC}"
     exit 1
