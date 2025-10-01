@@ -14,7 +14,7 @@ local opts = {
   },
 }
 -- devMode: true for local development or fals for production
-local devMode = true
+local devMode = false
 
 if devMode then
   return {
