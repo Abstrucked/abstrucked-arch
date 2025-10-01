@@ -181,30 +181,30 @@ EOF
      echo -e "${YELLOW}Warning: Backgrounds directory not found${NC}"
  fi
 
- # Generate Tmux theme
- echo -e "${BLUE}Generating Tmux theme configuration...${NC}"
- mkdir -p "$HOME/.config/tmux"
- cat > "$HOME/.config/tmux/theme.conf" << EOF
+  # Generate Tmux theme
+  echo -e "${BLUE}Generating Tmux theme configuration...${NC}"
+  mkdir -p "$HOME/.config/tmux"
+  cat > "$HOME/.config/tmux/theme.conf" << EOF
 # Tmux theme colors from $THEME
-set -g status-bg "colour$PRIMARY_BACKGROUND"
-set -g status-fg "colour$PRIMARY_FOREGROUND"
-set -g status-left-bg "colour$PRIMARY_BACKGROUND"
-set -g status-left-fg "colour$BRIGHT_BLUE"
-set -g status-right-bg "colour$PRIMARY_BACKGROUND"
-set -g status-right-fg "colour$BRIGHT_BLUE"
+set -g status-bg black
+set -g status-fg white
+set -g status-left-bg black
+set -g status-left-fg brightblue
+set -g status-right-bg black
+set -g status-right-fg brightblue
 
-set -g pane-border-fg "colour$NORMAL_BLACK"
-set -g pane-active-border-fg "colour$NORMAL_BLUE"
+set -g pane-border-fg black
+set -g pane-active-border-fg blue
 
-set -g window-status-current-bg "colour$BRIGHT_BLUE"
-set -g window-status-current-fg "colour$PRIMARY_BACKGROUND"
-set -g window-status-bg "colour$PRIMARY_BACKGROUND"
-set -g window-status-fg "colour$PRIMARY_FOREGROUND"
+set -g window-status-current-bg blue
+set -g window-status-current-fg black
+set -g window-status-bg black
+set -g window-status-fg white
 
-set -g message-bg "colour$BRIGHT_YELLOW"
-set -g message-fg "colour$PRIMARY_BACKGROUND"
+set -g message-bg brightyellow
+set -g message-fg black
 EOF
- echo -e "${GREEN}✓ Tmux theme generated${NC}"
+  echo -e "${GREEN}✓ Tmux theme generated${NC}"
 
   # Handle ghossty if it exists
  if [[ -d "$DOTFILES_DIR/ghossty" ]]; then
