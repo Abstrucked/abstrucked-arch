@@ -53,6 +53,9 @@ else
     exit 1
 fi
 
+# List of packages to stow (directories in dotfiles repo)
+stow_packages=("tmux" "awesome" "ssh" "alacritty" "btop" "nvim" "picom" "zsh" "pcmanfm" "scripts")
+
 # Unstow existing packages to clean up symlinks
 for package in "${stow_packages[@]}"; do
     if [[ -d "$DOTFILES_DIR/$package" ]]; then
@@ -74,9 +77,6 @@ done
 
 # Setup symlinks with GNU Stow
 echo -e "${YELLOW}Setting up symlinks with GNU Stow...${NC}"
-
-# List of packages to stow (directories in dotfiles repo)
-stow_packages=("tmux" "awesome" "ssh" "alacritty" "btop" "nvim" "picom" "zsh" "pcmanfm" "scripts")
 
 for package in "${stow_packages[@]}"; do
      if [[ -d "$DOTFILES_DIR/$package" ]]; then
