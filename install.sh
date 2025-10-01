@@ -46,6 +46,14 @@ else
   exit 1
 fi
 
+# Install Node.js version manager
+echo -e "${YELLOW}Installing Node.js version manager...${NC}"
+if [[ -f "$DOTFILES_DIR/install-node-manager.sh" ]]; then
+  bash "$DOTFILES_DIR/install-node-manager.sh"
+else
+  echo -e "${RED}Warning: install-node-manager.sh not found${NC}"
+fi
+
 # Optional YubiKey installation
 echo -e "${YELLOW}Do you want to install YubiKey authenticator and command-line tools? (y/N)${NC}"
 read -r response
