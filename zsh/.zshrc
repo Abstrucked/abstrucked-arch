@@ -14,6 +14,9 @@ fi
 
 source /usr/share/zsh-theme-powerlevel10k/powerlevel10k.zsh-theme
 source ~/zsh-autocomplete/zsh-autocomplete.plugin.zsh
+
+# Source custom aliases
+source ~/dotfiles/zsh/aliases.zsh
 #plugins=(zsh-autosuggestions zsh-syntax-highlighting fast-syntax-highlighting zsh-autocomplete)
 # To customize prompt, run `p10k configure` or edit ~/.p10k.zsh.
 [[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
@@ -46,15 +49,7 @@ HISTSIZE=10000
 SAVEHIST=10000
 setopt appendhistory
 
-alias yrs='yarn run serve'
-alias graph='npx graph'
-alias vue='npx vue'
-alias balena='/usr/bin/balenaEtcher.appImage'
-alias dev='cd ~/_dev/'
-alias scrot1="$HOME/.local/bin/screenshot_1"
-alias scrot2="$HOME/.local/bin/screenshot_2"
-alias sesh="$HOME/.local/bin/tmux-sessionizer"
-alias nvim-ai="$HOME/.local/bin/nvim-launcher"
+# Aliases moved to aliases.zsh
 ################################################################################
 
 
