@@ -17,15 +17,10 @@ source ~/zsh-autocomplete/zsh-autocomplete.plugin.zsh
 
 # Source custom aliases
 source ~/dotfiles/zsh/aliases.zsh
+
 #plugins=(zsh-autosuggestions zsh-syntax-highlighting fast-syntax-highlighting zsh-autocomplete)
 # To customize prompt, run `p10k configure` or edit ~/.p10k.zsh.
 [[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
-
-#zstyle '*:compinit' arguments -D -i -u -C -w
-#zstyle ':completion:*' menu select
-#zstyle ':completion::complete:*' gain-privileges 1
-#bindkey '\t' menu-select "$terminfo[kcbt]" menu-select
-#bindkey -M menuselect '\t' menu-complete "$terminfo[kcbt]" reverse-menu-complete
 
 # Home key (go to beginning of line)
 bindkey '^[[H' beginning-of-line
@@ -48,13 +43,6 @@ HISTFILE=~/.zsh_history
 HISTSIZE=10000
 SAVEHIST=10000
 setopt appendhistory
-
-# Aliases moved to aliases.zsh
-################################################################################
-
-
-
-
 
 export EDITOR='nvim'
 export VISUAL='gedit'
@@ -120,50 +108,4 @@ elif type compctl &>/dev/null; then
   compctl -K _pm2_completion + -f + pm2
 fi
 ###-end-pm2-completion-###
-
-# Turso
-export PATH="$PATH:/home/abstrucked/.turso"
-
-export PATH="${HOME}/.local/bin:$PATH"
-
-export PATH="${ASDF_DATA_DIR:-$HOME/.asdf}/shims:$PATH"
-# Alias for running starkup installer
-alias starkup="curl --proto '=https' --tlsv1.2 -sSf https://sh.starkup.sh | sh -s --"
-
-# BEGIN SCARB COMPLETIONS
-_scarb() {
-  if ! scarb completions zsh >/dev/null 2>&1; then
-    return 0
-  fi
-  eval "$(scarb completions zsh)"
-  _scarb "$@"
-}
-
-autoload -Uz compinit && compinit
-compdef _scarb scarb
-# END SCARB COMPLETIONS
-
-# BEGIN FOUNDRY COMPLETIONS
-_snforge() {
-  if ! snforge completions zsh >/dev/null 2>&1; then
-    return 0
-  fi
-  eval "$(snforge completions zsh)"
-  _snforge "$@"
-}
-
-_sncast() {
-  if ! sncast completions zsh >/dev/null 2>&1; then
-    return 0
-  fi
-  eval "$(sncast completions zsh)"
-  _sncast "$@"
-}
-
-compdef _snforge snforge
-compdef _sncast sncast
-# END FOUNDRY COMPLETIONS
-
-# dojo
-. "/home/abstrucked/.dojo/env"
 
