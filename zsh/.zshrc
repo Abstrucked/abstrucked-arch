@@ -13,7 +13,8 @@ if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]
 fi
 
 source /usr/share/zsh-theme-powerlevel10k/powerlevel10k.zsh-theme
-source ~/zsh-autocomplete/zsh-autocomplete.plugin.zsh
+source ./zsh-autocomplete/zsh-autocomplete.plugin.zsh
+
 
 # Source custom aliases
 source ~/dotfiles/zsh/aliases.zsh
@@ -60,12 +61,6 @@ export QT_QPA_PLATFORMTHEME=gtk2
 # Set QT5 configuration tool
 export QT_QPA_PLATFORMTHEME=qt5ct
 
-# bun completions
-[ -s "/home/abstrucked/.bun/_bun" ] && source "/home/abstrucked/.bun/_bun"
-
-# bun
-export BUN_INSTALL="$HOME/.bun"
-export PATH="$BUN_INSTALL/bin:$PATH"
 
 typeset -g POWERLEVEL9K_INSTANT_PROMPT=quiet
 ###-begin-pm2-completion-###
