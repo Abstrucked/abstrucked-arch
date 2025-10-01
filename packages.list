@@ -34,6 +34,9 @@ ttf-dejavu
 ttf-liberation
 ttf-nerd-fonts-symbols
 ttf-jetbrains-mono-nerd
+ttf-octicons
+ttf-font-logos
+ttf-codeicons
 
 # Development tools
 curl
