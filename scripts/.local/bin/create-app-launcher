@@ -75,7 +75,11 @@ fi
 if grep -q "alias ${program}-${category}=" "$aliases_file"; then
   print_warning "Alias ${program}-${category} already exists in aliases file."
 else
-  echo "alias ${program}-${category}=\"\$HOME/.local/bin/${program}-launcher\"" >>"$aliases_file"
+  # Ensure the file ends with a newline before appending
+  if [[ -f "$aliases_file" ]] && [[ -s "$aliases_file" ]] && [[ "$(tail -c1 "$aliases_file")" != $'\n' ]]; then
+    echo >> "$aliases_file"
+  fi
+  echo "alias ${program}-${category}=\"\$HOME/.local/bin/${program}-launcher\"" >> "$aliases_file"
   print_success "Alias added to aliases file."
 fi
 
