@@ -20,7 +20,7 @@ local menubar = require("menubar")
 local freedesktop = require("freedesktop")
 --local run_shell = require("awesome-wm-widgets.run_shell-3.run_shell")
 local run_shell = require("awesome-wm-widgets.run-shell-3.run-shell")
-local logout = require("custom-logout")
+local logout = require("awesome-wm-widgets.logout-widget.logout")
 local hotkeys_popup = require("awful.hotkeys_popup").widget
 require("awful.hotkeys_popup.keys")
 local my_table = awful.util.table or gears.table -- 4.{0,1} compatibility
