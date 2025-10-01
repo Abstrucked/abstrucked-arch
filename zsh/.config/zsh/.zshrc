@@ -12,6 +12,8 @@ if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]
   source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"
 fi
 
+XDG_CONFIG_DIR = "${HOME}/.config"
+
 source /usr/share/zsh-theme-powerlevel10k/powerlevel10k.zsh-theme
 source "${XDG_CONFIG_DIR}/zsh/zsh-autocomplete/zsh-autocomplete.plugin.zsh"
 
