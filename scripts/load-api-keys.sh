@@ -1,4 +1,4 @@
-#!/BIN/BASH
+#!/bin/bash
 
 # ~/load-api-keys.sh
 export XAI_API_KEY=$(pass ai/xai_api_key)
