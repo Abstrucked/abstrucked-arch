@@ -54,5 +54,11 @@ brave-bin
 inkscape
 gimp
 
+# YubiKey tools (optional, installed separately if user chooses)
+# yubikey-manager
+# yubico-authenticator-bin
+# pcsclite
+# ccid
+
 
 # zsh-theme-powerlevel10k
