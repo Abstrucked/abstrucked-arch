@@ -46,6 +46,19 @@ else
   exit 1
 fi
 
+# Optional YubiKey installation
+echo -e "${YELLOW}Do you want to install YubiKey authenticator and command-line tools? (y/N)${NC}"
+read -r response
+if [[ "$response" =~ ^[Yy]$ ]]; then
+  echo -e "${BLUE}Installing YubiKey packages...${NC}"
+  yay -S --needed --noconfirm yubikey-manager yubico-authenticator-bin pcsclite ccid
+  echo -e "${BLUE}Enabling pcscd service...${NC}"
+  systemctl enable pcscd.service
+  echo -e "${GREEN}✓ YubiKey tools installed and pcscd enabled${NC}"
+else
+  echo -e "${YELLOW}Skipping YubiKey installation${NC}"
+fi
+
 echo -e "${YELLOW}Removing system nodejs and npm to allow version manager usage...${NC}"
 yay -Rsn npm nodejs
 
