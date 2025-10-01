@@ -27,6 +27,9 @@ fi
 # Create config directory
 mkdir -p "$HOME/.config"
 
+# Set config directory
+NVIM_CONFIG_DIR="$HOME/.config/nvim"
+
 # Clone LazyVim starter
 echo -e "${YELLOW}Cloning LazyVim starter configuration...${NC}"
 git clone https://github.com/LazyVim/starter "$NVIM_CONFIG_DIR"
