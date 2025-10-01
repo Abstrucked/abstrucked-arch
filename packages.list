@@ -21,6 +21,7 @@ neovim
 ripgrep
 fd
 lazygit
+fzf
 
 # Password management
 pass
@@ -37,7 +38,13 @@ wget
 unzip
 nodejs
 npm
+ffmpeg
 
 # AUR packages (install with yay)
 discord
+brave-bin
+inkscape
+gimp
+
+
 # zsh-theme-powerlevel10k

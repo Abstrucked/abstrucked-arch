@@ -58,6 +58,10 @@ else
     exit 1
 fi
 
+echo -e "${YELLOW}Removing system nodejs and npm to allow version manager usage...${NC}"
+sudo pacman -Rsn nodejs
+yay -Rsn npm
+
 echo -e "${YELLOW}Initializing git submodules...${NC}"
 git submodule update --init --recursive
 
