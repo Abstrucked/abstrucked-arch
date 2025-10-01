@@ -70,28 +70,42 @@ local items = nil
 
 local selected_index = 1
 
+local filter = ""
+local filtered_items = {}
+local filter_widget = wibox.widget.textbox()
+
 -- Create list widget
 local list_widget = wibox.widget({
 	layout = wibox.layout.fixed.vertical,
 })
 
 local function update_list()
-	list_widget:reset()
-	if items then
-		for i, item in ipairs(items) do
-			local text = (i == selected_index) and "> " .. item or "  " .. item
-			list_widget:add(wibox.widget({
-				text = text,
-				widget = wibox.widget.textbox,
-			}))
+	filter_widget:set_text("/ " .. filter)
+	filtered_items = {}
+	for _, item in ipairs(items or {}) do
+		if filter == "" or item:lower():find(filter:lower(), 1, true) then
+			table.insert(filtered_items, item)
 		end
+	end
+	selected_index = math.max(1, math.min(selected_index, #filtered_items))
+	list_widget:reset()
+	for i, item in ipairs(filtered_items) do
+		local text = (i == selected_index) and "> " .. item or "  " .. item
+		list_widget:add(wibox.widget({
+			text = text,
+			widget = wibox.widget.textbox,
+		}))
 	end
 end
 
 -- Create popup
 local popup = awful.popup({
 	widget = {
-		list_widget,
+		{
+			filter_widget,
+			list_widget,
+			layout = wibox.layout.fixed.vertical,
+		},
 		margins = 10,
 		layout = wibox.container.margin,
 	},
@@ -110,6 +124,7 @@ function yubico.show_list()
 	if items == nil or #items == 0 then
 		return
 	end
+	filter = ""
 	selected_index = 1
 	update_list()
 
@@ -126,41 +141,42 @@ function yubico.show_list()
 			popup.visible = false
 		end,
 		stop_event = "release",
-
-		keybindings = {
-			{
-				{},
-				"Up",
-				function()
-					selected_index = (selected_index - 2) % #items + 1
-					update_list()
-				end,
-			},
-			{
-				{},
-				"Down",
-				function()
-					selected_index = (selected_index % #items) + 1
-					update_list()
-				end,
-			},
-			{
-				{},
-				"Return",
-				function()
-					naughty.notify({ title = "Selected", text = items[selected_index] })
+		keypressed_callback = function(self, modifiers, key, event)
+			if event ~= "press" then
+				return
+			end
+			if key == "Escape" then
+				grabber_ref:stop()
+			elseif key == "Return" then
+				if selected_index > 0 and selected_index <= #filtered_items then
 					grabber_ref:stop()
-					getAccountCode(items[selected_index])
-				end,
-			},
-			{
-				{},
-				"Escape",
-				function()
-					grabber_ref:stop()
-				end,
-			},
-		},
+					getAccountCode(filtered_items[selected_index])
+				end
+			elseif key == "BackSpace" then
+				filter = filter:sub(1, -2)
+				update_list()
+			elseif key == "Up" then
+				if selected_index > 1 then
+					selected_index = selected_index - 1
+				else
+					selected_index = #filtered_items
+				end
+				update_list()
+			elseif key == "Down" then
+				if selected_index < #filtered_items then
+					selected_index = selected_index + 1
+				else
+					selected_index = 1
+				end
+				update_list()
+			else
+				-- For other keys, if it's a single character, append to filter
+				if #key == 1 and key:match("%g") then -- printable characters
+					filter = filter .. key
+					update_list()
+				end
+			end
+		end,
 	})
 	grabber_ref = keygrabber_instance -- Now assign it correctly
 	keygrabber_instance:start()

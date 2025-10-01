@@ -12,10 +12,6 @@ mkdir -p "nvim/.config"
 cp -r "/home/abstrucked/.config/nvim" "nvim/.config/nvim"
 echo "✓ Copied nvim"
 
-mkdir -p "vlc/.config"
-cp -r "/home/abstrucked/.config/vlc" "vlc/.config/vlc"
-echo "✓ Copied vlc"
-
 mkdir -p "awesome/.config"
 cp -r "/home/abstrucked/.config/awesome" "awesome/.config/awesome"
 echo "✓ Copied awesome"
@@ -31,10 +27,6 @@ echo "✓ Copied btop"
 mkdir -p "picom/.config"
 cp -r "/home/abstrucked/.config/picom" "picom/.config/picom"
 echo "✓ Copied picom"
-
-mkdir -p "obs-studio/.config"
-cp -r "/home/abstrucked/.config/obs-studio" "obs-studio/.config/obs-studio"
-echo "✓ Copied obs-studio"
 
 mkdir -p "pcmanfm/.config"
 cp -r "/home/abstrucked/.config/pcmanfm" "pcmanfm/.config/pcmanfm"
@@ -78,3 +70,4 @@ echo "✓ Copied nvim-launcher"
 
 echo ""
 echo "🎉 All configurations copied successfully!"
+
