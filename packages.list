@@ -33,6 +33,7 @@ gnupg
 ttf-dejavu
 ttf-liberation
 ttf-nerd-fonts-symbols
+ttf-jetbrains-mono-nerd
 
 # Development tools
 curl
