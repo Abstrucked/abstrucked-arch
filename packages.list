@@ -5,6 +5,7 @@ base-devel
 
 # Terminal and shell
 zsh
+zsh-theme-powerlevel10k
 tmux
 alacritty
 ghostty
