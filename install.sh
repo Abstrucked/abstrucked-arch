@@ -201,19 +201,11 @@ set -g message-fg "colour$PRIMARY_BACKGROUND"
 EOF
  echo -e "${GREEN}✓ Tmux theme generated${NC}"
 
- # Handle ghossty if it exists
-if [[ -d "$DOTFILES_DIR/ghossty" ]]; then
-    echo -e "${BLUE}Stowing ghossty...${NC}"
-    stow -d "$DOTFILES_DIR" -t "$HOME" "ghossty"
-fi
-
-# Install LazyVim by default
-echo -e "${YELLOW}Installing LazyVim Neovim distribution...${NC}"
-if [[ -f "$DOTFILES_DIR/install-lazyvim.sh" ]]; then
-    bash "$DOTFILES_DIR/install-lazyvim.sh"
-else
-    echo -e "${RED}Warning: install-lazyvim.sh not found. Skipping LazyVim installation.${NC}"
-fi
+  # Handle ghossty if it exists
+ if [[ -d "$DOTFILES_DIR/ghossty" ]]; then
+     echo -e "${BLUE}Stowing ghossty...${NC}"
+     stow -d "$DOTFILES_DIR" -t "$HOME" "ghossty"
+ fi
 
 echo -e "${GREEN}=== Installation Complete! ===${NC}"
 echo -e "${YELLOW}LazyVim has been installed and configured.${NC}"
