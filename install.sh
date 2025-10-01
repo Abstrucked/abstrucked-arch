@@ -16,39 +16,38 @@ echo -e "${BLUE}=== Dotfiles Installation Script ===${NC}"
 echo -e "${YELLOW}Dotfiles directory: $DOTFILES_DIR${NC}"
 
 # Check if running on Arch Linux
-if ! command -v pacman &> /dev/null; then
-    echo -e "${RED}Error: This script is designed for Arch Linux systems.${NC}"
-    exit 1
+if ! command -v pacman &>/dev/null; then
+  echo -e "${RED}Error: This script is designed for Arch Linux systems.${NC}"
+  exit 1
 fi
 
 # Install yay if not present
-if ! command -v yay &> /dev/null; then
-    echo -e "${YELLOW}yay not found. Installing yay first...${NC}"
-    if [[ -f "$DOTFILES_DIR/install-yay.sh" ]]; then
-        bash "$DOTFILES_DIR/install-yay.sh"
-    else
-        echo -e "${RED}Error: install-yay.sh not found in $DOTFILES_DIR${NC}"
-        exit 1
-    fi
+if ! command -v yay &>/dev/null; then
+  echo -e "${YELLOW}yay not found. Installing yay first...${NC}"
+  if [[ -f "$DOTFILES_DIR/install-yay.sh" ]]; then
+    bash "$DOTFILES_DIR/install-yay.sh"
+  else
+    echo -e "${RED}Error: install-yay.sh not found in $DOTFILES_DIR${NC}"
+    exit 1
+  fi
 fi
 
 # Install packages
 echo -e "${YELLOW}Installing packages from packages.list...${NC}"
 if [[ -f "$DOTFILES_DIR/packages.list" ]]; then
-    # Install all packages with yay (handles both official and AUR)
-    all_packages=$(grep -v '^#' "$DOTFILES_DIR/packages.list" || true)
-    if [[ -n "$all_packages" ]]; then
-        echo -e "${BLUE}Installing packages with yay...${NC}"
-        echo "$all_packages" | xargs yay -S --needed --noconfirm
-    fi
+  # Install all packages with yay (handles both official and AUR)
+  all_packages=$(grep -v '^#' "$DOTFILES_DIR/packages.list" || true)
+  if [[ -n "$all_packages" ]]; then
+    echo -e "${BLUE}Installing packages with yay...${NC}"
+    echo "$all_packages" | xargs yay -S --needed --noconfirm
+  fi
 else
-    echo -e "${RED}Error: packages.list not found in $DOTFILES_DIR${NC}"
-    exit 1
+  echo -e "${RED}Error: packages.list not found in $DOTFILES_DIR${NC}"
+  exit 1
 fi
 
 echo -e "${YELLOW}Removing system nodejs and npm to allow version manager usage...${NC}"
-sudo pacman -Rsn nodejs
-yay -Rsn npm
+yay -Rsn npm nodejs
 
 echo -e "${YELLOW}Initializing git submodules...${NC}"
 git submodule update --init --recursive
@@ -58,41 +57,41 @@ stow_packages=("awesome" "ssh" "alacritty" "btop" "nvim" "picom" "zsh" "pcmanfm"
 
 # Unstow existing packages to clean up symlinks
 for package in "${stow_packages[@]}"; do
-    if [[ -d "$DOTFILES_DIR/$package" ]]; then
-        echo -e "${BLUE}Unstowing $package...${NC}"
-        stow -d "$DOTFILES_DIR" -t "$HOME" -D "$package" 2>/dev/null || true
-    fi
+  if [[ -d "$DOTFILES_DIR/$package" ]]; then
+    echo -e "${BLUE}Unstowing $package...${NC}"
+    stow -d "$DOTFILES_DIR" -t "$HOME" -D "$package" 2>/dev/null || true
+  fi
 done
 
 # Remove existing .config directories for packages about to be stowed
 for package in "${stow_packages[@]}"; do
-    if [[ -d "$DOTFILES_DIR/$package/.config" ]]; then
-        config_dir="$HOME/.config/$package"
-        if [[ -d "$config_dir" ]]; then
-            echo -e "${YELLOW}Removing existing $config_dir...${NC}"
-            rm -rf "$config_dir"
-        fi
+  if [[ -d "$DOTFILES_DIR/$package/.config" ]]; then
+    config_dir="$HOME/.config/$package"
+    if [[ -d "$config_dir" ]]; then
+      echo -e "${YELLOW}Removing existing $config_dir...${NC}"
+      rm -rf "$config_dir"
     fi
+  fi
 done
 
 # Setup symlinks with GNU Stow
 echo -e "${YELLOW}Setting up symlinks with GNU Stow...${NC}"
 
 for package in "${stow_packages[@]}"; do
-     if [[ -d "$DOTFILES_DIR/$package" ]]; then
-         echo -e "${BLUE}Stowing $package...${NC}"
-         stow -d "$DOTFILES_DIR" -t "$HOME" "$package"
-     else
-         echo -e "${YELLOW}Warning: $package directory not found, skipping...${NC}"
-     fi
- done
+  if [[ -d "$DOTFILES_DIR/$package" ]]; then
+    echo -e "${BLUE}Stowing $package...${NC}"
+    stow -d "$DOTFILES_DIR" -t "$HOME" "$package"
+  else
+    echo -e "${YELLOW}Warning: $package directory not found, skipping...${NC}"
+  fi
+done
 
- # Setup theme
- echo -e "${YELLOW}Setting up theme...${NC}"
- if [[ -f "$DOTFILES_DIR/themes/theme.sh" ]]; then
-     source "$DOTFILES_DIR/themes/theme.sh"
-     echo -e "${BLUE}Generating Alacritty theme.toml...${NC}"
-     cat > "$HOME/.config/alacritty/theme.toml" << EOF
+# Setup theme
+echo -e "${YELLOW}Setting up theme...${NC}"
+if [[ -f "$DOTFILES_DIR/themes/theme.sh" ]]; then
+  source "$DOTFILES_DIR/themes/theme.sh"
+  echo -e "${BLUE}Generating Alacritty theme.toml...${NC}"
+  cat >"$HOME/.config/alacritty/theme.toml" <<EOF
 [colors.primary]
 background = "$PRIMARY_BACKGROUND"
 foreground = "$PRIMARY_FOREGROUND"
@@ -159,25 +158,25 @@ color = "$INDEXED_16"
 index = 17
 color = "$INDEXED_17"
 EOF
-     echo -e "${GREEN}✓ Theme setup complete${NC}"
- else
-     echo -e "${YELLOW}Warning: Theme setup script not found${NC}"
- fi
+  echo -e "${GREEN}✓ Theme setup complete${NC}"
+else
+  echo -e "${YELLOW}Warning: Theme setup script not found${NC}"
+fi
 
- # Setup backgrounds
- echo -e "${YELLOW}Setting up backgrounds...${NC}"
- if [[ -d "$DOTFILES_DIR/backgrounds" ]]; then
-     ln -sf "$DOTFILES_DIR/backgrounds" "$HOME/.backgrounds"
-     echo -e "${GREEN}✓ Backgrounds linked to ~/.backgrounds${NC}"
-  else
-     echo -e "${YELLOW}Warning: Backgrounds directory not found${NC}"
- fi
+# Setup backgrounds
+echo -e "${YELLOW}Setting up backgrounds...${NC}"
+if [[ -d "$DOTFILES_DIR/backgrounds" ]]; then
+  ln -sf "$DOTFILES_DIR/backgrounds" "$HOME/.backgrounds"
+  echo -e "${GREEN}✓ Backgrounds linked to ~/.backgrounds${NC}"
+else
+  echo -e "${YELLOW}Warning: Backgrounds directory not found${NC}"
+fi
 
-  # Generate Tmux theme
-  echo -e "${BLUE}Generating Tmux theme configuration...${NC}"
-  mkdir -p "$HOME/.config/tmux"
-  ln -sf "$DOTFILES_DIR/config/tmux/tmux.conf" "$HOME/.config/tmux/tmux.conf"
-  cat > "$HOME/.config/tmux/theme.conf" << EOF
+# Generate Tmux theme
+echo -e "${BLUE}Generating Tmux theme configuration...${NC}"
+mkdir -p "$HOME/.config/tmux"
+ln -sf "$DOTFILES_DIR/config/tmux/tmux.conf" "$HOME/.config/tmux/tmux.conf"
+cat >"$HOME/.config/tmux/theme.conf" <<EOF
 # Tmux theme colors from $THEME
 set -g status-bg black
 set -g status-fg white
@@ -197,20 +196,21 @@ set -g window-status-fg white
 set -g message-bg brightyellow
 set -g message-fg black
 EOF
-  echo -e "${GREEN}✓ Tmux theme generated${NC}"
+echo -e "${GREEN}✓ Tmux theme generated${NC}"
 
-  # Symlink tmux config
-  ln -sf "$HOME/.config/tmux/tmux.conf" "$HOME/.tmux.conf"
-  echo -e "${GREEN}✓ Tmux config symlinked${NC}"
+# Symlink tmux config
+ln -sf "$HOME/.config/tmux/tmux.conf" "$HOME/.tmux.conf"
+echo -e "${GREEN}✓ Tmux config symlinked${NC}"
 
-  # Handle ghossty if it exists
- if [[ -d "$DOTFILES_DIR/ghossty" ]]; then
-     echo -e "${BLUE}Stowing ghossty...${NC}"
-     stow -d "$DOTFILES_DIR" -t "$HOME" "ghossty"
- fi
+# Handle ghossty if it exists
+if [[ -d "$DOTFILES_DIR/ghossty" ]]; then
+  echo -e "${BLUE}Stowing ghossty...${NC}"
+  stow -d "$DOTFILES_DIR" -t "$HOME" "ghossty"
+fi
 
 echo -e "${GREEN}=== Installation Complete! ===${NC}"
 echo -e "${YELLOW}LazyVim has been installed and configured.${NC}"
 echo -e "${YELLOW}Please restart your terminal or run 'source ~/.zshrc' to apply changes.${NC}"
 echo -e "${YELLOW}You may need to log out and back in for some changes to take effect.${NC}"
 echo -e "${YELLOW}Run 'nvim' to start using your new LazyVim setup!${NC}"
+
