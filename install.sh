@@ -53,6 +53,17 @@ else
     exit 1
 fi
 
+# Remove existing .config directories for packages about to be stowed
+for package in "${stow_packages[@]}"; do
+    if [[ -d "$DOTFILES_DIR/$package/.config" ]]; then
+        config_dir="$HOME/.config/$package"
+        if [[ -d "$config_dir" ]]; then
+            echo -e "${YELLOW}Removing existing $config_dir...${NC}"
+            rm -rf "$config_dir"
+        fi
+    fi
+done
+
 # Setup symlinks with GNU Stow
 echo -e "${YELLOW}Setting up symlinks with GNU Stow...${NC}"
 
