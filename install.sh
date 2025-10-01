@@ -86,6 +86,15 @@ for package in "${stow_packages[@]}"; do
   fi
 done
 
+# Make scripts executable
+echo -e "${YELLOW}Making scripts executable...${NC}"
+if [[ -d "$HOME/scripts/.local/bin" ]]; then
+  chmod +x "$HOME/scripts/.local/bin"/*
+  echo -e "${GREEN}✓ Scripts made executable${NC}"
+else
+  echo -e "${YELLOW}Warning: Scripts directory not found, skipping chmod${NC}"
+fi
+
 # Setup theme
 echo -e "${YELLOW}Setting up theme...${NC}"
 if [[ -f "$DOTFILES_DIR/themes/theme.sh" ]]; then
