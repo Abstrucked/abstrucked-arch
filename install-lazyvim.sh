@@ -24,14 +24,6 @@ if ! command -v git &> /dev/null; then
     exit 1
 fi
 
-# Backup existing Neovim config if it exists
-NVIM_CONFIG_DIR="$HOME/.config/nvim"
-if [[ -d "$NVIM_CONFIG_DIR" ]]; then
-    BACKUP_DIR="$HOME/.config/nvim.backup.$(date +%Y%m%d_%H%M%S)"
-    echo -e "${YELLOW}Backing up existing Neovim config to $BACKUP_DIR${NC}"
-    mv "$NVIM_CONFIG_DIR" "$BACKUP_DIR"
-fi
-
 # Create config directory
 mkdir -p "$HOME/.config"
 
