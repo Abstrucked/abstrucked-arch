@@ -53,6 +53,9 @@ else
     exit 1
 fi
 
+echo -e "${YELLOW}Initializing git submodules...${NC}"
+git submodule update --init --recursive
+
 # List of packages to stow (directories in dotfiles repo)
 stow_packages=("tmux" "awesome" "ssh" "alacritty" "btop" "nvim" "picom" "zsh" "pcmanfm" "scripts")
 
