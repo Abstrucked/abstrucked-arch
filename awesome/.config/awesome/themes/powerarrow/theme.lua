@@ -15,9 +15,10 @@ local math, string, os = math, string, os
 local my_table = awful.util.table or gears.table -- 4.{0,1} compatibility
 
 local theme = {}
-theme.dir = os.getenv("THEME_BG_DIR") or os.getenv("HOME") .. "/.backgrounds"
-theme.wallpaper = theme.dir .. "/cosmo.png"
-theme.wallpaperUltrawide = theme.dir .. "/arch_wide_bluish.png"
+theme.bgDir = os.getenv("THEME_BG_DIR") or os.getenv("HOME") .. "/.backgrounds"
+theme.dir = os.getenv("HOME") .. "/.config/awesome/themes/powerarrow"
+theme.wallpaper = theme.bgDir .. "/cosmo.png"
+theme.wallpaperUltrawide = theme.bgDir .. "/arch_wide_bluish.png"
 
 theme.font = "JetBrains Mono Nerd Font 10"
 

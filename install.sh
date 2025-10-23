@@ -67,8 +67,6 @@ else
   echo -e "${YELLOW}Skipping YubiKey installation${NC}"
 fi
 
-echo -e "${YELLOW}Removing system nodejs and npm to allow version manager usage...${NC}"
-yay -Rsn npm nodejs
 
 echo -e "${YELLOW}Initializing git submodules...${NC}"
 git submodule update --init --recursive
