@@ -42,8 +42,6 @@ ttf-codeicons
 curl
 wget
 unzip
-nodejs
-npm
 ffmpeg
 lazygit
 lazydocker

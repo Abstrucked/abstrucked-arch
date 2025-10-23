@@ -11,3 +11,8 @@ alias sesh="$HOME/.local/bin/tmux-sessionizer"
 alias nvim-ai="$HOME/.local/bin/nvim-launcher"
 alias create-app="$HOME/.local/bin/create-app-launcher"
 alias pass-insert="$HOME/.local/bin/pass-insert-utility"
+
+alias batt='~/bin/batt-mode.sh'
+alias balanced='~/bin/balanced-mode.sh'
+alias perf='~/bin/perf-mode.sh'
+alias checkmode='sensors | grep -E "Tctl|Tdie|Package" && grep MHz /proc/cpuinfo | head -1'

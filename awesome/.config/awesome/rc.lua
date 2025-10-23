@@ -505,10 +505,10 @@ globalkeys = my_table.join(
 	end),
 	-- Brightness - MONITOR ---------------------------
 	awful.key({}, "XF86MonBrightnessUp", function()
-		awful.util.spawn("macbook-lighter-screen --inc 50")
+		awful.util.spawn("brightnessctl set 10%+")
 	end, { description = "Increase Monitor Brightness +10%", group = "widgets" }),
 	awful.key({}, "XF86MonBrightnessDown", function()
-		awful.util.spawn("macbook-lighter-screen --dec 50")
+		awful.util.spawn("brightnessctl set 10%-")
 	end, { description = "Decrease Monitor Brightness-10%", group = "widgets" }),
 	-- Brightness - KEYBOARD --------------------------
 	awful.key({}, "XF86KbdBrightnessUp", function()
@@ -749,7 +749,7 @@ awful.rules.rules = {
 	{ rule = { class = "Brave" }, properties = { screen = 1, tag = awful.util.tagnames[3] } },
 
 	-- Set Discord to always map on the first tag on desktop 7.
-	{ rule = { class = "discord" }, properties = { screen = 2, tag = awful.util.tagnames[7] } },
+	{ rule = { class = "discord" }, properties = { screen = 1, tag = awful.util.tagnames[7] } },
 
 	-- Set Gimp to always show maximized and on desktop 6 .
 	{
