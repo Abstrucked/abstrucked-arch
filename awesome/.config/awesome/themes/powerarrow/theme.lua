@@ -130,12 +130,14 @@ mytextclock.font = theme.font
 -- Calendar
 theme.cal = lain.widget.cal({
 	cal = "cal --color=always",
-	-- attach_to = { mytextclock },
-	-- notification_preset = {
-	-- 	--font = "Monospace 11",
-	-- 	fg = theme.fg_normal,
-	-- 	bg = theme.bg_normal,
-	-- },
+	notification_preset = {
+		font = "Monospace 11",
+		fg = theme.fg_normal,
+		bg = theme.bg_normal,
+		border_color = theme.border_focus,
+		border_width = dpi(2),
+		timeout = 0,
+	},
 })
 
 -- WIDGET EXAMPLE
@@ -297,39 +299,46 @@ theme.fs = lain.widget.fs({
 })
 
 -- Battery
---[[local baticon = wibox.widget.imagebox(theme.widget_battery)
+
+local baticon = wibox.widget.imagebox(theme.widget_battery)
 local bat = lain.widget.bat({
-    settings = function()
-        if bat_now.status and bat_now.status ~= "N/A" then
-            if bat_now.ac_status == 1 then
-                widget:set_markup(markup.font(theme.font, " AC "))
-                baticon:set_image(theme.widget_ac)
-                return
-            elseif not bat_now.perc and tonumber(bat_now.perc) <= 5 then
-                baticon:set_image(theme.widget_battery_empty)
-            elseif not bat_now.perc and tonumber(bat_now.perc) <= 15 then
-                baticon:set_image(theme.widget_battery_low)
-            else
-                baticon:set_image(theme.widget_battery)
-            end
-            widget:set_markup(markup.font(theme.font, " " .. bat_now.perc .. "% "))
-        else
-            widget:set_markup()
-            baticon:set_image(theme.widget_ac)
-        end
-    end
+	notification_preset = { fg = theme.fg_normal, bg = theme.bg_normal, font = "Monospace 10" },
+	settings = function()
+		if bat_now.status and bat_now.status ~= "N/A" then
+			if bat_now.ac_status == 1 then
+				widget:set_markup(markup.font(theme.font, " AC "))
+				baticon:set_image(theme.widget_ac)
+				return
+			elseif bat_now.perc and tonumber(bat_now.perc) <= 5 then
+				baticon:set_image(theme.widget_battery_empty)
+			elseif bat_now.perc and tonumber(bat_now.perc) <= 15 then
+				baticon:set_image(theme.widget_battery_low)
+			else
+				baticon:set_image(theme.widget_battery)
+			end
+			widget:set_markup(markup.font(theme.font, " " .. bat_now.perc .. "% "))
+		else
+			widget:set_markup()
+			baticon:set_image(theme.widget_ac)
+		end
+	end,
 })
 --]]
 
 -- Net
 local neticon = wibox.widget.imagebox(theme.widget_net)
 local net = lain.widget.net({
+	notification_preset = { fg = theme.fg_normal, bg = theme.bg_normal, font = "Monospace 10" },
 	settings = function()
 		widget:set_markup(
 			markup.fontfg(
 				theme.font,
 				theme.titlebar_fg_focus,
-				" ↓ " .. net_now.received .. " ↑ " .. net_now.sent .. " "
+				" ↓ "
+					.. string.format("%.1f", net_now.received / 1024)
+					.. " MiB/s ↑ "
+					.. string.format("%.1f", net_now.sent / 1024)
+					.. " MiB/s "
 			)
 		)
 	end,
@@ -406,7 +415,8 @@ function theme.at_screen_connect(s)
 
 	-- Tags
 	awful.tag(awful.util.tagnames, s, awful.layout.layouts)
-
+	s.tags[2].layout = awful.layout.suit.max
+	s.tags[3].layout = awful.layout.suit.max
 	-- Create a promptbox for each screen
 	s.mypromptbox = awful.widget.prompt()
 	-- Create an imagebox widget which will contains an icon indicating which layout we're using.
@@ -467,7 +477,7 @@ function theme.at_screen_connect(s)
 				"#4B3B5122"
 			),
 			-- default
-			pl(spotify_widget()),
+			--pl(spotify_widget()),
 			-- customized
 			--[[spotify_widget({
            fontont = 'Ubuntu Mono 9',
@@ -484,7 +494,7 @@ function theme.at_screen_connect(s)
 				wibox.widget({ fsicon, theme.fs and theme.fs.widget, layout = wibox.layout.align.horizontal }),
 				"#4B3B5122"
 			),
-			--pl(wibox.widget { baticon, bat.widget, layout = wibox.layout.align.horizontal }, "#8DAA9A22"),
+			pl(wibox.widget({ baticon, bat.widget, layout = wibox.layout.align.horizontal }), "#8DAA9A22"),
 			pl(wibox.widget({ neticon, net.widget, layout = wibox.layout.align.horizontal }), "#C0C0A222"),
 			pl(mytextclock, "#4B3B5122"),
 			logout.widget({}),

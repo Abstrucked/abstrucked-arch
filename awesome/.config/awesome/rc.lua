@@ -101,11 +101,11 @@ local altkey = "Mod1"
 local terminal = "alacritty"
 local vi_focus = false -- vi-like client focus - https://github.com/lcpz/awesome-copycats/issues/275
 local cycle_prev = true -- cycle trough all previous client or just the first -- https://github.com/lcpz/awesome-copycats/issues/274
-local editor = os.getenv("EDITOR") or "nano"
+local editor = os.getenv("EDITOR") or "nvim"
 local guieditor = os.getenv("GUI_EDITOR") or "gedit"
 local browser = "brave" --os.getenv("BROWSER") or
 local scrlocker = "slock"
-local ide = "webstorm"
+local ide = "nvim"
 
 awful.util.terminal = terminal
 awful.util.tagnames = { "1", "2", "3", "4", "5", "6", "7", "8", "9" }
@@ -119,8 +119,8 @@ awful.layout.layouts = {
 	--awful.layout.suit.fair.horizontal,
 	--awful.layout.suit.spiral,
 	--awful.layout.suit.spiral.dwindle,
-	--awful.layout.suit.max,
-	--awful.layout.suit.max.fullscreen,
+	awful.layout.suit.max,
+	awful.layout.suit.max.fullscreen,
 	--awful.layout.suit.magnifier,
 	--awful.layout.suit.corner.nw,
 	--awful.layout.suit.corner.ne,
@@ -569,12 +569,15 @@ globalkeys = my_table.join(
 	awful.key({ modkey }, "q", function()
 		awful.spawn(browser)
 	end, { description = "run browser", group = "launcher" }),
+	awful.key({ modkey }, "d", function()
+		awful.spawn("discord")
+	end, { description = "run discord", group = "launcher" }),
 	awful.key({ modkey }, "a", function()
 		awful.spawn(guieditor)
 	end, { description = "run gui editor", group = "launcher" }),
 	awful.key({ modkey, "Shift" }, "w", function()
 		awful.spawn(ide)
-	end, { dewscription = "run Webstorm", group = "launcher" }),
+	end, { dewscription = "run ide", group = "launcher" }),
 	-- Default
 	--[[ Menubar
     -- awful.key({ modkey }, "p", function() menubar.show() end,

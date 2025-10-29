@@ -16,3 +16,5 @@ alias batt='~/bin/batt-mode.sh'
 alias balanced='~/bin/balanced-mode.sh'
 alias perf='~/bin/perf-mode.sh'
 alias checkmode='sensors | grep -E "Tctl|Tdie|Package" && grep MHz /proc/cpuinfo | head -1'
+
+alias _omen="$HOME/.local/bin/tailscale-ssh"
