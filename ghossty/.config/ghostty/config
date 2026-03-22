@@ -1,2 +1,3 @@
 theme = Catppuccin Mocha
 window-decoration = none
+shell-integration = detect 

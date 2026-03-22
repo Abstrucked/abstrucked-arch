@@ -2,4 +2,6 @@
 tailscale ssh arch-omen \
   -L 3000:localhost:3000 \
   -L 3001:localhost:3001 \
-  -L 5555:localhost:5555
+  -L 5900:localhost:5900 \
+  -L 5555:localhost:5555 \
+  -L 8080:localhost:8080

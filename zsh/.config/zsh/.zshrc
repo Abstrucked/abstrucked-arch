@@ -54,6 +54,9 @@ export N_PREFIX="$HOME/n"; [[ :$PATH: == *":$N_PREFIX/bin:"* ]] || PATH+=":$N_PR
 
 export PATH="$HOME/.local/bin:$PATH"
 
+export PATH="${ASDF_DATA_DIR:-$HOME/.asdf}/shims:$PATH"
+export ASDF_DATA_DIR="${HOME}/.asdf"
+
 # Set GTK dark theme
 export GTK_THEME=Adwaita:dark
 
@@ -70,6 +73,9 @@ typeset -g POWERLEVEL9K_INSTANT_PROMPT=quiet
 #
 # Installation: pm2 completion >> ~/.bashrc  (or ~/.zshrc)
 #
+
+fpath=(${ASDF_DATA_DIR:-$HOME/.asdf}/completions $fpath)
+
 
 COMP_WORDBREAKS=${COMP_WORDBREAKS/=/}
 COMP_WORDBREAKS=${COMP_WORDBREAKS/@/}
