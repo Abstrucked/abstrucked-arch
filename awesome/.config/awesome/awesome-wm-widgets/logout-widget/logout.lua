@@ -57,7 +57,17 @@ local function create_button(icon_name, action_name, color, onclick, icon_size, 
     }
     button:connect_signal("mouse::enter", function(c) action:set_text(action_name) end)
     button:connect_signal("mouse::leave", function(c) action:set_text(' ') end)
-    return button
+    return wibox.widget {
+        button,
+        {
+            text = action_name:match("^(.-) %(") or action_name,
+            align = "center",
+            font = beautiful.font,
+            widget = wibox.widget.textbox,
+        },
+        spacing = 4,
+        layout = wibox.layout.fixed.vertical,
+    }
 end
 
 local function launch(args)
@@ -67,8 +77,8 @@ local function launch(args)
     local bg_color = args.bg_color or beautiful.bg_normal
     local accent_color = args.accent_color or beautiful.bg_focus
     local text_color = args.text_color or beautiful.fg_normal
-    local phrases = args.phrases or {'Goodbye!'}
-    local icon_size = args.icon_size or 40
+    local phrases = args.phrases or { "Choose an action" }
+    local icon_size = args.icon_size or 36
     local icon_margin = args.icon_margin or 16
 
     local onlogout = args.onlogout or function () awesome.quit() end
@@ -104,7 +114,7 @@ local function launch(args)
                 halign = 'center',
                 layout = wibox.container.place
             },
-            spacing = 32,
+            spacing = 20,
             layout = wibox.layout.fixed.vertical
         },
         id = 'a',

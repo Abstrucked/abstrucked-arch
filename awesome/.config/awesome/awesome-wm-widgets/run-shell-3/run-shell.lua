@@ -13,6 +13,7 @@ local gfs = require("gears.filesystem")
 local wibox = require("wibox")
 local gears = require("gears")
 local naughty = require("naughty")
+local beautiful = require("beautiful")
 local completion = require("awful.completion")
 local math, os, string = math, os, string
 
@@ -44,7 +45,7 @@ function widget.new()
 				{
 					{
 						{
-							markup = '<span font="awesomewm-font 14" color="#ffffff">a</span>',
+							markup = '<span font="awesomewm-font 14" color="' .. beautiful.fg_normal .. '">a</span>',
 							widget = wibox.widget.textbox,
 						},
 						id = "icon",
@@ -60,14 +61,14 @@ function widget.new()
 					layout = wibox.layout.fixed.horizontal,
 				},
 				widget = wibox.container.background,
-				bg = "#333333",
+					bg = beautiful.bg_normal,
 				shape = function(cr, width, height)
 					gears.shape.rounded_rect(cr, width, height, 3)
 				end,
-				shape_border_color = "#74aeab",
+					shape_border_color = beautiful.border_focus,
 				shape_border_width = 1,
-				forced_width = 200,
-				forced_height = 50,
+					forced_width = 360,
+					forced_height = 56,
 			},
 			layout = wibox.container.place,
 		})
@@ -137,7 +138,7 @@ function widget.new()
 			awful.placement.top(w, { margins = { top = 20 }, parent = s })
 			awful.prompt.run({
 				prompt = "Run: ",
-				bg_cursor = "#74aeab",
+					bg_cursor = beautiful.bg_focus,
 				textbox = run_shell.widget,
 				completion_callback = completion.shell,
 				exe_callback = function(command)
