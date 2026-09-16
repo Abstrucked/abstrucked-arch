@@ -8,127 +8,164 @@
 -- @copyright 2019 Pavel Makhov
 -------------------------------------------------
 
-local capi = {
-    screen = screen,
-    client = client,
-}
 local awful = require("awful")
 local gfs = require("gears.filesystem")
 local wibox = require("wibox")
 local gears = require("gears")
 local naughty = require("naughty")
 local completion = require("awful.completion")
+local math, os, string = math, os, string
 
 local run_shell = awful.widget.prompt()
+run_shell.with_shell = true
 
 local widget = {}
 
 function widget.new()
-    local widget_instance = {
-        _cached_wiboxes = {},
-        _cmd_pixelate = [[bash -c 'ffmpeg -loglevel panic -f x11grab -video_size 3440x1420 -y -i :0.0+%s,20 -vf frei0r=pixeliz0r -vframes 1 /tmp/i3lock-%s.png ; echo done']],
-        _cmd_blur = [[bash -c 'ffmpeg -loglevel panic -f x11grab -video_size 3440x1420 -y -i :0.0+%s,20 -filter_complex "boxblur=7" -vframes 1 /tmp/i3lock-%s.png ; echo done']]
-    }
+	local cache_dir = gfs.get_cache_dir() .. "run-shell/"
+	gfs.make_directories(cache_dir)
 
-    function widget_instance:_create_wibox()
-        local w = wibox {
-            visible = false,
-            ontop = true,
-            height = mouse.screen.geometry.height,
-            width = mouse.screen.geometry.width,
-        }
+	local widget_instance = {
+		_cached_wiboxes = {},
+		_running = false,
+	}
 
-        w:setup {
-            {
-                {
-                    {
-                        {
-                            markup = '<span font="awesomewm-font 14" color="#ffffff">a</span>',
-                            widget = wibox.widget.textbox,
-                        },
-                        id = 'icon',
-                        left = 10,
-                        layout = wibox.container.margin
-                    },
-                    {
-                        run_shell,
-                        left = 10,
-                        layout = wibox.container.margin,
-                    },
-                    id = 'left',
-                    layout = wibox.layout.fixed.horizontal
-                },
-                widget = wibox.container.background,
-                bg = '#333333',
-                shape = function(cr, width, height)
-                    gears.shape.rounded_rect(cr, width, height, 3)
-                end,
-                shape_border_color = '#74aeab',
-                shape_border_width = 1,
-                forced_width = 200,
-                forced_height = 50
-            },
-            layout = wibox.container.place
-        }
+	function widget_instance:_create_wibox(s)
+		local w = wibox({
+			visible = false,
+			ontop = true,
+			screen = s,
+			height = s.geometry.height,
+			width = s.geometry.width,
+		})
 
-        return w
-    end
+		w:setup({
+			{
+				{
+					{
+						{
+							markup = '<span font="awesomewm-font 14" color="#ffffff">a</span>',
+							widget = wibox.widget.textbox,
+						},
+						id = "icon",
+						left = 10,
+						layout = wibox.container.margin,
+					},
+					{
+						run_shell,
+						left = 10,
+						layout = wibox.container.margin,
+					},
+					id = "left",
+					layout = wibox.layout.fixed.horizontal,
+				},
+				widget = wibox.container.background,
+				bg = "#333333",
+				shape = function(cr, width, height)
+					gears.shape.rounded_rect(cr, width, height, 3)
+				end,
+				shape_border_color = "#74aeab",
+				shape_border_width = 1,
+				forced_width = 200,
+				forced_height = 50,
+			},
+			layout = wibox.container.place,
+		})
 
-    function widget_instance:launch(s, c)
-        c = c or capi.client.focus
-        s = mouse.screen
-        --        naughty.notify { text = 'screen ' .. s.index }
-        if not self._cached_wiboxes[s] then
-            self._cached_wiboxes[s] = {}
-            --            naughty.notify { text = 'nope' }
-        end
-        if not self._cached_wiboxes[s][1] then
-            self._cached_wiboxes[s][1] = self:_create_wibox()
-            --            naughty.notify { text = 'nope' }
-        end
-        local w = self._cached_wiboxes[s][1]
-        local rnd = math.random()
-        awful.spawn.with_line_callback(string.format(self._cmd_blur, tostring(awful.screen.focused().geometry.x), rnd), {
-            stdout = function(line)
-                w.visible = true
-                w.bgimage = '/tmp/i3lock-' .. rnd ..'.png'
-                awful.placement.top(w, { margins = { top = 20 }, parent = awful.screen.focused() })
-                awful.prompt.run {
-                    prompt = 'Run: ',
-                    bg_cursor = '#74aeab',
-                    textbox = run_shell.widget,
-                    completion_callback = completion.shell,
-                    exe_callback = function(...)
-                        run_shell:spawn_and_handle_error(...)
-                    end,
-                    history_path = gfs.get_cache_dir() .. "/history",
-                    done_callback = function()
-                        w.visible = false
-                        w.bgimage = ''
-                        awful.spawn([[bash -c 'rm -f /tmp/i3lock*']])
-                    end
-                }
-            end,
-            stderr = function(line)
-                naughty.notify { text = "ERR:" .. line }
-            end,
-        })
+		return w
+	end
 
-    end
+	function widget_instance:_capture_command(s, image_path)
+		local geometry = s.geometry
+		local display = os.getenv("DISPLAY") or ":0.0"
+		return {
+			"ffmpeg",
+			"-loglevel",
+			"error",
+			"-f",
+			"x11grab",
+			"-video_size",
+			string.format("%dx%d", geometry.width, geometry.height),
+			"-y",
+			"-i",
+			string.format("%s+%d,%d", display, geometry.x, geometry.y),
+			"-vf",
+			"boxblur=7",
+			"-frames:v",
+			"1",
+			image_path,
+		}
+	end
 
-    return widget_instance
+	function widget_instance:launch(s)
+		if self._running then
+			return
+		end
+
+		s = s or awful.screen.focused()
+		local w = self._cached_wiboxes[s]
+		if not w then
+			w = self:_create_wibox(s)
+			self._cached_wiboxes[s] = w
+		end
+
+		w.screen = s
+		w.width = s.geometry.width
+		w.height = s.geometry.height
+
+		local image_path = string.format(
+			"%scapture-%d-%d.png",
+			cache_dir,
+			os.time(),
+			math.random(1, 1000000000)
+		)
+		self._running = true
+
+		awful.spawn.easy_async(self:_capture_command(s, image_path), function(_, stderr, reason, exitcode)
+			if reason ~= "exit" or exitcode ~= 0 then
+				self._running = false
+				awful.spawn({ "rm", "-f", image_path }, false)
+				naughty.notify({
+					title = "Run prompt",
+					text = stderr ~= "" and stderr or "Could not capture the screen",
+				})
+				return
+			end
+
+			w.visible = true
+			w.bgimage = image_path
+			awful.placement.top(w, { margins = { top = 20 }, parent = s })
+			awful.prompt.run({
+				prompt = "Run: ",
+				bg_cursor = "#74aeab",
+				textbox = run_shell.widget,
+				completion_callback = completion.shell,
+				exe_callback = function(command)
+					run_shell:spawn_and_handle_error(command)
+				end,
+				history_path = cache_dir .. "history",
+				done_callback = function()
+					w.visible = false
+					w.bgimage = nil
+					self._running = false
+					awful.spawn({ "rm", "-f", image_path }, false)
+				end,
+			})
+		end)
+	end
+
+	return widget_instance
 end
 
 local function get_default_widget()
-    if not widget.default_widget then
-        widget.default_widget = widget.new()
-    end
-    return widget.default_widget
+	if not widget.default_widget then
+		widget.default_widget = widget.new()
+	end
+	return widget.default_widget
 end
 
 function widget.launch(...)
-    return get_default_widget():launch(...)
+	return get_default_widget():launch(...)
 end
 
 return widget
-

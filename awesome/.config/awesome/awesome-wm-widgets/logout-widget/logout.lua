@@ -11,12 +11,13 @@ local awful = require("awful")
 local capi = {keygrabber = keygrabber }
 local wibox = require("wibox")
 local gears = require("gears")
+local gfs = require("gears.filesystem")
+local gstring = require("gears.string")
 local beautiful = require("beautiful")
 local awesomebuttons = require("awesome-buttons.awesome-buttons")
 
 
-local HOME_DIR = os.getenv("HOME")
-local WIDGET_DIR = HOME_DIR .. '/.config/awesome/awesome-wm-widgets/logout-widget'
+local WIDGET_DIR = gfs.get_configuration_dir() .. 'awesome-wm-widgets/logout-widget'
 
 
 local w = wibox {
@@ -61,6 +62,8 @@ end
 
 local function launch(args)
 
+	args = args or {}
+
     local bg_color = args.bg_color or beautiful.bg_normal
     local accent_color = args.accent_color or beautiful.bg_focus
     local text_color = args.text_color or beautiful.fg_normal
@@ -69,14 +72,14 @@ local function launch(args)
     local icon_margin = args.icon_margin or 16
 
     local onlogout = args.onlogout or function () awesome.quit() end
-    local onlock = args.onlock or function() awful.spawn.with_shell("systemctl suspend") end
+    local onlock = args.onlock or function() awful.spawn("slock") end
     local onreboot = args.onreboot or function() awful.spawn.with_shell("reboot") end
     local onsuspend = args.onsuspend or function() awful.spawn.with_shell("systemctl suspend") end
     local onpoweroff = args.onpoweroff or function() awful.spawn.with_shell("shutdown now") end
 
     w:set_bg(bg_color)
     if #phrases > 0 then
-        phrase_widget:set_markup('<span color="'.. text_color .. '" size="20000">' .. phrases[ math.random( #phrases ) ] .. '</span>')
+        phrase_widget:set_markup('<span color="'.. text_color .. '" size="20000">' .. gstring.xml_escape(phrases[ math.random( #phrases ) ]) .. '</span>')
     end
 
     w:setup {
@@ -93,12 +96,12 @@ local function launch(args)
                     spacing = 8,
                     layout = wibox.layout.fixed.horizontal
                 },
-                valigh = 'center',
+                valign = 'center',
                 layout = wibox.container.place
             },
             {
                 action,
-                haligh = 'center',
+                halign = 'center',
                 layout = wibox.container.place
             },
             spacing = 32,
@@ -106,11 +109,11 @@ local function launch(args)
         },
         id = 'a',
         shape_border_width = 1,
-        valigh = 'center',
+        valign = 'center',
         layout = wibox.container.place
     }
 
-    w.screen = mouse.screen
+    w.screen = args.screen or awful.screen.focused()
     w.visible = true
 
     awful.placement.centered(w)
@@ -138,6 +141,7 @@ local function launch(args)
 end
 
 local function widget(args)
+	args = args or {}
     local icon = args.icon or WIDGET_DIR .. '/power.svg'
 
     local res = wibox.widget {
@@ -160,6 +164,7 @@ local function widget(args)
                     capi.keygrabber.stop()
                     w.visible = false
                 else
+					args.screen = mouse.screen
                     launch(args)
                 end
             end)

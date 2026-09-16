@@ -84,6 +84,7 @@ local function factory(args)
 		fs_now = {}
 
 		local notifypaths = {}
+		local mount_paths = {}
 		local mounts_get
 		local mount_get_mount_path
 		pcall(function()
@@ -94,8 +95,29 @@ local function factory(args)
 			mounts_get = Gio.unix_mounts_get
 			mount_get_mount_path = Gio.unix_mount_get_mount_path
 		end
-		for _, mount in ipairs(mounts_get()) do
-			local path = mount_get_mount_path(mount)
+		if mounts_get then
+			for _, mount in ipairs(mounts_get()) do
+				mount_paths[#mount_paths + 1] = mount_get_mount_path(mount)
+			end
+		else
+			local seen = {}
+			local f = io.open("/proc/mounts", "r")
+			if f then
+				for line in f:lines() do
+					local dev, mpath, mtype = line:match("^(%S+)%s+(%S+)%s+(%S+)")
+					if dev and mpath and not seen[mpath]
+						and (dev:sub(1, 1) == "/" or dev:sub(1, 5) == "/dev/")
+						and not mtype:match("^tmpfs$")
+						and not mpath:match("^/(sys|proc|dev|run|snap)")
+					then
+						seen[mpath] = true
+						mount_paths[#mount_paths + 1] = mpath
+					end
+				end
+				f:close()
+			end
+		end
+		for _, path in ipairs(mount_paths) do
 			local root = Gio.File.new_for_path(path)
 			local info = root:query_filesystem_info(query)
 

@@ -89,11 +89,12 @@ local function factory(args)
 
             -- Notify only once when connection is lost
             if string.match(dev_now.carrier, "0") and notify == "on" and helpers.get_map(dev) then
+                local target_screen = type(screen) == "function" and screen() or screen
                 naughty.notify {
                     title    = dev,
                     text     = "No carrier",
                     icon     = helpers.icons_dir .. "no_net.png",
-                    screen   = screen
+                    screen   = target_screen
                 }
                 helpers.set_map(dev, false)
             elseif string.match(dev_now.carrier, "1") then

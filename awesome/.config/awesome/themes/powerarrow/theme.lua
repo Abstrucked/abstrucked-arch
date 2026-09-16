@@ -6,19 +6,27 @@
 --]]
 
 local gears = require("gears")
+local gfs = require("gears.filesystem")
 local lain = require("lain")
 local awful = require("awful")
 local wibox = require("wibox")
 local dpi = require("beautiful.xresources").apply_dpi
 local logout = require("awesome-wm-widgets.logout-widget.logout")
-local math, string, os = math, string, os
+local math, string, os, screen = math, string, os, screen
 local my_table = awful.util.table or gears.table -- 4.{0,1} compatibility
 
 local theme = {}
 theme.bgDir = os.getenv("THEME_BG_DIR") or os.getenv("HOME") .. "/.backgrounds"
-theme.dir = os.getenv("HOME") .. "/.config/awesome/themes/powerarrow"
+theme.dir = gfs.get_configuration_dir() .. "themes/powerarrow"
 theme.wallpaper = theme.bgDir .. "/cosmo.png"
 theme.wallpaperUltrawide = theme.bgDir .. "/arch_wide_bluish.png"
+
+function theme.wallpaper_for(s)
+	if s.geometry.width == 3440 and s.geometry.height == 1440 then
+		return theme.wallpaperUltrawide
+	end
+	return theme.wallpaper
+end
 
 theme.font = "JetBrains Mono Nerd Font 10"
 
@@ -114,97 +122,115 @@ theme.titlebar_maximized_button_normal_inactive = theme.dir .. "/icons/titlebar/
 theme.icon_theme = "Numix"
 local markup = lain.util.markup
 
--- Textclock
---os.setlocale(os.getenv("LANG")) -- to localize the clock
-local mytextclock = wibox.widget.textclock("<span font='Misc Tamsyn 5'> </span>%H:%M ")
-mytextclock.font = theme.font
-
--- Calendar
-theme.cal = lain.widget.cal({
-	cal = "cal --color=always",
-	notification_preset = {
-		font = "Monospace 11",
-		fg = theme.fg_normal,
-		bg = theme.bg_normal,
-		border_color = theme.border_focus,
-		border_width = dpi(2),
-		timeout = 0,
-	},
-})
-
 -- Volume
 local volumebar_widget = require("awesome-wm-widgets.volumebar-widget.volumebar")
 
--- MEM
-local memicon = wibox.widget.imagebox(theme.widget_mem)
-local mem = lain.widget.mem({
-	settings = function()
-		widget:set_markup(markup.font(theme.font, " " .. mem_now.used .. "MB "))
-	end,
-})
+local function build_screen_widgets()
+	local widgets = {}
 
--- CPU
-local cpuicon = wibox.widget.imagebox(theme.widget_cpu)
-local cpu = lain.widget.cpu({
-	settings = function()
-		widget:set_markup(markup.font(theme.font, " " .. cpu_now.usage .. "% "))
-	end,
-})
--- / fs
-local fsicon = wibox.widget.imagebox(theme.widget_hdd)
--- commented because it needs Gio/Glib >= 2.54
-theme.fs = lain.widget.fs({
-	notification_preset = { fg = theme.fg_normal, bg = theme.bg_normal, font = "InputMono 8" },
-	settings = function()
-		local fsp = string.format("%3.2f%s", fs_now["/"].free, fs_now["/"].units)
-		widget:set_markup(markup.font(theme.font, fsp))
-	end,
-})
+	widgets.clock = wibox.widget.textclock("<span font='Misc Tamsyn 5'> </span>%H:%M ")
+	widgets.clock.font = theme.font
 
--- Battery
+	widgets.cal = lain.widget.cal({
+		followtag = true,
+		notification_preset = {
+			font = "Monospace 11",
+			fg = theme.fg_normal,
+			bg = theme.bg_normal,
+			border_color = theme.border_focus,
+			border_width = dpi(2),
+			timeout = 0,
+		},
+	})
 
-local baticon = wibox.widget.imagebox(theme.widget_battery)
-local bat = lain.widget.bat({
-	notification_preset = { fg = theme.fg_normal, bg = theme.bg_normal, font = "Monospace 10" },
-	settings = function()
-		if bat_now.status and bat_now.status ~= "N/A" then
-			if bat_now.ac_status == 1 then
-				widget:set_markup(markup.font(theme.font, " AC "))
-				baticon:set_image(theme.widget_ac)
-				return
-			elseif bat_now.perc and tonumber(bat_now.perc) <= 5 then
-				baticon:set_image(theme.widget_battery_empty)
-			elseif bat_now.perc and tonumber(bat_now.perc) <= 15 then
-				baticon:set_image(theme.widget_battery_low)
-			else
-				baticon:set_image(theme.widget_battery)
+	local memicon = wibox.widget.imagebox(theme.widget_mem)
+	widgets.mem = lain.widget.mem({
+		settings = function()
+			widget:set_markup(markup.font(theme.font, " " .. mem_now.used .. "MB "))
+		end,
+	})
+
+	local cpuicon = wibox.widget.imagebox(theme.widget_cpu)
+	widgets.cpu = lain.widget.cpu({
+		settings = function()
+			widget:set_markup(markup.font(theme.font, " " .. cpu_now.usage .. "% "))
+		end,
+	})
+
+	local fsicon = wibox.widget.imagebox(theme.widget_hdd)
+	widgets.fs = lain.widget.fs({
+		followtag = true,
+		notification_preset = { fg = theme.fg_normal, bg = theme.bg_normal, font = "InputMono 8" },
+		settings = function()
+			local root = fs_now["/"]
+			if root then
+				local fsp = string.format("%3.2f%s", root.free, root.units)
+				widget:set_markup(markup.font(theme.font, fsp))
 			end
-			widget:set_markup(markup.font(theme.font, " " .. bat_now.perc .. "% "))
-		else
-			widget:set_markup()
-			baticon:set_image(theme.widget_ac)
-		end
-	end,
-})
+		end,
+	})
 
--- Net
-local neticon = wibox.widget.imagebox(theme.widget_net)
-local net = lain.widget.net({
-	notification_preset = { fg = theme.fg_normal, bg = theme.bg_normal, font = "Monospace 10" },
-	settings = function()
-		widget:set_markup(
-			markup.fontfg(
-				theme.font,
-				theme.titlebar_fg_focus,
-				" ↓ "
-					.. string.format("%.1f", net_now.received / 1024)
-					.. " MiB/s ↑ "
-					.. string.format("%.1f", net_now.sent / 1024)
-					.. " MiB/s "
+	local baticon = wibox.widget.imagebox(theme.widget_battery)
+	widgets.bat = lain.widget.bat({
+		notification_preset = { fg = theme.fg_normal, bg = theme.bg_normal, font = "Monospace 10" },
+		settings = function()
+			if bat_now.status and bat_now.status ~= "N/A" then
+				if bat_now.ac_status == 1 then
+					widget:set_markup(markup.font(theme.font, " AC "))
+					baticon:set_image(theme.widget_ac)
+					return
+				elseif bat_now.perc and tonumber(bat_now.perc) <= 5 then
+					baticon:set_image(theme.widget_battery_empty)
+				elseif bat_now.perc and tonumber(bat_now.perc) <= 15 then
+					baticon:set_image(theme.widget_battery_low)
+				else
+					baticon:set_image(theme.widget_battery)
+				end
+				widget:set_markup(markup.font(theme.font, " " .. bat_now.perc .. "% "))
+			else
+				widget:set_markup()
+				baticon:set_image(theme.widget_ac)
+			end
+		end,
+	})
+
+	local neticon = wibox.widget.imagebox(theme.widget_net)
+	widgets.net = lain.widget.net({
+		screen = function()
+			return awful.screen.focused()
+		end,
+		notification_preset = { fg = theme.fg_normal, bg = theme.bg_normal, font = "Monospace 10" },
+		settings = function()
+			widget:set_markup(
+				markup.fontfg(
+					theme.font,
+					theme.titlebar_fg_focus,
+					" ↓ "
+						.. string.format("%.1f", net_now.received / 1024)
+						.. " MiB/s ↑ "
+						.. string.format("%.1f", net_now.sent / 1024)
+						.. " MiB/s "
+					)
 			)
-		)
-	end,
-})
+		end,
+	})
+
+	widgets.volume = volumebar_widget({
+		main_color = theme.bg_urgent,
+		mute_color = "#777E7655",
+		width = 80,
+		shape = "rounded_bar",
+		margins = 4,
+		timeout = 2,
+	})
+	widgets.memicon = memicon
+	widgets.cpuicon = cpuicon
+	widgets.fsicon = fsicon
+	widgets.baticon = baticon
+	widgets.neticon = neticon
+
+	return widgets
+end
 
 function theme.powerline_rl(cr, width, height)
 	local arrow_depth, offset = height / 2, 0
@@ -229,24 +255,11 @@ end
 function theme.at_screen_connect(s)
 	-- Quake application
 	s.quake = lain.util.quake({ app = awful.util.terminal })
+	local widgets = build_screen_widgets()
+	s.cal = widgets.cal
+	s.fs = widgets.fs
 
-	-- If wallpaper is a function, call it with the screen
-
-	-- Set wallpaper based on screen resolution
-
-	if s.geometry.width == 3440 and s.geometry.height == 1440 then
-		local wallpaper = theme.wallpaperUltrawide
-		if type(wallpaper) == "function" then
-			wallpaper = wallpaper(s)
-		end
-		gears.wallpaper.maximized(wallpaper, s, true)
-	else
-		local wallpaper = theme.wallpaper
-		if type(wallpaper) == "function" then
-			wallpaper = wallpaper(s)
-		end
-		gears.wallpaper.maximized(wallpaper, s, true)
-	end
+	gears.wallpaper.maximized(theme.wallpaper_for(s), s, true)
 
 	-- Tags
 	awful.tag(awful.util.tagnames, s, awful.layout.layouts)
@@ -286,6 +299,22 @@ function theme.at_screen_connect(s)
 	s.mywibox =
 		awful.wibar({ position = "top", screen = s, height = dpi(18), bg = theme.bg_normal, fg = theme.fg_normal })
 
+	local right_widgets = {
+		layout = wibox.layout.fixed.horizontal,
+	}
+	if s == screen.primary then
+		table.insert(right_widgets, wibox.widget.systray())
+	end
+	table.insert(right_widgets, pl(widgets.volume, "#4B3B5122"))
+	table.insert(right_widgets, pl(wibox.widget({ widgets.memicon, widgets.mem.widget, layout = wibox.layout.align.horizontal }), "#4B3B5122"))
+	table.insert(right_widgets, pl(wibox.widget({ widgets.cpuicon, widgets.cpu.widget, layout = wibox.layout.align.horizontal }), "#C0C0A222"))
+	table.insert(right_widgets, pl(wibox.widget({ widgets.fsicon, widgets.fs.widget, layout = wibox.layout.align.horizontal }), "#4B3B5122"))
+	table.insert(right_widgets, pl(wibox.widget({ widgets.baticon, widgets.bat.widget, layout = wibox.layout.align.horizontal }), "#8DAA9A22"))
+	table.insert(right_widgets, pl(wibox.widget({ widgets.neticon, widgets.net.widget, layout = wibox.layout.align.horizontal }), "#C0C0A222"))
+	table.insert(right_widgets, pl(widgets.clock, "#4B3B5122"))
+	table.insert(right_widgets, logout.widget({}))
+	table.insert(right_widgets, pl(s.mylayoutbox, ""))
+
 	-- Add widgets to the wibox
 	s.mywibox:setup({
 		layout = wibox.layout.align.horizontal,
@@ -297,31 +326,7 @@ function theme.at_screen_connect(s)
 			-- spr,
 		},
 		s.mytasklist, -- Middle widget
-		{ -- Right widgets
-			layout = wibox.layout.fixed.horizontal,
-			wibox.widget.systray(),
-			pl(
-				volumebar_widget({
-					main_color = theme.bg_urgent,
-					mute_color = "#777E7655",
-					width = 80,
-					shape = "rounded_bar",
-					margins = 4,
-				}),
-				"#4B3B5122"
-			),
-			pl(wibox.widget({ memicon, mem.widget, layout = wibox.layout.align.horizontal }), "#4B3B5122"),
-			pl(wibox.widget({ cpuicon, cpu.widget, layout = wibox.layout.align.horizontal }), "#C0C0A222"),
-			pl(
-				wibox.widget({ fsicon, theme.fs and theme.fs.widget, layout = wibox.layout.align.horizontal }),
-				"#4B3B5122"
-			),
-			pl(wibox.widget({ baticon, bat.widget, layout = wibox.layout.align.horizontal }), "#8DAA9A22"),
-			pl(wibox.widget({ neticon, net.widget, layout = wibox.layout.align.horizontal }), "#C0C0A222"),
-			pl(mytextclock, "#4B3B5122"),
-			logout.widget({}),
-			pl(s.mylayoutbox, ""),
-		},
+		right_widgets,
 	})
 end
 

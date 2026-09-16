@@ -14,9 +14,10 @@ local gears = require("gears")
 local spawn = require("awful.spawn")
 local watch = require("awful.widget.watch")
 local wibox = require("wibox")
+local math = math
 
 local GET_VOLUME_CMD = "amixer -D pipewire sget Master"
-local INC_VOLUME_CMD = "amixer -D piperwire sset Master 5%+"
+local INC_VOLUME_CMD = "amixer -D pipewire sset Master 5%+"
 local DEC_VOLUME_CMD = "amixer -D pipewire sset Master 5%-"
 local TOG_VOLUME_CMD = "amixer -D pipewire sset Master toggle"
 
@@ -51,10 +52,17 @@ local function worker(args)
 		widget = wibox.widget.progressbar,
 	})
 
-	local update_graphic = function(widget, stdout, _, _, _)
+	local update_graphic = function(widget, stdout, _, _, exitcode)
+		if exitcode ~= 0 then
+			return
+		end
+
 		local mute = string.match(stdout, "%[(o%D%D?)%]") -- \[(o\D\D?)\] - [on] or [off]
-		local volume = string.match(stdout, "(%d?%d?%d)%%") -- (\d?\d?\d)\%)
-		volume = tonumber(string.format("% 3d", volume))
+		local volume = tonumber(string.match(stdout, "(%d?%d?%d)%%")) -- (\d?\d?\d)\%)
+		if not volume then
+			return
+		end
+		volume = math.max(0, math.min(100, volume))
 
 		widget.value = volume / 100
 		widget.color = mute == "off" and mute_color or main_color

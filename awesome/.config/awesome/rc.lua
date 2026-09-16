@@ -10,6 +10,7 @@ local awesome, client, mouse, screen, tag = awesome, client, mouse, screen, tag
 local ipairs, string, os, table, tostring, tonumber, type = ipairs, string, os, table, tostring, tonumber, type
 
 local gears = require("gears")
+local gfs = require("gears.filesystem")
 local awful = require("awful")
 require("awful.autofocus")
 local wibox = require("wibox")
@@ -61,8 +62,14 @@ end
 
 -- This function will run once every time Awesome is started
 local function run_once(cmd_arr)
+	local user = os.getenv("USER") or os.getenv("LOGNAME")
+	local function shell_quote(value)
+		return "'" .. tostring(value):gsub("'", "'\\''") .. "'"
+	end
+
 	for _, cmd in ipairs(cmd_arr) do
-		awful.spawn.with_shell(string.format("pgrep -u $USER -fx '%s' > /dev/null || (%s)", cmd, cmd))
+		local check = user and string.format("pgrep -u %s -fx -- %s", shell_quote(user), shell_quote(cmd)) or "false"
+		awful.spawn.with_shell(string.format("%s >/dev/null 2>&1 || (%s)", check, cmd))
 	end
 end
 
@@ -70,39 +77,28 @@ end
 
 -- This function implements the XDG autostart specification
 
-awful.spawn.with_shell(
-	'if (xrdb -query | grep -q "^awesome\\.started:\\s*true$"); then exit; fi;'
-		.. 'xrdb -merge <<< "awesome.started:true";'
-		-- list each of your autostart commands, followed by ; inside single quotes, followed by ..
-		.. 'dex --environment Awesome --autostart --search-paths "$XDG_CONFIG_DIRS/autostart:$XDG_CONFIG_HOME/autostart"' -- https://github.com/jceb/dex
-)
+awful.spawn.with_shell([=[
+	if xrdb -query | grep -q '^awesome\.started:[[:space:]]*true$'; then
+		exit 0
+	fi
+	printf 'awesome.started:true\n' | xrdb -merge
+	dex --environment Awesome --autostart --search-paths \
+		"${XDG_CONFIG_DIRS:-/etc/xdg}/autostart:${XDG_CONFIG_HOME:-$HOME/.config}/autostart"
+]=])
 
 -- }}}
 
 -- {{{ Variable definitions
 
-local themes = {
-	"blackburn", -- 1
-	"copland", -- 2
-	"dremora", -- 3
-	"holo", -- 4
-	"multicolor", -- 5
-	"powerarrow", -- 6
-	"powerarrow-dark", -- 7
-	"rainbow", -- 8
-	"steamburn", -- 9
-	"mxh", -- 10
-}
-
-local chosen_theme = themes[6]
+local chosen_theme = os.getenv("AWESOME_THEME") or "powerarrow"
 local modkey = "Mod4"
 local altkey = "Mod1"
-local terminal = "alacritty"
+local terminal = os.getenv("TERMINAL") or "alacritty"
 local vi_focus = false -- vi-like client focus - https://github.com/lcpz/awesome-copycats/issues/275
 local cycle_prev = true -- cycle trough all previous client or just the first -- https://github.com/lcpz/awesome-copycats/issues/274
 local editor = os.getenv("EDITOR") or "nvim"
 local guieditor = os.getenv("GUI_EDITOR") or "gedit"
-local browser = "brave" --os.getenv("BROWSER") or
+local browser = os.getenv("BROWSER") or "brave"
 local scrlocker = "slock"
 local ide = "nvim"
 
@@ -208,7 +204,7 @@ lain.layout.cascade.tile.extra_padding = dpi(5)
 lain.layout.cascade.tile.nmaster = 5
 lain.layout.cascade.tile.ncol = 2
 
-beautiful.init(string.format("%s/.config/awesome/themes/%s/theme.lua", os.getenv("HOME"), chosen_theme))
+beautiful.init(gfs.get_configuration_dir() .. "themes/" .. chosen_theme .. "/theme.lua")
 -- }}}
 
 -- {{{ Menu
@@ -249,8 +245,8 @@ awful.util.mydesktop = freedesktop.menu.build()
 -- Re-set wallpaper when a screen's geometry changes (e.g. different resolution)
 screen.connect_signal("property::geometry", function(s)
 	-- Wallpaper
-	if beautiful.wallpaper then
-		local wallpaper = beautiful.wallpaper
+	local wallpaper = beautiful.wallpaper_for and beautiful.wallpaper_for(s) or beautiful.wallpaper
+	if wallpaper then
 		-- If wallpaper is a function, call it with the screen
 		if type(wallpaper) == "function" then
 			wallpaper = wallpaper(s)
@@ -287,6 +283,23 @@ root.buttons(my_table.join(
 -- }}}
 
 -- {{{ Key bindings
+local function launch_logout()
+	logout.launch({
+		onlock = function()
+			awful.spawn(scrlocker)
+		end,
+		screen = awful.screen.focused(),
+	})
+end
+
+local function show_screen_widget(name)
+	local focused_screen = awful.screen.focused()
+	local widget = focused_screen[name]
+	if widget and widget.show then
+		widget.show(7)
+	end
+end
+
 local globalkeys = my_table.join(
 	-- Take a screenshot
 	-- https://github.com/lcpz/dots/blob/master/bin/screenshot
@@ -303,7 +316,7 @@ local globalkeys = my_table.join(
 		awful.spawn.with_shell(scrlocker)
 	end, { description = "lock screen", group = "hotkeys" }),
 	awful.key({ altkey, "Control" }, "l", function()
-		logout.launch()
+		launch_logout()
 	end, { description = "Show logout screen", group = "custom" }),
 
 	-- Hotkeys
@@ -482,47 +495,38 @@ local globalkeys = my_table.join(
 
 	-- Widgets popups ---------------------------------
 	awful.key({ altkey }, "c", function()
-		if beautiful.cal then
-			beautiful.cal.show(7)
-		end
+		show_screen_widget("cal")
 	end, { description = "show calendar", group = "widgets" }),
 	awful.key({ altkey }, "h", function()
-		if beautiful.fs then
-			beautiful.fs.show(7)
-		end
+		show_screen_widget("fs")
 	end, { description = "show filesystem", group = "widgets" }),
-	awful.key({ altkey }, "w", function()
-		if beautiful.weather then
-			beautiful.weather.show(7)
-		end
-	end, { description = "show weather", group = "widgets" }),
 	-- Yubico -----------------------------------------
 	awful.key({ altkey }, "y", function()
 		require("abstrucked-plugins/yubico").show_list()
 	end),
 	-- Brightness - MONITOR ---------------------------
 	awful.key({}, "XF86MonBrightnessUp", function()
-		awful.util.spawn("brightnessctl set 10%+")
+		awful.spawn("brightnessctl set 10%+")
 	end, { description = "Increase Monitor Brightness +10%", group = "widgets" }),
 	awful.key({}, "XF86MonBrightnessDown", function()
-		awful.util.spawn("brightnessctl set 10%-")
+		awful.spawn("brightnessctl set 10%-")
 	end, { description = "Decrease Monitor Brightness-10%", group = "widgets" }),
 	-- Brightness - KEYBOARD --------------------------
 	awful.key({}, "XF86KbdBrightnessUp", function()
-		awful.util.spawn("macbook-lighter-kbd --inc 10")
+		awful.spawn("macbook-lighter-kbd --inc 10")
 	end, { description = "Increase Keyboard Brightness +10%", group = "widgets" }),
 	awful.key({}, "XF86KbdBrightnessDown", function()
-		awful.util.spawn("macbook-lighter-kbd --dec 10")
+		awful.spawn("macbook-lighter-kbd --dec 10")
 	end, { description = "Decrease Keyboard Brightness -10%", group = "widgets" }),
 	-- Volume ------------------------------------------
 	awful.key({}, "XF86AudioLowerVolume", function()
-		awful.util.spawn("amixer -D pipewire set Master 2%-")
+		awful.spawn("amixer -D pipewire set Master 2%-")
 	end, { description = "Descrease Volume", group = "audio" }),
 	awful.key({}, "XF86AudioRaiseVolume", function()
-		awful.util.spawn("amixer -D pipewire set Master 2%+")
+		awful.spawn("amixer -D pipewire set Master 2%+")
 	end, { description = "Increase Volume", group = "audio" }),
 	awful.key({}, "XF86AudioMute", function()
-		awful.util.spawn("amixer -D pipewire set Master 1+ toggle")
+		awful.spawn("amixer -D pipewire set Master 1+ toggle")
 	end, { description = "Mute/Unmute", group = "audio" }),
 	-- Media control (playerctl/MPRIS) ------------------
 	awful.key({}, "XF86AudioPlay", function()
@@ -733,16 +737,16 @@ awful.rules.rules = {
 	-- Titlebars
 	{ rule_any = { type = { "dialog", "normal" } }, properties = { titlebars_enabled = false } },
 
-	-- Set Brave to always map on the first tag on desktop 3.
-	{ rule = { class = "Brave" }, properties = { screen = 1, tag = awful.util.tagnames[3] } },
+	-- Set Brave to map on the primary screen and tag 3.
+	{ rule_any = { class = { "Brave", "Brave-browser" } }, properties = { screen = screen.primary, tag = awful.util.tagnames[3] } },
 
-	-- Set Discord to always map on the first tag on desktop 7.
-	{ rule = { class = "discord" }, properties = { screen = 1, tag = awful.util.tagnames[7] } },
+	-- Set Discord to map on the primary screen and tag 7.
+	{ rule_any = { class = { "discord", "Discord" } }, properties = { screen = screen.primary, tag = awful.util.tagnames[7] } },
 
 	-- Set Gimp to always show maximized on tag 3.
 	{
 		rule = { class = "Gimp", role = "gimp-image-window" },
-		properties = { screen = 1, tag = awful.util.tagnames[3], maximized = true },
+		properties = { screen = screen.primary, tag = awful.util.tagnames[3], maximized = true },
 	},
 }
 -- }}}
@@ -839,6 +843,4 @@ local autorun_apps = {
 }
 if autorun then
 	run_once(autorun_apps)
-	-- one-shot, idempotent commands
-	awful.spawn.with_shell("xrandr --output DP-0 --primary")
 end

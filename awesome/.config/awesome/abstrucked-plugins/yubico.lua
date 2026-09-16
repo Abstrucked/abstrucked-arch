@@ -2,77 +2,103 @@ local awful = require("awful")
 local wibox = require("wibox")
 local gears = require("gears")
 local naughty = require("naughty")
+local math = math
 
 local yubico = {}
-local ERROR_NO_YUBIKEY = "ERROR: No YubiKey detected!"
 
-local function is_null(item)
-	if item == nil or item == "" then
-		return true
-	end
-	return false
+local function notify(title, text)
+	naughty.notify({ title = title, text = text })
 end
 
-function yubico.get_accounts()
-	local handle = io.popen("ykman oath accounts list")
-	local result = ""
-	if handle then
-		result = handle:read("*a") or ""
-		handle:close()
-	end
-
-	if is_null(result) or result:match(ERROR_NO_YUBIKEY) then
-		naughty.notify({ title = "Yubikey not found", text = "Insert yubikey to access the account list" })
-		return nil
-	end
-
-	local items = {}
-	for line in result:gmatch("[^\r\n]+") do
-		table.insert(items, line)
-	end
-
-	-- Return nil if no accounts were found (empty table)
-	if #items == 0 then
-		naughty.notify({ title = "No accounts", text = "No OATH accounts found on the YubiKey" })
-		return nil
-	end
-
-	return items
+local function shell_quote(value)
+	return "'" .. tostring(value):gsub("'", "'\\''") .. "'"
 end
 
-local function shell_quote(str)
-	return "'" .. tostring(str):gsub("'", "'\\''") .. "'"
+local function command_error(stderr, fallback)
+	local message = (stderr or ""):gsub("%s+$", "")
+	return message ~= "" and message or fallback
+end
+
+function yubico.get_accounts(callback)
+	awful.spawn.easy_async({ "ykman", "oath", "accounts", "list" }, function(stdout, stderr, reason, exitcode)
+		if reason ~= "exit" or exitcode ~= 0 then
+			local error_text = command_error(stderr, "Insert a YubiKey to access the account list")
+			notify("YubiKey unavailable", error_text)
+			callback(nil)
+			return
+		end
+
+		local items = {}
+		for line in stdout:gmatch("[^\r\n]+") do
+			table.insert(items, line)
+		end
+
+		if #items == 0 then
+			notify("No accounts", "No OATH accounts found on the YubiKey")
+			callback(nil)
+			return
+		end
+
+		callback(items)
+	end)
+end
+
+local function clear_clipboard()
+	awful.spawn.easy_async_with_shell(
+		"if command -v xclip >/dev/null 2>&1; then printf '' | xclip -selection clipboard; "
+			.. "elif command -v xsel >/dev/null 2>&1; then printf '' | xsel -ib; fi",
+		function() end
+	)
+end
+
+local function copy_code(code)
+	local quoted_code = shell_quote(code)
+	local command = string.format(
+		"if command -v xclip >/dev/null 2>&1; then printf '%%s' %s | xclip -selection clipboard; "
+			.. "elif command -v xsel >/dev/null 2>&1; then printf '%%s' %s | xsel -ib; else exit 127; fi",
+		quoted_code,
+		quoted_code
+	)
+
+	awful.spawn.easy_async_with_shell(command, function(_, stderr, reason, exitcode)
+		if reason ~= "exit" or exitcode ~= 0 then
+			notify("Clipboard error", command_error(stderr, "No supported clipboard utility was found"))
+			return
+		end
+
+		notify("Clipboard", "Code ready; clipboard will be cleared in 30 seconds")
+		gears.timer.start_new(30, function()
+			clear_clipboard()
+			return false
+		end)
+	end)
 end
 
 local function get_account_code(account)
-	local handle = io.popen("ykman oath accounts code " .. shell_quote(account))
-	local accountData = ""
-	if handle then
-		accountData = handle:read("*a") or ""
-		handle:close()
-	end
-	local code = accountData:match("(%d%d%d%d%d%d)[^%d]*$")
-	if code then
-		local cmd = string.format("echo -n '%s' | xclip -selection clipboard", code)
-		awful.spawn.easy_async(cmd, function()
-			-- Optional callback after copy
-			naughty.notify({ title = "Clipboard", text = "Code ready" })
-		end)
-	else
-		naughty.notify({ title = "Error", text = "Could not retrieve code from YubiKey" })
-	end
+	awful.spawn.easy_async({ "ykman", "oath", "accounts", "code", account }, function(stdout, stderr, reason, exitcode)
+		if reason ~= "exit" or exitcode ~= 0 then
+			notify("YubiKey error", command_error(stderr, "Could not retrieve the account code"))
+			return
+		end
+
+		local code = stdout:match("(%d%d%d%d%d%d%d%d)%s*$") or stdout:match("(%d%d%d%d%d%d)%s*$")
+		if not code then
+			notify("YubiKey error", "Could not retrieve a six- or eight-digit code")
+			return
+		end
+
+		copy_code(code)
+	end)
 end
 
--- List items
 local items = nil
-
 local selected_index = 1
-
 local filter = ""
 local filtered_items = {}
+local active_keygrabber = nil
+local loading = false
 local filter_widget = wibox.widget.textbox()
 
--- Create list widget
 local list_widget = wibox.widget({
 	layout = wibox.layout.fixed.vertical,
 })
@@ -85,6 +111,7 @@ local function update_list()
 			table.insert(filtered_items, item)
 		end
 	end
+
 	selected_index = math.max(1, math.min(selected_index, #filtered_items))
 	list_widget:reset()
 	for i, item in ipairs(filtered_items) do
@@ -96,7 +123,6 @@ local function update_list()
 	end
 end
 
--- Create popup
 local popup = awful.popup({
 	widget = {
 		{
@@ -116,72 +142,72 @@ local popup = awful.popup({
 	ontop = true,
 })
 
--- Create and start a fresh keygrabber instance
 function yubico.show_list()
-	items = yubico.get_accounts()
-	if items == nil or #items == 0 then
+	if loading then
 		return
 	end
-	filter = ""
-	selected_index = 1
-	update_list()
+	if active_keygrabber then
+		active_keygrabber:stop()
+	end
 
-	popup.visible = true
+	loading = true
+	yubico.get_accounts(function(account_items)
+		loading = false
+		if not account_items then
+			return
+		end
 
-	local grabber_ref -- placeholder for the grabber object
+		items = account_items
+		filter = ""
+		selected_index = 1
+		update_list()
+		popup.screen = awful.screen.focused()
+		popup.visible = true
 
-	-- Assign grabber_ref before defining keygrabber_instance
-	local keygrabber_instance = awful.keygrabber({
-		start_callback = function()
-			popup.visible = true
-		end,
-		stop_callback = function()
-			popup.visible = false
-		end,
-		stop_event = "release",
-		keypressed_callback = function(self, modifiers, key, event)
-			if event ~= "press" then
-				return
-			end
-			if key == "Escape" then
-				grabber_ref:stop()
-			elseif key == "Return" then
-				if selected_index > 0 and selected_index <= #filtered_items then
-					grabber_ref:stop()
-					get_account_code(filtered_items[selected_index])
+		local keygrabber_instance
+		keygrabber_instance = awful.keygrabber({
+			start_callback = function()
+				popup.visible = true
+			end,
+			stop_callback = function()
+				popup.visible = false
+				if active_keygrabber == keygrabber_instance then
+					active_keygrabber = nil
 				end
-			elseif key == "BackSpace" then
-				filter = filter:sub(1, -2)
-				update_list()
-			elseif key == "Up" then
-				if selected_index > 1 then
-					selected_index = selected_index - 1
-				else
-					selected_index = #filtered_items
+			end,
+			stop_event = "release",
+			keypressed_callback = function(_, _, key, event)
+				if event ~= "press" then
+					return
 				end
-				update_list()
-			elseif key == "Down" then
-				if selected_index < #filtered_items then
-					selected_index = selected_index + 1
-				else
-					selected_index = 1
-				end
-				update_list()
-			else
-				-- For other keys, if it's a single character, append to filter
-				if #key == 1 and key:match("%g") then -- printable characters
+
+				if key == "Escape" then
+					keygrabber_instance:stop()
+				elseif key == "Return" then
+					if selected_index > 0 and selected_index <= #filtered_items then
+						keygrabber_instance:stop()
+						get_account_code(filtered_items[selected_index])
+					end
+				elseif key == "BackSpace" then
+					filter = filter:sub(1, -2)
+					update_list()
+				elseif (key == "Up" or key == "Down") and #filtered_items > 0 then
+					if key == "Up" then
+						selected_index = selected_index > 1 and selected_index - 1 or #filtered_items
+					else
+						selected_index = selected_index < #filtered_items and selected_index + 1 or 1
+					end
+					update_list()
+				elseif #key == 1 and key:match("%g") then
 					filter = filter .. key
 					update_list()
 				end
-			end
-		end,
-	})
-	grabber_ref = keygrabber_instance -- Now assign it correctly
-	keygrabber_instance:start()
+			end,
+		})
 
-	if popup.visible == false then
-		keygrabber_instance:stop()
-	end
+		active_keygrabber = keygrabber_instance
+		keygrabber_instance:start()
+	end)
 end
 
 return yubico
