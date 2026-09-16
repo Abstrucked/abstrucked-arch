@@ -82,8 +82,12 @@ awful.spawn.with_shell([=[
 		exit 0
 	fi
 	printf 'awesome.started:true\n' | xrdb -merge
-	dex --environment Awesome --autostart --search-paths \
-		"${XDG_CONFIG_DIRS:-/etc/xdg}/autostart:${XDG_CONFIG_HOME:-$HOME/.config}/autostart"
+	if command -v dex >/dev/null 2>&1; then
+		dex --environment Awesome --autostart --search-paths \
+			"${XDG_CONFIG_DIRS:-/etc/xdg}/autostart:${XDG_CONFIG_HOME:-$HOME/.config}/autostart"
+	else
+		logger -t awesome 'dex is not installed; skipping XDG autostart entries'
+	fi
 ]=])
 
 -- }}}
@@ -97,7 +101,7 @@ local terminal = os.getenv("TERMINAL") or "alacritty"
 local vi_focus = false -- vi-like client focus - https://github.com/lcpz/awesome-copycats/issues/275
 local cycle_prev = true -- cycle trough all previous client or just the first -- https://github.com/lcpz/awesome-copycats/issues/274
 local editor = os.getenv("EDITOR") or "nvim"
-local guieditor = os.getenv("GUI_EDITOR") or "gedit"
+local guieditor = os.getenv("GUI_EDITOR")
 local browser = os.getenv("BROWSER") or "brave"
 local scrlocker = "slock"
 local ide = "nvim"
@@ -175,16 +179,7 @@ awful.util.tasklist_buttons = my_table.join(
 		c:kill()
 	end),
 	awful.button({}, 3, function()
-		local instance = nil
-
-		return function()
-			if instance and instance.wibox.visible then
-				instance:hide()
-				instance = nil
-			else
-				instance = awful.menu.clients({ theme = { width = dpi(250) } })
-			end
-		end
+		awful.menu.client_list({ theme = { width = dpi(250) } })
 	end),
 	awful.button({}, 4, function()
 		awful.client.focus.byidx(1)
@@ -331,8 +326,8 @@ local globalkeys = my_table.join(
 		--awful.spawn("pcmanfm")
 	end, { description = "Open PcManFm", group = "hotkeys" }),
 	awful.key({ modkey, "Shift" }, "`", function()
-		awful.spawn("nautilus")
-	end, { description = "Open Nautilus", group = "hotkeys" }),
+		awful.spawn("pcmanfm")
+	end, { description = "open file manager", group = "launcher" }),
 	----------------------------------------------------------------------
 	-- Non-empty tag browsing
 	awful.key({ altkey }, "Left", function()
@@ -513,20 +508,20 @@ local globalkeys = my_table.join(
 	end, { description = "Decrease Monitor Brightness-10%", group = "widgets" }),
 	-- Brightness - KEYBOARD --------------------------
 	awful.key({}, "XF86KbdBrightnessUp", function()
-		awful.spawn("macbook-lighter-kbd --inc 10")
+		awful.spawn({ "brightnessctl", "--device=*::kbd_backlight", "set", "10%+" })
 	end, { description = "Increase Keyboard Brightness +10%", group = "widgets" }),
 	awful.key({}, "XF86KbdBrightnessDown", function()
-		awful.spawn("macbook-lighter-kbd --dec 10")
+		awful.spawn({ "brightnessctl", "--device=*::kbd_backlight", "set", "10%-" })
 	end, { description = "Decrease Keyboard Brightness -10%", group = "widgets" }),
 	-- Volume ------------------------------------------
 	awful.key({}, "XF86AudioLowerVolume", function()
-		awful.spawn("amixer -D pipewire set Master 2%-")
+		awful.spawn({ "wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", "2%-" })
 	end, { description = "Descrease Volume", group = "audio" }),
 	awful.key({}, "XF86AudioRaiseVolume", function()
-		awful.spawn("amixer -D pipewire set Master 2%+")
+		awful.spawn({ "wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", "2%+" })
 	end, { description = "Increase Volume", group = "audio" }),
 	awful.key({}, "XF86AudioMute", function()
-		awful.spawn("amixer -D pipewire set Master 1+ toggle")
+		awful.spawn({ "wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "toggle" })
 	end, { description = "Mute/Unmute", group = "audio" }),
 	-- Media control (playerctl/MPRIS) ------------------
 	awful.key({}, "XF86AudioPlay", function()
@@ -559,8 +554,12 @@ local globalkeys = my_table.join(
 		awful.spawn("discord")
 	end, { description = "run discord", group = "launcher" }),
 	awful.key({ modkey }, "a", function()
-		awful.spawn(guieditor)
-	end, { description = "run gui editor", group = "launcher" }),
+		if guieditor then
+			awful.spawn(guieditor)
+		else
+			awful.spawn({ terminal, "-e", editor })
+		end
+	end, { description = "open editor", group = "launcher" }),
 	awful.key({ modkey, "Shift" }, "w", function()
 		awful.spawn(ide)
 	end, { description = "run ide", group = "launcher" }),
@@ -576,21 +575,8 @@ local globalkeys = my_table.join(
 	-- check https://github.com/DaveDavenport/rofi for more details
 	-- rofi
 	awful.key({ modkey }, "x", function()
-		awful.spawn({
-			"rofi",
-			"-combi-modi",
-			"window,drun,ssh",
-			"-theme",
-			"Arc-Dark",
-			"-font",
-			"hack 10",
-			"-show",
-			"combi",
-			"-icon-theme",
-			"Papirus",
-			"-show-icons",
-		})
-	end, { description = "show rofi", group = "launcher" }),
+		run_shell.launch()
+	end, { description = "run command prompt", group = "launcher" }),
 	--]]
 	-- Prompt
 	--awful.key({ modkey }, "r", function () awful.screen.focused().mypromptbox:run() end,

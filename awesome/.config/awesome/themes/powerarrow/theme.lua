@@ -18,6 +18,7 @@ local my_table = awful.util.table or gears.table -- 4.{0,1} compatibility
 local theme = {}
 theme.bgDir = os.getenv("THEME_BG_DIR") or os.getenv("HOME") .. "/.backgrounds"
 theme.dir = gfs.get_configuration_dir() .. "themes/powerarrow"
+local default_theme_dir = gfs.get_themes_dir() .. "default/"
 theme.wallpaper = theme.bgDir .. "/cosmo.png"
 theme.wallpaperUltrawide = theme.bgDir .. "/arch_wide_bluish.png"
 
@@ -61,7 +62,7 @@ theme.titlebar_fg_normal = "#a6adc8"
 theme.menu_height = dpi(16)
 theme.menu_width = dpi(140)
 theme.menu_submenu_icon = theme.dir .. "/icons/submenu.png"
-theme.awesome_icon = theme.dir .. "/icons/awesome_icon.png"
+theme.awesome_icon = theme.dir .. "/icons/awesome.png"
 theme.taglist_squares_sel = theme.dir .. "/icons/square_sel.png"
 theme.taglist_squares_unsel = theme.dir .. "/icons/square_unsel.png"
 theme.layout_tile = theme.dir .. "/icons/tile.png"
@@ -72,8 +73,8 @@ theme.layout_fairv = theme.dir .. "/icons/fairv.png"
 theme.layout_fairh = theme.dir .. "/icons/fairh.png"
 theme.layout_spiral = theme.dir .. "/icons/spiral.png"
 theme.layout_dwindle = theme.dir .. "/icons/dwindle.png"
-theme.layout_max = theme.dir .. "/icons/max.png"
-theme.layout_fullscreen = theme.dir .. "/icons/fullscreen.png"
+theme.layout_max = default_theme_dir .. "layouts/max.png"
+theme.layout_fullscreen = default_theme_dir .. "layouts/fullscreen.png"
 theme.layout_magnifier = theme.dir .. "/icons/magnifier.png"
 theme.layout_floating = theme.dir .. "/icons/floating.png"
 theme.widget_ac = theme.dir .. "/icons/ac.png"
@@ -125,7 +126,7 @@ local markup = lain.util.markup
 -- Volume
 local volumebar_widget = require("awesome-wm-widgets.volumebar-widget.volumebar")
 
-local function build_screen_widgets()
+local function build_screen_widgets(s)
 	local widgets = {}
 
 	widgets.clock = wibox.widget.textclock("<span font='Misc Tamsyn 5'> </span>%H:%M ")
@@ -196,9 +197,7 @@ local function build_screen_widgets()
 
 	local neticon = wibox.widget.imagebox(theme.widget_net)
 	widgets.net = lain.widget.net({
-		screen = function()
-			return awful.screen.focused()
-		end,
+		screen = s,
 		notification_preset = { fg = theme.fg_normal, bg = theme.bg_normal, font = "Monospace 10" },
 		settings = function()
 			widget:set_markup(
@@ -255,7 +254,7 @@ end
 function theme.at_screen_connect(s)
 	-- Quake application
 	s.quake = lain.util.quake({ app = awful.util.terminal })
-	local widgets = build_screen_widgets()
+	local widgets = build_screen_widgets(s)
 	s.cal = widgets.cal
 	s.fs = widgets.fs
 

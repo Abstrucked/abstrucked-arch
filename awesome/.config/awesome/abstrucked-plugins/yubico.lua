@@ -43,11 +43,19 @@ function yubico.get_accounts(callback)
 	end)
 end
 
-local function clear_clipboard()
+local function clear_clipboard_if_matches(code)
 	awful.spawn.easy_async_with_shell(
-		"if command -v xclip >/dev/null 2>&1; then printf '' | xclip -selection clipboard; "
-			.. "elif command -v xsel >/dev/null 2>&1; then printf '' | xsel -ib; fi",
-		function() end
+		"if command -v xclip >/dev/null 2>&1; then xclip -selection clipboard -o; "
+			.. "elif command -v xsel >/dev/null 2>&1; then xsel -ob; else exit 127; fi",
+		function(stdout, _, reason, exitcode)
+			if reason == "exit" and exitcode == 0 and stdout:gsub("\n$", "") == code then
+				awful.spawn.easy_async_with_shell(
+					"if command -v xclip >/dev/null 2>&1; then printf '' | xclip -selection clipboard; "
+						.. "elif command -v xsel >/dev/null 2>&1; then printf '' | xsel -ib; fi",
+					function() end
+				)
+			end
+		end
 	)
 end
 
@@ -68,7 +76,7 @@ local function copy_code(code)
 
 		notify("Clipboard", "Code ready; clipboard will be cleared in 30 seconds")
 		gears.timer.start_new(30, function()
-			clear_clipboard()
+			clear_clipboard_if_matches(code)
 			return false
 		end)
 	end)

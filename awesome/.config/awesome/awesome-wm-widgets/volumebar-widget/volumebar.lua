@@ -16,10 +16,10 @@ local watch = require("awful.widget.watch")
 local wibox = require("wibox")
 local math = math
 
-local GET_VOLUME_CMD = "amixer -D pipewire sget Master"
-local INC_VOLUME_CMD = "amixer -D pipewire sset Master 5%+"
-local DEC_VOLUME_CMD = "amixer -D pipewire sset Master 5%-"
-local TOG_VOLUME_CMD = "amixer -D pipewire sset Master toggle"
+local GET_VOLUME_CMD = { "wpctl", "get-volume", "@DEFAULT_AUDIO_SINK@" }
+local INC_VOLUME_CMD = { "wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", "5%+" }
+local DEC_VOLUME_CMD = { "wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", "5%-" }
+local TOG_VOLUME_CMD = { "wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "toggle" }
 
 local widget = {}
 
@@ -57,15 +57,15 @@ local function worker(args)
 			return
 		end
 
-		local mute = string.match(stdout, "%[(o%D%D?)%]") -- \[(o\D\D?)\] - [on] or [off]
-		local volume = tonumber(string.match(stdout, "(%d?%d?%d)%%")) -- (\d?\d?\d)\%)
+		local mute = stdout:match("%[MUTED%]") ~= nil
+		local volume = tonumber(stdout:match("Volume:%s*([%d%.]+)"))
 		if not volume then
 			return
 		end
-		volume = math.max(0, math.min(100, volume))
+		volume = math.max(0, math.min(1, volume))
 
-		widget.value = volume / 100
-		widget.color = mute == "off" and mute_color or main_color
+		widget.value = volume
+		widget.color = mute and mute_color or main_color
 	end
 
 	volumebar_widget:connect_signal("button::press", function(_, _, _, button)
