@@ -17,3 +17,11 @@ source "$XDG_CONFIG_HOME/zsh/.zshrc"
 [[ -f /home/abstrucked/.config/.dart-cli-completion/zsh-config.zsh ]] && . /home/abstrucked/.config/.dart-cli-completion/zsh-config.zsh || true
 ## [/Completion]
 
+
+# pnpm
+export PNPM_HOME="/home/abstrucked/.local/share/pnpm"
+case ":$PATH:" in
+  *":$PNPM_HOME:"*) ;;
+  *) export PATH="$PNPM_HOME:$PATH" ;;
+esac
+# pnpm end

@@ -415,6 +415,7 @@ function theme.at_screen_connect(s)
 
 	-- Tags
 	awful.tag(awful.util.tagnames, s, awful.layout.layouts)
+	s.tags[1].layout = lain.layout.centerwork
 	s.tags[2].layout = awful.layout.suit.max
 	s.tags[3].layout = awful.layout.suit.max
 	-- Create a promptbox for each screen

@@ -9,6 +9,7 @@ alias scrot1="$HOME/.local/bin/screenshot_1"
 alias scrot2="$HOME/.local/bin/screenshot_2"
 alias sesh="$HOME/.local/bin/tmux-sessionizer"
 alias nvim-ai="$HOME/.local/bin/nvim-launcher"
+alias opencode-ai="$HOME/.local/bin/opencode-launcher"
 alias create-app="$HOME/.local/bin/create-app-launcher"
 alias pass-insert="$HOME/.local/bin/pass-insert-utility"
 

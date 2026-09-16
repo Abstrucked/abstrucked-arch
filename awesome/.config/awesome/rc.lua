@@ -98,7 +98,7 @@ local themes = {
 local chosen_theme = themes[6]
 local modkey = "Mod4"
 local altkey = "Mod1"
-local terminal = "ghostty"
+local terminal = "alacritty"
 local vi_focus = false -- vi-like client focus - https://github.com/lcpz/awesome-copycats/issues/275
 local cycle_prev = true -- cycle trough all previous client or just the first -- https://github.com/lcpz/awesome-copycats/issues/274
 local editor = os.getenv("EDITOR") or "nvim"
@@ -758,14 +758,6 @@ awful.rules.rules = {
 	{
 		rule = { class = "Gimp", role = "gimp-image-window" },
 		properties = { screen = 1, tag = awful.util.tagnames[3], maximized = true },
-	},
-
-	-- Set specific layout for tag 4
-	{
-		rule = { tag = awful.util.tagnames[2] },
-		properties = {
-			layout = awful.layout.suit.centerwork,
-		},
 	},
 }
 -- }}}
