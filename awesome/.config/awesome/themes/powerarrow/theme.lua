@@ -126,6 +126,26 @@ local markup = lain.util.markup
 -- Volume
 local volumebar_widget = require("awesome-wm-widgets.volumebar-widget.volumebar")
 
+-- Lain reports memory in MiB and network rates in KiB/s.
+local function compact_value(value, small_unit, large_unit)
+	value = tonumber(value) or 0
+	if value >= 1024 then
+		return string.format("%.1f%s", value / 1024, large_unit)
+	end
+	return string.format("%.0f%s", value, small_unit)
+end
+
+local function compact_rate(value)
+	value = tonumber(value) or 0
+	local unit = "K"
+	if value >= 1024 * 1024 then
+		value, unit = value / (1024 * 1024), "G"
+	elseif value >= 1024 then
+		value, unit = value / 1024, "M"
+	end
+	return string.format(value < 10 and unit ~= "K" and "%.1f%s" or "%.0f%s", value, unit)
+end
+
 local function build_screen_widgets(s)
 	local widgets = {}
 
@@ -133,9 +153,10 @@ local function build_screen_widgets(s)
 	widgets.clock.font = theme.font
 
 	widgets.cal = lain.widget.cal({
+		attach_to = { widgets.clock },
 		followtag = true,
 		notification_preset = {
-			font = "Monospace 11",
+			font = theme.font,
 			fg = theme.fg_normal,
 			bg = theme.bg_normal,
 			border_color = theme.border_focus,
@@ -147,7 +168,7 @@ local function build_screen_widgets(s)
 	local memicon = wibox.widget.imagebox(theme.widget_mem)
 	widgets.mem = lain.widget.mem({
 		settings = function()
-			widget:set_markup(markup.font(theme.font, " " .. mem_now.used .. "MB "))
+			widget:set_markup(markup.font(theme.font, " " .. compact_value(mem_now.used, "M", "G") .. " "))
 		end,
 	})
 
@@ -165,7 +186,7 @@ local function build_screen_widgets(s)
 		settings = function()
 			local root = fs_now["/"]
 			if root then
-				local fsp = string.format("%3.2f%s", root.free, root.units)
+				local fsp = string.format("%.1f%s", root.free, root.units)
 				widget:set_markup(markup.font(theme.font, fsp))
 			end
 		end,
@@ -173,6 +194,8 @@ local function build_screen_widgets(s)
 
 	local baticon = wibox.widget.imagebox(theme.widget_battery)
 	widgets.bat = lain.widget.bat({
+		-- Refresh promptly on power changes instead of Lain's 30-second default.
+		timeout = 2,
 		notification_preset = { fg = theme.fg_normal, bg = theme.bg_normal, font = "Monospace 10" },
 		settings = function()
 			if bat_now.status and bat_now.status ~= "N/A" then
@@ -204,14 +227,18 @@ local function build_screen_widgets(s)
 				markup.fontfg(
 					theme.font,
 					theme.titlebar_fg_focus,
-					" ↓ "
-						.. string.format("%.1f", net_now.received / 1024)
-						.. " MiB/s ↑ "
-						.. string.format("%.1f", net_now.sent / 1024)
-						.. " MiB/s "
+					"↓" .. compact_rate(net_now.received)
+						.. " ↑" .. compact_rate(net_now.sent)
 					)
 			)
 		end,
+	})
+	-- Keep throughput updates from resizing the bar, without a wide empty slot.
+	widgets.net.widget.forced_width = dpi(120)
+	widgets.net.widget.align = "center"
+	widgets.net_tooltip = awful.tooltip({
+		objects = { widgets.net.widget },
+		text = "Download / upload rate: K = KiB/s, M = MiB/s, G = GiB/s",
 	})
 
 	widgets.volume = volumebar_widget({
@@ -248,7 +275,10 @@ function theme.powerline_rl(cr, width, height)
 	cr:close_path()
 end
 local function pl(widget, bgcolor, padding)
-	return wibox.container.background(wibox.container.margin(widget, dpi(16), dpi(16)), bgcolor, theme.powerline_rl)
+	local horizontal_padding = dpi(padding or 10)
+	return wibox.container.background(
+		wibox.container.margin(widget, horizontal_padding, horizontal_padding), bgcolor, theme.powerline_rl
+	)
 end
 
 function theme.at_screen_connect(s)
