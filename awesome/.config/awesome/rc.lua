@@ -61,19 +61,25 @@ end
 -- {{{ Autostart windowless processes
 
 -- This function will run once every time Awesome is started
-local function run_once(cmd_arr)
+local function run_once(commands)
 	local user = os.getenv("USER") or os.getenv("LOGNAME")
 	local function shell_quote(value)
 		return "'" .. tostring(value):gsub("'", "'\\''") .. "'"
 	end
 
-	for _, cmd in ipairs(cmd_arr) do
-		local check = user and string.format("pgrep -u %s -fx -- %s", shell_quote(user), shell_quote(cmd)) or "false"
-		awful.spawn.with_shell(string.format("%s >/dev/null 2>&1 || (%s)", check, cmd))
+	for _, argv in ipairs(commands) do
+		local command = table.concat(argv, " ")
+		local quoted = {}
+		for _, argument in ipairs(argv) do
+			quoted[#quoted + 1] = shell_quote(argument)
+		end
+		local check = user and string.format("pgrep -u %s -fx -- %s", shell_quote(user), shell_quote(command))
+			or "false"
+		awful.spawn.with_shell(string.format("%s >/dev/null 2>&1 || %s", check, table.concat(quoted, " ")))
 	end
 end
 
--- run_once({ "=alacritty", "unclutter -root" }) -- entries must be separated by commas
+-- Commands are argv arrays so arguments remain safely separated.
 
 -- This function implements the XDG autostart specification
 
@@ -254,7 +260,7 @@ end)
 screen.connect_signal("arrange", function(s)
 	local only_one = #s.tiled_clients == 1
 	for _, c in pairs(s.clients) do
-		if only_one and not c.floating or c.maximized then
+		if (only_one and not c.floating) or c.maximized then
 			c.border_width = 0
 		else
 			c.border_width = beautiful.border_width
@@ -295,20 +301,26 @@ local function show_screen_widget(name)
 	end
 end
 
+local function focus_and_raise()
+	if client.focus then
+		client.focus:raise()
+	end
+end
+
 local globalkeys = my_table.join(
 	-- Take a screenshot
 	-- https://github.com/lcpz/dots/blob/master/bin/screenshot
 	awful.key({ altkey }, "p", function()
-		awful.spawn.with_shell("screenshot_1")
+		awful.spawn("screenshot_1")
 	end, { description = "take a screenshot::widescreen", group = "hotkeys" }),
 
 	awful.key({ altkey, "Shift" }, "p", function()
-		awful.spawn.with_shell("screenshot_2")
+		awful.spawn("screenshot_2")
 	end, { description = "take a screenshot::fullhd", group = "hotkeys" }),
 
 	-- X screen locker
 	awful.key({ altkey, "Control" }, "@", function()
-		awful.spawn.with_shell(scrlocker)
+		awful.spawn(scrlocker)
 	end, { description = "lock screen", group = "hotkeys" }),
 	awful.key({ altkey, "Control" }, "l", function()
 		launch_logout()
@@ -348,27 +360,19 @@ local globalkeys = my_table.join(
 	-- By direction client focus
 	awful.key({ modkey }, "j", function()
 		awful.client.focus.global_bydirection("down")
-		if client.focus then
-			client.focus:raise()
-		end
+		focus_and_raise()
 	end, { description = "focus down", group = "client" }),
 	awful.key({ modkey }, "k", function()
 		awful.client.focus.global_bydirection("up")
-		if client.focus then
-			client.focus:raise()
-		end
+		focus_and_raise()
 	end, { description = "focus up", group = "client" }),
 	awful.key({ modkey }, "h", function()
 		awful.client.focus.global_bydirection("left")
-		if client.focus then
-			client.focus:raise()
-		end
+		focus_and_raise()
 	end, { description = "focus left", group = "client" }),
 	awful.key({ modkey }, "l", function()
 		awful.client.focus.global_bydirection("right")
-		if client.focus then
-			client.focus:raise()
-		end
+		focus_and_raise()
 	end, { description = "focus right", group = "client" }),
 	awful.key({ modkey }, "w", function()
 		awful.util.mymainmenu:show()
@@ -394,17 +398,11 @@ local globalkeys = my_table.join(
 		else
 			awful.client.focus.byidx(-1)
 		end
-		if client.focus then
-			client.focus:raise()
-		end
+		focus_and_raise()
 	end, { description = "cycle with previous/go back", group = "client" }),
 	awful.key({ modkey, "Shift" }, "Tab", function()
-		if cycle_prev then
-			awful.client.focus.byidx(1)
-			if client.focus then
-				client.focus:raise()
-			end
-		end
+		awful.client.focus.byidx(1)
+		focus_and_raise()
 	end, { description = "go forth", group = "client" }),
 
 	-- Show/Hide Wibox
@@ -561,7 +559,7 @@ local globalkeys = my_table.join(
 		end
 	end, { description = "open editor", group = "launcher" }),
 	awful.key({ modkey, "Shift" }, "w", function()
-		awful.spawn(ide)
+		awful.spawn({ terminal, "-e", ide })
 	end, { description = "run ide", group = "launcher" }),
 	-- Default
 	--[[ dmenu
@@ -724,10 +722,16 @@ awful.rules.rules = {
 	{ rule_any = { type = { "dialog", "normal" } }, properties = { titlebars_enabled = false } },
 
 	-- Set Brave to map on the primary screen and tag 3.
-	{ rule_any = { class = { "Brave", "Brave-browser" } }, properties = { screen = screen.primary, tag = awful.util.tagnames[3] } },
+	{
+		rule_any = { class = { "Brave", "Brave-browser" } },
+		properties = { screen = screen.primary, tag = awful.util.tagnames[3] },
+	},
 
 	-- Set Discord to map on the primary screen and tag 7.
-	{ rule_any = { class = { "discord", "Discord" } }, properties = { screen = screen.primary, tag = awful.util.tagnames[7] } },
+	{
+		rule_any = { class = { "discord", "Discord" } },
+		properties = { screen = screen.primary, tag = awful.util.tagnames[7] },
+	},
 
 	-- Set Gimp to always show maximized on tag 3.
 	{
@@ -776,7 +780,7 @@ client.connect_signal("request::titlebars", function(c)
 		end)
 	)
 
-	awful.titlebar(c, { size = dpi(18) }):setup({
+	awful.titlebar(c, { size = dpi(24) }):setup({
 		{ -- Left
 			awful.titlebar.widget.iconwidget(c),
 			buttons = buttons,
@@ -821,11 +825,11 @@ end)
 -- pgrep-guarded via run_once(), so these stay single-instance across awesome.restart
 local autorun = true
 local autorun_apps = {
-	-- "picom -b --unredir-if-possible --backend xr_glx_hybrid --vsync --use-damage --glx-no-stencil",
-	"picom -b",
-	-- "/usr/bin/pcmanfm -d",
-	-- "smbnetfs net/",
-	-- "/bin/lightdmxrand.sh",
+	-- { "picom", "-b", "--unredir-if-possible", "--backend", "xr_glx_hybrid", "--vsync", "--use-damage", "--glx-no-stencil" },
+	{ "picom", "-b" },
+	-- { "/usr/bin/pcmanfm", "-d" },
+	-- { "smbnetfs", "net/" },
+	-- { "/bin/lightdmxrand.sh" },
 }
 if autorun then
 	run_once(autorun_apps)
