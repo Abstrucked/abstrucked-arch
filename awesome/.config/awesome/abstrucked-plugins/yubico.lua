@@ -6,14 +6,14 @@ local naughty = require("naughty")
 local yubico = {}
 local ERROR_NO_YUBIKEY = "ERROR: No YubiKey detected!"
 
-local function isNull(item)
+local function is_null(item)
 	if item == nil or item == "" then
 		return true
 	end
 	return false
 end
 
-function yubico.getAccounts()
+function yubico.get_accounts()
 	local handle = io.popen("ykman oath accounts list")
 	local result = ""
 	if handle then
@@ -21,7 +21,7 @@ function yubico.getAccounts()
 		handle:close()
 	end
 
-	if isNull(result) or result:match(ERROR_NO_YUBIKEY) then
+	if is_null(result) or result:match(ERROR_NO_YUBIKEY) then
 		naughty.notify({ title = "Yubikey not found", text = "Insert yubikey to access the account list" })
 		return nil
 	end
@@ -29,11 +29,6 @@ function yubico.getAccounts()
 	local items = {}
 	for line in result:gmatch("[^\r\n]+") do
 		table.insert(items, line)
-	end
-
-	-- items is now a Lua array/table of file names
-	for i, item in ipairs(items) do
-		print(i, item)
 	end
 
 	-- Return nil if no accounts were found (empty table)
@@ -45,8 +40,12 @@ function yubico.getAccounts()
 	return items
 end
 
-local function getAccountCode(account)
-	local handle = io.popen("ykman oath accounts code " .. account)
+local function shell_quote(str)
+	return "'" .. tostring(str):gsub("'", "'\\''") .. "'"
+end
+
+local function get_account_code(account)
+	local handle = io.popen("ykman oath accounts code " .. shell_quote(account))
 	local accountData = ""
 	if handle then
 		accountData = handle:read("*a") or ""
@@ -59,7 +58,6 @@ local function getAccountCode(account)
 			-- Optional callback after copy
 			naughty.notify({ title = "Clipboard", text = "Code ready" })
 		end)
-		os.execute(cmd)
 	else
 		naughty.notify({ title = "Error", text = "Could not retrieve code from YubiKey" })
 	end
@@ -120,7 +118,7 @@ local popup = awful.popup({
 
 -- Create and start a fresh keygrabber instance
 function yubico.show_list()
-	items = yubico.getAccounts()
+	items = yubico.get_accounts()
 	if items == nil or #items == 0 then
 		return
 	end
@@ -150,7 +148,7 @@ function yubico.show_list()
 			elseif key == "Return" then
 				if selected_index > 0 and selected_index <= #filtered_items then
 					grabber_ref:stop()
-					getAccountCode(filtered_items[selected_index])
+					get_account_code(filtered_items[selected_index])
 				end
 			elseif key == "BackSpace" then
 				filter = filter:sub(1, -2)

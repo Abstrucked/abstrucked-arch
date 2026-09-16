@@ -4,7 +4,6 @@
 - **Lint Lua**: `luacheck rc.lua` or `luacheck awesome-wm-widgets/`
 - **Format Lua**: `lua-format -i <file>` for code formatting
 - **Validate Lua syntax**: `lua -c <file>` to check syntax
-- **Shell scripts**: Use `shellcheck autorun.sh` for validation
 
 ## Code Style Guidelines
 
@@ -45,7 +44,7 @@
 - **awesome-wm-widgets/**: Third-party widget library with modular widget patterns
 - **lain/**: Layout and widget library with utility helpers
 - **themes/**: Theme files with color and style definitions
-- **autorun.sh**: Startup script for background services
+- **Autostart**: Handled inline in `rc.lua` via `run_once()` (pgrep-guarded)
 
 ## Commit Guidelines
 - Use conventional commits: `feat: add new widget`, `fix: correct keybinding`, `refactor: simplify config`

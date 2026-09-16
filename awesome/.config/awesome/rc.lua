@@ -16,7 +16,6 @@ local wibox = require("wibox")
 local beautiful = require("beautiful")
 local naughty = require("naughty")
 local lain = require("lain")
-local menubar = require("menubar")
 local freedesktop = require("freedesktop")
 --local run_shell = require("awesome-wm-widgets.run_shell-3.run_shell")
 local run_shell = require("awesome-wm-widgets.run-shell-3.run-shell")
@@ -162,7 +161,7 @@ awful.util.tasklist_buttons = my_table.join(
 		if c == client.focus then
 			c.minimized = true
 		else
-			--c:emit_signal("request::activate", "tasklist", {raise = true})<Paste>
+			--c:emit_signal("request::activate", "tasklist", {raise = true})
 
 			-- Without this, the following
 			-- :isvisible() makes no sense
@@ -244,8 +243,6 @@ awful.util.mymainmenu = freedesktop.menu.build({
 awful.util.mydesktop = freedesktop.menu.build()
 -- hide menu when mouse leaves it
 --awful.util.mymainmenu.wibox:connect_signal("mouse::leave", function() awful.util.mymainmenu:hide() end)
-
-menubar.utils.terminal = terminal -- Set the Menubar terminal for applications that require it
 -- }}}
 
 -- {{{ Screen
@@ -290,22 +287,22 @@ root.buttons(my_table.join(
 -- }}}
 
 -- {{{ Key bindings
-globalkeys = my_table.join(
+local globalkeys = my_table.join(
 	-- Take a screenshot
 	-- https://github.com/lcpz/dots/blob/master/bin/screenshot
 	awful.key({ altkey }, "p", function()
-		awful.spawn.with_shell("scrot1")
+		awful.spawn.with_shell("screenshot_1")
 	end, { description = "take a screenshot::widescreen", group = "hotkeys" }),
 
 	awful.key({ altkey, "Shift" }, "p", function()
-		awful.spawn.with_shell("scrot2")
+		awful.spawn.with_shell("screenshot_2")
 	end, { description = "take a screenshot::fullhd", group = "hotkeys" }),
 
 	-- X screen locker
 	awful.key({ altkey, "Control" }, "@", function()
 		awful.spawn.with_shell(scrlocker)
 	end, { description = "lock screen", group = "hotkeys" }),
-	awful.key({ modkey }, "l", function()
+	awful.key({ altkey, "Control" }, "l", function()
 		logout.launch()
 	end, { description = "Show logout screen", group = "custom" }),
 
@@ -327,10 +324,10 @@ globalkeys = my_table.join(
 	-- Non-empty tag browsing
 	awful.key({ altkey }, "Left", function()
 		lain.util.tag_view_nonempty(-1)
-	end, { description = "view  previous nonempty", group = "tag" }),
+	end, { description = "view previous nonempty", group = "tag" }),
 	awful.key({ altkey }, "Right", function()
 		lain.util.tag_view_nonempty(1)
-	end, { description = "view  previous nonempty", group = "tag" }),
+	end, { description = "view next nonempty", group = "tag" }),
 
 	-- Default client focus
 	awful.key({ altkey }, "j", function()
@@ -527,34 +524,19 @@ globalkeys = my_table.join(
 	awful.key({}, "XF86AudioMute", function()
 		awful.util.spawn("amixer -D pipewire set Master 1+ toggle")
 	end, { description = "Mute/Unmute", group = "audio" }),
-	-- MPD control-------------------------------------
+	-- Media control (playerctl/MPRIS) ------------------
 	awful.key({}, "XF86AudioPlay", function()
-		os.execute("mpc toggle")
-		beautiful.mpd.update()
-	end, { description = "mpc toggle", group = "mpc" }),
+		awful.spawn("playerctl play-pause")
+	end, { description = "play/pause", group = "media" }),
 	awful.key({ altkey, modkey }, "Down", function()
-		os.execute("mpc stop")
-		beautiful.mpd.update()
-	end, { description = "mpc stop", group = "mpc" }),
+		awful.spawn("playerctl stop")
+	end, { description = "stop", group = "media" }),
 	awful.key({}, "XF86AudioPrev", function()
-		os.execute("mpc prev")
-		beautiful.mpd.update()
-	end, { description = "mpc prev", group = "mpc" }),
+		awful.spawn("playerctl previous")
+	end, { description = "previous track", group = "media" }),
 	awful.key({}, "XF86AudioNext", function()
-		os.execute("mpc next")
-		beautiful.mpd.update()
-	end, { description = "mpc next", group = "mpc" }),
-	awful.key({ altkey }, "0", function()
-		local common = { text = "MPD widget ", position = "top_middle", timeout = 2 }
-		if beautiful.mpd.timer.started then
-			beautiful.mpd.timer:stop()
-			common.text = common.text .. lain.util.markup.bold("OFF")
-		else
-			beautiful.mpd.timer:start()
-			common.text = common.text .. lain.util.markup.bold("ON")
-		end
-		naughty.notify(common)
-	end, { description = "mpc on/off", group = "widgets" }),
+		awful.spawn("playerctl next")
+	end, { description = "next track", group = "media" }),
 
 	-- Copy primary to clipboard (terminals to gtk)
 	awful.key({ modkey }, "c", function()
@@ -577,12 +559,8 @@ globalkeys = my_table.join(
 	end, { description = "run gui editor", group = "launcher" }),
 	awful.key({ modkey, "Shift" }, "w", function()
 		awful.spawn(ide)
-	end, { dewscription = "run ide", group = "launcher" }),
+	end, { description = "run ide", group = "launcher" }),
 	-- Default
-	--[[ Menubar
-    -- awful.key({ modkey }, "p", function() menubar.show() end,
-    --          {description = "show the menubar", group = "launcher"}),
-    --]]
 	--[[ dmenu
     awful.key({ modkey }, "x", function ()
             os.execute(string.format("dmenu_run -i -fn 'Monospace' -nb '%s' -nf '%s' -sb '%s' -sf '%s'",
@@ -594,13 +572,20 @@ globalkeys = my_table.join(
 	-- check https://github.com/DaveDavenport/rofi for more details
 	-- rofi
 	awful.key({ modkey }, "x", function()
-		os.execute(
-			string.format(
-				"rofi -combi-modi window,drun,ssh -theme Arc-Dark -font 'hack 10' -show combi -icon-theme 'Papirus' -show-icons",
-				"run",
-				"dmenu"
-			)
-		)
+		awful.spawn({
+			"rofi",
+			"-combi-modi",
+			"window,drun,ssh",
+			"-theme",
+			"Arc-Dark",
+			"-font",
+			"hack 10",
+			"-show",
+			"combi",
+			"-icon-theme",
+			"Papirus",
+			"-show-icons",
+		})
 	end, { description = "show rofi", group = "launcher" }),
 	--]]
 	-- Prompt
@@ -622,7 +607,7 @@ globalkeys = my_table.join(
     --]]
 )
 
-clientkeys = my_table.join(
+local clientkeys = my_table.join(
 	awful.key({ altkey, "Shift" }, "m", lain.util.magnify_client, { description = "magnify client", group = "client" }),
 	awful.key({ modkey }, "f", function(c)
 		c.fullscreen = not c.fullscreen
@@ -754,7 +739,7 @@ awful.rules.rules = {
 	-- Set Discord to always map on the first tag on desktop 7.
 	{ rule = { class = "discord" }, properties = { screen = 1, tag = awful.util.tagnames[7] } },
 
-	-- Set Gimp to always show maximized and on desktop 6 .
+	-- Set Gimp to always show maximized on tag 3.
 	{
 		rule = { class = "Gimp", role = "gimp-image-window" },
 		properties = { screen = 1, tag = awful.util.tagnames[3], maximized = true },
@@ -843,22 +828,17 @@ end)
 -- https://github.com/lcpz/awesome-copycats/issues/251
 -- }}}
 -- Autorun programs
-autorun = true
-autorunApps = {
-	--   	"picom -b --unredir-if-possible --backend xr_glx_hybrid --vsync --use-damage --glx-no-stencil"
-	"/usr/bin/picom -b",
-	--    "/usr/bin/pcmanfm -d",
-	--        "smbnetfs net/",
-	--    "/bin/lightdmxrand.sh",
-	"pgrep udisk2 >dev/null || udisk2 &",
-	"pgrep gvfsd > dev/nul /usr/lib/gvfs/gvfsd &",
-	"xrandr --output DP-0 --primary",
+-- pgrep-guarded via run_once(), so these stay single-instance across awesome.restart
+local autorun = true
+local autorun_apps = {
+	-- "picom -b --unredir-if-possible --backend xr_glx_hybrid --vsync --use-damage --glx-no-stencil",
+	"picom -b",
+	-- "/usr/bin/pcmanfm -d",
+	-- "smbnetfs net/",
+	-- "/bin/lightdmxrand.sh",
 }
---[[ awful.util.spawn_with_shell(
-	"exec --no-startup-id /usr/bin/gnome-keyring-daemon --start --components=pkcs11,secrets,ssh"
-)--]]
 if autorun then
-	for app = 1, #autorunApps do
-		awful.util.spawn(autorunApps[app])
-	end
+	run_once(autorun_apps)
+	-- one-shot, idempotent commands
+	awful.spawn.with_shell("xrandr --output DP-0 --primary")
 end
