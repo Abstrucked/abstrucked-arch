@@ -40,6 +40,11 @@ validate_directory "$DOTFILES_DIR"
 
 # Interactive component selection
 select_components
+validate_component_dependencies || exit 1
+if [[ ${#SELECTED_COMPONENTS[@]} -eq 0 ]]; then
+    log_info "No components selected; nothing to install."
+    exit 0
+fi
 
 # Show summary and confirm
 show_summary
@@ -72,10 +77,9 @@ for component in "${SELECTED_COMPONENTS[@]}"; do
         if ! command_exists yay; then
             progress_step "Installing yay AUR helper"
             if validate_file "$DOTFILES_DIR/install-yay.sh"; then
-                execute bash "$DOTFILES_DIR/install-yay.sh" || {
-                    progress_complete "failed"
-                    log_warn "Failed to install yay"
-                }
+                yay_args=()
+                [[ "$NON_INTERACTIVE" != "true" ]] || yay_args+=(--non-interactive)
+                execute bash "$DOTFILES_DIR/install-yay.sh" "${yay_args[@]}" || die "Failed to install yay"
                 progress_complete "done"
             else
                 progress_complete "failed"
@@ -101,14 +105,11 @@ for component in "${SELECTED_COMPONENTS[@]}"; do
         validate_file "$packages_file" || die "packages.list not found"
         validate_packages_file "$packages_file" || die "Invalid packages in packages.list"
         
-        all_packages=$(grep -v '^#' "$packages_file" | grep -v '^$' || true)
-        if [[ -n "$all_packages" ]]; then
-            echo "$all_packages" | while IFS= read -r pkg; do
-                [[ -z "$pkg" ]] && continue
-                log_info "Installing: $pkg"
-                execute yay -S --needed --noconfirm "$pkg" || log_warn "Failed to install: $pkg"
-            done
-        fi
+        while IFS= read -r pkg || [[ -n "$pkg" ]]; do
+            [[ -z "$pkg" || "$pkg" == \#* ]] && continue
+            log_info "Installing: $pkg"
+            execute yay -S --needed --noconfirm -- "$pkg" || die "Failed to install: $pkg"
+        done < "$packages_file"
         
         progress_complete "done"
         break
@@ -123,7 +124,14 @@ for component in "${SELECTED_COMPONENTS[@]}"; do
     if [[ "$name" == "node" ]]; then
         progress_step "Installing Node.js version manager"
         if validate_file "$DOTFILES_DIR/install-node-manager.sh" false; then
-            execute bash "$DOTFILES_DIR/install-node-manager.sh" || log_warn "Node.js version manager installation failed"
+            node_args=()
+            if [[ "$NON_INTERACTIVE" == "true" ]]; then
+                node_args+=("--non-interactive")
+            fi
+            if [[ "$DRY_RUN" == "true" ]]; then
+                node_args+=("--dry-run")
+            fi
+            execute bash "$DOTFILES_DIR/install-node-manager.sh" "${node_args[@]}" || die "Node.js version manager installation failed"
             progress_complete "done"
         else
             progress_complete "skipped"
@@ -140,19 +148,12 @@ for component in "${SELECTED_COMPONENTS[@]}"; do
     
     if [[ "$name" == "yubikey" ]]; then
         progress_step "Installing YubiKey tools"
-        execute yay -S --needed --noconfirm yubikey-manager yubico-authenticator-bin pcsclite ccid || {
-            log_warn "Failed to install some YubiKey packages"
-        }
-        execute systemctl enable pcscd.service || log_warn "Failed to enable pcscd service"
+        execute yay -S --needed --noconfirm yubikey-manager yubico-authenticator-bin pcsclite ccid || die "Failed to install YubiKey packages"
+        execute sudo systemctl enable pcscd.service || die "Failed to enable pcscd service"
         progress_complete "done"
         break
     fi
 done
-
-# Initialize git submodules
-progress_step "Initializing git submodules"
-execute git submodule update --init --recursive || log_warn "Failed to update git submodules"
-progress_complete "done"
 
 # Setup symlinks with GNU Stow
 for component in "${SELECTED_COMPONENTS[@]}"; do
@@ -161,7 +162,10 @@ for component in "${SELECTED_COMPONENTS[@]}"; do
     
     if [[ "$name" == "stow" ]]; then
         progress_step "Setting up symlinks with GNU Stow"
-        require_command stow "stow is required but not installed"
+        if [[ "$DRY_RUN" != "true" ]]; then
+            require_command stow "stow is required but not installed"
+        fi
+        execute git -C "$DOTFILES_DIR" submodule update --init --recursive || die "Failed to update git submodules"
         
         # Base packages (without shell - added dynamically based on selection)
         stow_packages=("awesome" "ssh" "alacritty" "btop" "nvim" "picom" "pcmanfm" "scripts" "ghossty" "gnupg")
@@ -169,94 +173,38 @@ for component in "${SELECTED_COMPONENTS[@]}"; do
         # Add selected shell if shell component was selected
         if [[ -n "$SELECTED_SHELL" ]]; then
             stow_packages+=("$SELECTED_SHELL")
-            
-            # Handle shell switching - unstow old shell if different
-            current_shell=$(detect_current_shell)
-            if [[ -n "$current_shell" ]] && [[ "$current_shell" != "$SELECTED_SHELL" ]]; then
-                log_info "Switching from $current_shell to $SELECTED_SHELL..."
-                if [[ -d "$DOTFILES_DIR/$current_shell" ]]; then
-                    execute stow -d "$DOTFILES_DIR" -t "$HOME" -D "$current_shell" 2>/dev/null || true
-                fi
-            fi
-        else
-            # No shell selected, default to zsh for backward compatibility
-            stow_packages+=("zsh")
         fi
         
-        # Handle root-level dotfiles (.bashrc, .zshrc) that aren't symlinks
-        for shell_file in .bashrc .zshrc; do
-            target="$HOME/$shell_file"
-            if [[ -f "$target" ]] && [[ ! -L "$target" ]]; then
-                log_info "Backing up existing $shell_file (not a symlink)"
-                backup_item "$target" || log_warn "Failed to backup $target"
-                execute rm -f "$target" || log_warn "Failed to remove $target"
-            fi
-        done
-        
-        # Clean up existing symlinks and backup real configs
-        for package in "${stow_packages[@]}"; do
-            if [[ -d "$DOTFILES_DIR/$package/.config" ]]; then
-                config_dir="$HOME/.config/$package"
-                if [[ -L "$config_dir" ]]; then
-                    # It's a symlink (created by stow) - just remove it, no backup needed
-                    execute rm -f "$config_dir" || log_warn "Failed to remove symlink $config_dir"
-                elif [[ -d "$config_dir" ]]; then
-                    # It's a real directory - backup before removing
-                    backup_item "$config_dir" || log_warn "Failed to backup $config_dir"
-                    execute rm -rf "$config_dir" || log_warn "Failed to remove $config_dir"
-                fi
-            fi
-        done
-        
-        # Setup new symlinks (stow handles re-stowing gracefully)
+        # Let Stow merge directories and reject conflicts without deleting user configs.
         for package in "${stow_packages[@]}"; do
             if [[ -d "$DOTFILES_DIR/$package" ]]; then
                 log_info "Stowing $package..."
-                execute stow -d "$DOTFILES_DIR" -t "$HOME" "$package" || log_warn "Failed to stow $package"
+                shell_backup=""
+                if [[ "$package" == "$SELECTED_SHELL" ]]; then
+                    target="$HOME/.${SELECTED_SHELL}rc"
+                    if [[ -f "$target" && ! -L "$target" ]]; then
+                        backup_item "$target" || die "Could not back up $target"
+                        if [[ "$DRY_RUN" != true ]]; then
+                            shell_backup="${BACKUPS[-1]}"
+                        fi
+                        execute rm -f -- "$target" || die "Could not remove $target"
+                    fi
+                fi
+                if ! execute stow -d "$DOTFILES_DIR" -t "$HOME" "$package"; then
+                    if [[ -n "$shell_backup" ]]; then
+                        restore_backup "$shell_backup" "$target" || log_error "Restore failed; original config is at $shell_backup"
+                    fi
+                    die "Failed to stow $package; reconcile the reported conflicts and rerun"
+                fi
             else
-                log_warn "$package directory not found, skipping..."
+                die "$package directory not found"
             fi
         done
-        
-        # Make scripts executable
-        scripts_dir="$HOME/scripts/.local/bin"
-        if [[ -d "$scripts_dir" ]]; then
-            execute find "$scripts_dir" -type f -exec chmod +x {} + || log_warn "Failed to make some scripts executable"
-        fi
         
         progress_complete "done"
         break
     fi
 done
-
-# Update terminal shell defaults (if shell was selected)
-if [[ -n "$SELECTED_SHELL" ]]; then
-    progress_step "Updating terminal shell defaults to $SELECTED_SHELL"
-    
-    # Update Alacritty shell
-    alacritty_conf="$HOME/.config/alacritty/alacritty.toml"
-    if [[ -f "$alacritty_conf" ]]; then
-        if [[ "$DRY_RUN" == "true" ]]; then
-            log_info "[dry-run] Would update $alacritty_conf to use $SELECTED_SHELL"
-        else
-            sed -i "s|shell = \"/bin/.*\"|shell = \"/bin/$SELECTED_SHELL\"|" "$alacritty_conf" || log_warn "Failed to update Alacritty shell"
-            log_info "Updated Alacritty to use $SELECTED_SHELL"
-        fi
-    fi
-    
-    # Update tmux default-shell
-    tmux_conf="$HOME/.config/tmux/tmux.conf"
-    if [[ -f "$tmux_conf" ]]; then
-        if [[ "$DRY_RUN" == "true" ]]; then
-            log_info "[dry-run] Would update $tmux_conf to use $SELECTED_SHELL"
-        else
-            sed -i "s|default-shell \"/usr/bin/.*\"|default-shell \"/usr/bin/$SELECTED_SHELL\"|" "$tmux_conf" || log_warn "Failed to update tmux default-shell"
-            log_info "Updated tmux to use $SELECTED_SHELL"
-        fi
-    fi
-    
-    progress_complete "done"
-fi
 
 # Setup theme if selected
 for component in "${SELECTED_COMPONENTS[@]}"; do
@@ -268,11 +216,16 @@ for component in "${SELECTED_COMPONENTS[@]}"; do
         theme_script="$DOTFILES_DIR/themes/theme.sh"
         
         if validate_file "$theme_script" false; then
-            source "$theme_script" || die "Failed to source theme.sh"
-            validate_theme_variables || die "Invalid theme configuration"
-            
-            mkdir -p "$HOME/.config/alacritty"
-            cat > "$HOME/.config/alacritty/theme.toml" <<EOF
+            if [[ "$DRY_RUN" == "true" ]]; then
+                log_info "[dry-run] Would source theme and write Alacritty theme.toml"
+            else
+                source "$theme_script" || die "Failed to source theme.sh"
+                validate_theme_variables || die "Invalid theme configuration"
+
+                mkdir -p "$HOME/.config/alacritty"
+                theme_target=$(readlink -f -- "$HOME/.config/alacritty/theme.toml")
+                backup_item "$theme_target" || die "Failed to back up Alacritty theme"
+                cat > "$HOME/.config/alacritty/theme.toml" <<EOF
 [colors.primary]
 background = "$PRIMARY_BACKGROUND"
 foreground = "$PRIMARY_FOREGROUND"
@@ -339,6 +292,7 @@ color = "$INDEXED_16"
 index = 17
 color = "$INDEXED_17"
 EOF
+            fi
             progress_complete "done"
         else
             progress_complete "skipped"
@@ -356,7 +310,7 @@ for component in "${SELECTED_COMPONENTS[@]}"; do
     if [[ "$name" == "backgrounds" ]]; then
         progress_step "Setting up desktop backgrounds"
         if [[ -d "$DOTFILES_DIR/backgrounds" ]]; then
-            safe_symlink "$DOTFILES_DIR/backgrounds" "$HOME/.backgrounds" || log_warn "Failed to link backgrounds"
+            safe_symlink "$DOTFILES_DIR/backgrounds" "$HOME/.backgrounds" || die "Failed to link backgrounds"
             progress_complete "done"
         else
             progress_complete "skipped"
@@ -373,39 +327,59 @@ for component in "${SELECTED_COMPONENTS[@]}"; do
     
     if [[ "$name" == "tmux" ]]; then
         progress_step "Setting up Tmux configuration"
+        if [[ "$DRY_RUN" == "true" ]]; then
+            log_info "[dry-run] Would link tmux config and theme into ~/.config/tmux and ~/.tmux.conf"
+            progress_complete "done"
+            break
+        fi
+
         mkdir -p "$HOME/.config/tmux"
-        
+
         tmux_conf="$DOTFILES_DIR/config/tmux/tmux.conf"
         if validate_file "$tmux_conf" false; then
-            safe_symlink "$tmux_conf" "$HOME/.config/tmux/tmux.conf" || log_warn "Failed to symlink tmux.conf"
+            safe_symlink "$tmux_conf" "$HOME/.config/tmux/tmux.conf" || die "Failed to symlink tmux.conf"
+        else
+            die "Tmux configuration not found"
         fi
-        
+
+        theme_target=$(readlink -f -- "$HOME/.config/tmux/theme.conf")
+        backup_item "$theme_target" || die "Failed to back up tmux theme"
         cat > "$HOME/.config/tmux/theme.conf" <<'EOF'
 # Tmux theme colors
-set -g status-bg black
-set -g status-fg white
-set -g status-left-bg black
-set -g status-left-fg brightblue
-set -g status-right-bg black
-set -g status-right-fg brightblue
-
-set -g pane-border-fg black
-set -g pane-active-border-fg blue
-
-set -g window-status-current-bg blue
-set -g window-status-current-fg black
-set -g window-status-bg black
-set -g window-status-fg white
-
-set -g message-bg brightyellow
-set -g message-fg black
+set -g status-style bg=black,fg=white
+set -g status-left-style bg=black,fg=brightblue
+set -g status-right-style bg=black,fg=brightblue
+set -g pane-border-style fg=black
+set -g pane-active-border-style fg=blue
+set -g window-status-current-style bg=blue,fg=black
+set -g window-status-style bg=black,fg=white
+set -g message-style bg=brightyellow,fg=black
 EOF
-        
-        safe_symlink "$HOME/.config/tmux/tmux.conf" "$HOME/.tmux.conf" || log_warn "Failed to symlink tmux config"
+
+        safe_symlink "$HOME/.config/tmux/tmux.conf" "$HOME/.tmux.conf" || die "Failed to symlink tmux config"
         progress_complete "done"
         break
     fi
 done
+
+# Edit resolved targets so GNU sed does not replace Stow symlinks.
+if [[ -n "$SELECTED_SHELL" ]]; then
+    for terminal_config in "$HOME/.config/alacritty/alacritty.toml" "$HOME/.config/tmux/tmux.conf"; do
+        if [[ -f "$terminal_config" ]]; then
+            target=$(readlink -f -- "$terminal_config")
+            if [[ "$DRY_RUN" == "true" ]]; then
+                log_info "[dry-run] Would update $terminal_config to use $SELECTED_SHELL"
+            else
+                backup_item "$target" || die "Failed to back up $terminal_config"
+                if [[ "$terminal_config" == *.toml ]]; then
+                    sed -i "s|shell = \"/bin/[^\"]*\"|shell = \"/bin/$SELECTED_SHELL\"|" "$target"
+                else
+                    sed -i -E "s|default-shell \"[^\"]*\"|default-shell \"/usr/bin/$SELECTED_SHELL\"|" "$target"
+                fi
+            fi
+        fi
+    done
+fi
 
 # Install LazyVim if selected
 for component in "${SELECTED_COMPONENTS[@]}"; do
@@ -416,7 +390,14 @@ for component in "${SELECTED_COMPONENTS[@]}"; do
         progress_step "Installing LazyVim Neovim distribution"
         if [[ -d "$DOTFILES_DIR/nvim" ]] && command_exists nvim; then
             if validate_file "$DOTFILES_DIR/install-lazyvim.sh" false; then
-                execute bash "$DOTFILES_DIR/install-lazyvim.sh" || log_warn "LazyVim installation failed"
+                lazyvim_args=()
+                if [[ "$NON_INTERACTIVE" == "true" ]]; then
+                    lazyvim_args+=("--non-interactive")
+                fi
+                if [[ "$DRY_RUN" == "true" ]]; then
+                    lazyvim_args+=("--dry-run")
+                fi
+                execute bash "$DOTFILES_DIR/install-lazyvim.sh" "${lazyvim_args[@]}" || die "LazyVim installation failed"
                 progress_complete "done"
             else
                 progress_complete "skipped"

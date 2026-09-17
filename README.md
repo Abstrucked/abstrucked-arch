@@ -13,13 +13,58 @@ cd ~/dotfiles
 ./install.sh
 ```
 
-The installation script will:
+Run the installer as a regular user on Arch Linux, with `git` and `curl` installed. Building yay also requires `base-devel` (`sudo pacman -S --needed base-devel git`).
+
+With the default components selected, the installation script will:
 - Install yay (AUR helper) if not present
 - Install all required packages
 - Prompt you to select a default shell (zsh or bash)
 - Set up symlinks using GNU Stow
 - Configure terminal defaults for the selected shell
 - Install and configure LazyVim
+
+### Installer Flags
+
+These flags belong to `install.sh`; standalone helpers support only their own options.
+
+| Flag | Behavior |
+|------|----------|
+| `--dry-run` | Preview actions without making changes; prerequisite and selection validation still applies. |
+| `--non-interactive`, `-y` | Use default selections without prompting; shell selection defaults to zsh and Node manager installation is skipped. |
+| `--only STEP` | Restrict selection to a step; repeat the flag for each additional step. |
+| `--skip STEP` | Exclude a step; repeat the flag for each additional exclusion. |
+| `--verbose`, `-v` | Enable debug output. |
+| `--quiet`, `-q` | Suppress non-error logging. |
+| `--help`, `-h` | Show usage. |
+
+Supported steps: `yay`, `packages`, `node`, `yubikey`, `stow`, `shell`, `theme`, `backgrounds`, `tmux`, and `lazyvim`. Unknown steps and a step listed in both `--only` and `--skip` are rejected. Filters also apply to interactive selections.
+
+```bash
+# Preview selected components without prompts
+./install.sh --dry-run -y --only yay --only packages --only stow
+
+# Skip multiple components
+./install.sh --skip node --skip yubikey
+```
+
+Dependencies are validated before installation, not automatically added: `packages` and `yubikey` require yay already installed or the `yay` step selected; `stow` requires GNU Stow already installed or `packages` selected; `shell` requires the `stow` step selected. Package list entries are validated, and package installation failures stop the installer.
+
+### Helpers and Safety
+
+`install-yay.sh`, `install-node-manager.sh`, and `install-lazyvim.sh` support `--dry-run`, `--non-interactive` (or `-y`), and `--help` (or `-h`). The Node helper additionally supports `--manager n|nvm|skip`. `bootstrap-configs.sh` and `copy-awesome-config.sh` also support `--dry-run`.
+
+```bash
+./install-yay.sh --dry-run
+./install-node-manager.sh --dry-run --manager nvm
+./install-lazyvim.sh --dry-run
+./copy-awesome-config.sh --dry-run
+```
+
+Dry runs do not install packages, download installers, copy configurations, create backups, or sync plugins. They are previews, not proof that a real installation will succeed. Unattended yay installation requires usable cached sudo credentials (`sudo -v` beforehand).
+
+Backups use unique directories so repeated operations do not overwrite earlier backups. Shared installer backups live under `~/.dotfiles-backups/backup.*`; bootstrap and LazyVim replacements use unique backups beside the destination. Stow conflicts stop installation for manual reconciliation without deleting unrelated configurations. Earlier successful steps are not automatically rolled back.
+
+Run the isolated regression suite with `python3 -B -m unittest discover -s tests -v`. It uses temporary homes and copied scripts with mocked install commands, not your real home or package manager.
 
 ## 🐚 Shell Selection
 
@@ -35,13 +80,10 @@ During installation, you'll be prompted to choose your default shell:
 You can switch shells at any time by re-running the installer:
 
 ```bash
-./install.sh
+./install.sh --only stow --only shell
 ```
 
-Select the "shell" component and choose your new default. The installer will:
-1. Unstow the old shell configuration
-2. Stow the new shell configuration
-3. Update Alacritty and tmux to use the new shell
+Select both "stow" and "shell", then choose your shell (GNU Stow must already be installed for this command). The installer stows the selected shell configuration and updates existing Alacritty and tmux shell settings through their resolved targets, preserving symlinks. It does not unstow the old shell or change your account's login shell. Stow also processes the base configuration packages, not just the shell.
 
 ### Customizing Starship (Bash)
 
@@ -78,12 +120,12 @@ If you already have configurations you want to import:
 The bootstrap script will:
 - Scan your `~/.config/` directory for known applications
 - Check for dotfiles in your home directory (`.zshrc`, `.tmux.conf`, etc.)
-- **Automatically skip configs containing sensitive files** (SSH keys, passwords, API tokens, etc.)
-- Interactively copy safe configurations to the proper stow structure
+- Skip configs flagged by best-effort checks for sensitive filenames and common credential patterns
+- Interactively copy approved configurations to the proper stow structure
 - Create backups of existing dotfiles configs
 - Provide security guidance for sensitive configurations
 
-**Security First:** The script prioritizes security by automatically skipping any configuration containing sensitive files. Use `--force-sensitive` only if you understand the risks and have proper encryption in place.
+**Review before committing:** The scanner is best effort, not a guarantee that copied files are free of secrets. Review all imported files and the staged diff before committing, including backups created inside the repository. `--yes` skips copy prompts, not sensitive-content checks. `--force-sensitive` overrides detected-content warnings, but does not override scan errors; use it only after reviewing the contents yourself.
 
 ## 🟢 Node.js Version Manager
 
@@ -99,8 +141,18 @@ Choose between two popular Node.js version managers:
 - **`skip`** - Don't install any Node.js manager
 
 **Comparison:**
-- **n**: Faster, simpler, bash-only
-- **nvm**: More features, works with any shell, supports `.nvmrc`
+- **n**: Simple executable manager; usable from Bash or Zsh
+- **nvm**: Shell-based manager for compatible shells including Bash and Zsh; supports `.nvmrc`
+
+`./install.sh -y` skips Node manager installation because it does not choose a manager. For unattended installation, explicitly select a manager with the standalone helper:
+
+```bash
+./install-node-manager.sh --non-interactive --manager n
+# Or:
+./install-node-manager.sh --non-interactive --manager nvm
+```
+
+Without `--manager`, the helper skips in non-interactive mode, dry-run mode, or when standard input is not a terminal. It installs/verifies the manager only, not a Node.js version, and prints shell setup instructions without sourcing or rewriting your shell profiles.
 
 ## 📦 Included Tools
 
@@ -283,7 +335,10 @@ dotfiles/
 
 ### Neovim (LazyVim)
 - `nvim/.config/nvim/` - LazyVim configuration
-- Automatically installed and configured by `install-lazyvim.sh`
+- `install-lazyvim.sh` preserves existing repository-managed configuration and runs `nvim --headless '+Lazy! sync' +qa` to synchronize plugins.
+- Unknown existing configurations are kept without modification in non-interactive mode (including non-terminal input) and dry runs. Existing configuration symlinks are never replaced.
+- An interactive replacement of an unmanaged directory requires explicit confirmation. The helper stages the starter first, makes a unique backup, and attempts to restore the previous configuration if installation or synchronization fails.
+- With no existing configuration, the helper installs the LazyVim starter. Real installation/synchronization requires Neovim and git; `XDG_CONFIG_HOME` and `NVIM_APPNAME` select the configuration location.
 
 ### Zsh (Powerlevel10k)
 - `zsh/.zshrc` - Zsh configuration
@@ -313,28 +368,22 @@ If you prefer to install manually:
 
 2. **Install packages**:
    ```bash
-   yay -S --needed - < packages.list
+    ./install.sh -y --only packages
    ```
 
 3. **Set up symlinks** (choose your shell):
     ```bash
     # For zsh:
-    stow -t ~ tmux awesome ssh alacritty btop nvim picom zsh pcmanfm scripts ghossty
+     stow -t ~ awesome ssh alacritty btop nvim picom zsh pcmanfm scripts ghossty gnupg
 
     # For bash:
-    stow -t ~ tmux awesome ssh alacritty btop nvim picom bash pcmanfm scripts ghossty
+     stow -t ~ awesome ssh alacritty btop nvim picom bash pcmanfm scripts ghossty gnupg
+
+     # Tmux uses config/tmux rather than a Stow package:
+     ./install.sh -y --only tmux
     ```
 
-4. **Configure terminal shell** (set default shell in terminal configs):
-    ```bash
-    # For zsh:
-    sed -i 's|shell = "/bin/.*"|shell = "/bin/zsh"|' ~/.config/alacritty/alacritty.toml
-    sed -i 's|default-shell "/usr/bin/.*"|default-shell "/usr/bin/zsh"|' ~/.config/tmux/tmux.conf
-
-    # For bash:
-    sed -i 's|shell = "/bin/.*"|shell = "/bin/bash"|' ~/.config/alacritty/alacritty.toml
-    sed -i 's|default-shell "/usr/bin/.*"|default-shell "/usr/bin/bash"|' ~/.config/tmux/tmux.conf
-    ```
+4. **Configure terminal shell**: Back up and edit the resolved targets of `~/.config/alacritty/alacritty.toml` and `~/.config/tmux/tmux.conf` (use `readlink -f` to locate them). Set the Alacritty shell and tmux `default-shell` to your chosen shell. Do not replace the Stow symlinks with regular files. Alternatively, use `./install.sh --only stow --only shell` to apply the installer's backed-up, symlink-preserving updates.
 
 5. **Install LazyVim**:
    ```bash
@@ -435,18 +484,14 @@ git pull
     chmod +x install.sh install-yay.sh install-lazyvim.sh scripts/.local/bin/create-app-launcher scripts/.local/bin/pass-insert-utility
     ```
 
-2. **Stow conflicts**: If you have existing config files:
-   ```bash
-   # Backup existing configs first
-   mkdir ~/config_backup
-   mv ~/.config/some_config ~/config_backup/
-   ```
+2. **Stow conflicts**: The installer stops at the conflicting package. Inspect the paths Stow reports, back up any files you choose to move, and reconcile only those conflicts before rerunning. Do not delete whole configuration directories or unrelated symlinks to force installation.
 
-3. **LazyVim issues**: If LazyVim doesn't install properly:
-    ```bash
-    rm -rf ~/.config/nvim
-    ./install-lazyvim.sh
-    ```
+3. **LazyVim issues**: Preview the helper's decision, then rerun interactively if appropriate:
+     ```bash
+     ./install-lazyvim.sh --dry-run
+     ./install-lazyvim.sh
+     ```
+   Managed configurations are preserved while plugins sync. Unknown configurations are kept unless you explicitly approve an interactive directory replacement; do not delete `~/.config/nvim` as a troubleshooting step. Inspect Neovim's error output and any reported backup location if synchronization fails.
 
 4. **Launcher or alias issues**: If aliases don't load:
     ```bash

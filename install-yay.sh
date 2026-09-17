@@ -1,52 +1,54 @@
 #!/bin/bash
-# Install yay AUR helper
-
+# Build yay as a regular user; makepkg handles privileged package installation.
 set -euo pipefail
 
-# Get script directory
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DOTFILES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly DOTFILES_DIR
+source "$DOTFILES_DIR/lib/logging.sh"
+source "$DOTFILES_DIR/lib/cleanup.sh"
 
-# Source helper functions
-source "$SCRIPT_DIR/lib/logging.sh"
-source "$SCRIPT_DIR/lib/validation.sh"
-source "$SCRIPT_DIR/lib/cleanup.sh"
+DRY_RUN=false
+NON_INTERACTIVE=false
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --dry-run) DRY_RUN=true ;;
+        --non-interactive|-y) NON_INTERACTIVE=true ;;
+        --help|-h)
+            printf 'Usage: %s [--dry-run] [--non-interactive]\n' "$0"
+            exit 0 ;;
+        *) die "Unknown argument: $1" ;;
+    esac
+    shift
+done
 
-# Set up cleanup trap
-setup_cleanup_trap
-
-log_header "Installing yay AUR helper"
-
-# Check if yay is already installed
 if command_exists yay; then
-    log_success "yay is already installed!"
+    log_info "yay is already installed; skipping."
     exit 0
 fi
+if [[ "$DRY_RUN" == true ]]; then
+    log_info "[dry-run] Would check non-root user and base-devel, clone yay, then build/install with makepkg -si."
+    exit 0
+fi
+[[ "$EUID" -ne 0 ]] || die "yay must be built as a regular user, not root. Run this helper without sudo."
+require_command pacman "yay requires Arch Linux and pacman"
+require_command git "Install prerequisites first: sudo pacman -S --needed base-devel git"
+require_command makepkg "Install prerequisites first: sudo pacman -S --needed base-devel git"
+pacman -Q base-devel >/dev/null 2>&1 || die "Missing base-devel. Run: sudo pacman -S --needed base-devel git"
 
-# Check prerequisites
-log_step "Checking prerequisites..."
-require_command git "git is required but not installed"
-require_command makepkg "makepkg is required but not installed"
-
-# Create temp directory for building
-log_step "Creating temporary build directory..."
-temp_dir=$(create_temp_dir "yay-build") || die "Failed to create temp directory"
-log_debug "Build directory: $temp_dir"
-
-# Clone yay from AUR
-log_step "Cloning yay from AUR..."
-cd "$temp_dir"
-git clone https://aur.archlinux.org/yay.git || {
-    log_error "Failed to clone yay repository"
-    exit 1
-}
-
-# Build and install yay
-log_step "Building and installing yay..."
-cd yay
-makepkg -si --noconfirm || {
-    log_error "Failed to build/install yay"
-    log_info "You may need to install dependencies manually"
-    exit 1
-}
-
-log_success "yay installed successfully!"
+setup_cleanup_trap
+create_temp_dir yay-build temp_dir || die "Failed to create yay build directory"
+git clone -- https://aur.archlinux.org/yay.git "$temp_dir/yay" || die "Failed to clone yay repository"
+makepkg_args=(-si)
+if [[ "$NON_INTERACTIVE" == true ]]; then
+    makepkg_args+=(--noconfirm)
+    require_command sudo "sudo is required for unattended makepkg package installation"
+    sudo -n -v || die "Unattended installation requires cached sudo credentials; run sudo -v first."
+    export PACMAN_AUTH='sudo -n'
+fi
+(
+    cd "$temp_dir/yay" || exit 1
+    makepkg "${makepkg_args[@]}"
+) || die "Failed to build/install yay. Check base-devel and the makepkg output above."
+command_exists yay || die "yay installation failed: executable not found in PATH"
+yay --version || die "yay verification failed"
+log_success "yay installed successfully."

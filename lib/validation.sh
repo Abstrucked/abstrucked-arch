@@ -8,8 +8,7 @@ fi
 _VALIDATION_SH_LOADED=1
 
 # Source logging functions
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/logging.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/logging.sh"
 
 # Validate that we're on Arch Linux
 require_arch() {
@@ -51,7 +50,7 @@ validate_packages_file() {
     fi
     
     local invalid_packages=()
-    while IFS= read -r line; do
+    while IFS= read -r line || [[ -n "$line" ]]; do
         # Skip empty lines and comments
         [[ -z "$line" || "$line" =~ ^# ]] && continue
         
@@ -96,6 +95,10 @@ validate_directory() {
     
     if [[ ! -d "$dir" ]]; then
         if [[ "$create" == "true" ]]; then
+            if [[ "${DRY_RUN:-false}" == "true" ]]; then
+                log_info "[dry-run] Would create directory $dir"
+                return 0
+            fi
             mkdir -p "$dir" || {
                 log_error "Failed to create directory: $dir"
                 return 1

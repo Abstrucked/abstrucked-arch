@@ -201,8 +201,7 @@ spinner_start() {
     ) &
     SPINNER_PID=$!
     
-    # Ensure spinner is cleaned up on exit
-    trap "spinner_stop" EXIT
+    # The caller owns its EXIT trap; never replace the installer's cleanup trap.
 }
 
 # Stop spinner
@@ -221,14 +220,15 @@ spinner_stop() {
 }
 
 # Run a command with spinner
-run_with_spinner() {
+run_with_spinner() (
     local message=$1
     shift
     
+    trap spinner_stop EXIT
     spinner_start "$message"
     
     local exit_code=0
-    if [[ "$DRY_RUN" == "true" ]]; then
+    if [[ "${DRY_RUN:-false}" == "true" ]]; then
         spinner_stop
         log_info "[DRY RUN] $*"
     else
@@ -237,4 +237,4 @@ run_with_spinner() {
     fi
     
     return $exit_code
-}
+)

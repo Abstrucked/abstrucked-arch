@@ -1,242 +1,99 @@
 #!/bin/bash
-# Install Node.js version manager (n or nvm)
-
+# Install a Node.js version manager without executing or rewriting shell profiles.
 set -euo pipefail
 
-# Get script directory
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DOTFILES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly DOTFILES_DIR
+source "$DOTFILES_DIR/lib/logging.sh"
+source "$DOTFILES_DIR/lib/cleanup.sh"
 
-# Source helper functions
-source "$SCRIPT_DIR/lib/logging.sh"
-source "$SCRIPT_DIR/lib/validation.sh"
-source "$SCRIPT_DIR/lib/cleanup.sh"
-
-# Set up cleanup trap
-setup_cleanup_trap
-
-# Script variables
-INSTALL_CHOICE=""
-
-print_header() {
-    log_header "Node.js Version Manager Installer"
-    log_info "Choose between n (simpler) or nvm (more features)"
-}
-
-print_info() {
-    echo -e "${YELLOW}Available options:${NC}"
-    echo -e "${GREEN}n${NC}     - Simple, fast Node.js version manager"
-    echo -e "${GREEN}      - Pros: Lightweight, fast switching, simple commands${NC}"
-    echo -e "${GREEN}      - Cons: Bash-only, no .nvmrc auto-switching${NC}"
-    echo ""
-    echo -e "${GREEN}nvm${NC}   - Advanced Node.js version manager"
-    echo -e "${GREEN}      - Pros: Supports .nvmrc, works with any shell, more features${NC}"
-    echo -e "${GREEN}      - Cons: Slower, more complex, requires bash initialization${NC}"
-    echo ""
-}
-
-get_user_choice() {
-    while true; do
-        echo -e "${PURPLE}Which Node.js version manager would you like to install?${NC}"
-        echo -n "[n/nvm/skip]? "
-        
-        local response
-        read -r response
-        
-        case "${response,,}" in
-            "n")
-                INSTALL_CHOICE="n"
-                break
-                ;;
-            "nvm")
-                INSTALL_CHOICE="nvm"
-                break
-                ;;
-            "skip" | "s")
-                log_info "Skipping Node.js version manager installation."
-                exit 0
-                ;;
-            *)
-                log_error "Invalid choice. Please enter 'n', 'nvm', or 'skip'."
-                ;;
-        esac
-    done
-}
-
-# Download a script safely and verify it
-download_script() {
-    local url=$1
-    local output_file=$2
-    
-    log_step "Downloading from: $url"
-    
-    # Download with error checking
-    if ! curl -fsSL -o "$output_file" "$url"; then
-        log_error "Failed to download from: $url"
-        return 1
-    fi
-    
-    # Verify the script is not empty
-    if [[ ! -s "$output_file" ]]; then
-        log_error "Downloaded script is empty"
-        return 1
-    fi
-    
-    # Basic sanity check - should be a shell script
-    if ! head -1 "$output_file" | grep -q '^#!/'; then
-        log_warn "Downloaded script does not appear to be a shell script"
-    fi
-    
-    return 0
-}
-
-install_n() {
-    log_step "Installing n (Node.js version manager)..."
-    
-    # Check if n is already installed
-    if command_exists n; then
-        log_success "n is already installed!"
-        return 0
-    fi
-    
-    # Check prerequisites
-    require_command curl "curl is required for installation"
-    
-    # Create temp directory
-    local temp_dir
-    temp_dir=$(create_temp_dir "n-install") || return 1
-    
-    # Download n installer
-    local installer="$temp_dir/n-install.sh"
-    download_script "https://git.io/n-install" "$installer" || {
-        log_error "Failed to download n installer"
-        return 1
-    }
-    
-    # Make executable and run
-    chmod +x "$installer"
-    
-    log_step "Running n installer..."
-    if ! bash "$installer"; then
-        log_error "n installation failed"
-        return 1
-    fi
-    
-    # Source the updated profile to get n in PATH
-    for profile in "$HOME/.bashrc" "$HOME/.zshrc"; do
-        if [[ -f "$profile" ]]; then
-            # shellcheck disable=SC1090
-            source "$profile" 2>/dev/null || true
-        fi
-    done
-    
-    # Verify installation
-    if command_exists n; then
-        log_success "n installed successfully!"
-        echo ""
-        echo -e "${CYAN}Usage examples:${NC}"
-        echo -e "${CYAN}  n latest          # Install latest Node.js${NC}"
-        echo -e "${CYAN}  n lts             # Install LTS version${NC}"
-        echo -e "${CYAN}  n 18              # Install Node.js 18${NC}"
-        echo -e "${CYAN}  n                 # List installed versions${NC}"
-    else
-        log_error "Failed to verify n installation"
-        return 1
-    fi
-}
-
-install_nvm() {
-    log_step "Installing nvm (Node Version Manager)..."
-    
-    # Check if nvm is already installed
-    if [[ -d "$HOME/.nvm" ]] || command_exists nvm; then
-        log_success "nvm is already installed!"
-        return 0
-    fi
-    
-    # Check prerequisites
-    require_command curl "curl is required for installation"
-    
-    # Create temp directory
-    local temp_dir
-    temp_dir=$(create_temp_dir "nvm-install") || return 1
-    
-    # Download nvm installer
-    local installer="$temp_dir/nvm-install.sh"
-    download_script "https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh" "$installer" || {
-        log_error "Failed to download nvm installer"
-        return 1
-    }
-    
-    # Make executable and run
-    chmod +x "$installer"
-    
-    log_step "Running nvm installer..."
-    if ! bash "$installer"; then
-        log_error "nvm installation failed"
-        return 1
-    fi
-    
-    # Source nvm
-    export NVM_DIR="$HOME/.nvm"
-    if [[ -s "$NVM_DIR/nvm.sh" ]]; then
-        # shellcheck disable=SC1091
-        \. "$NVM_DIR/nvm.sh"
-    fi
-    
-    # Add nvm to shell profiles if not already there
-    local shell_profiles=("$HOME/.bashrc" "$HOME/.zshrc")
-    
-    for profile in "${shell_profiles[@]}"; do
-        if [[ -f "$profile" ]]; then
-            if ! grep -q "NVM_DIR" "$profile"; then
-                log_info "Adding nvm configuration to $profile"
-                cat >> "$profile" <<'EOF'
-
-# NVM (Node Version Manager)
-export NVM_DIR="$HOME/.nvm"
-[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
-EOF
-            fi
-        fi
-    done
-    
-    # Verify installation
-    if [[ -d "$HOME/.nvm" ]]; then
-        log_success "nvm installed successfully!"
-        echo ""
-        echo -e "${CYAN}Usage examples:${NC}"
-        echo -e "${CYAN}  nvm install node     # Install latest Node.js${NC}"
-        echo -e "${CYAN}  nvm install --lts    # Install LTS version${NC}"
-        echo -e "${CYAN}  nvm install 18       # Install Node.js 18${NC}"
-        echo -e "${CYAN}  nvm list             # List installed versions${NC}"
-        echo -e "${CYAN}  nvm use 18           # Switch to Node.js 18${NC}"
-        echo ""
-        log_warn "Restart your terminal or run 'source ~/.bashrc' to use nvm"
-    else
-        log_error "Failed to verify nvm installation"
-        return 1
-    fi
-}
-
-main() {
-    print_header
-    print_info
-    get_user_choice
-    
-    case "$INSTALL_CHOICE" in
-        "n")
-            install_n
-            ;;
-        "nvm")
-            install_nvm
-            ;;
+DRY_RUN=false
+NON_INTERACTIVE=false
+NODE_MANAGER=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --dry-run) DRY_RUN=true; shift ;;
+        --non-interactive|-y) NON_INTERACTIVE=true; shift ;;
+        --manager)
+            [[ $# -ge 2 ]] || die "--manager requires n, nvm, or skip"
+            NODE_MANAGER="$2"; shift 2 ;;
+        --help|-h)
+            printf 'Usage: %s [--dry-run] [--non-interactive] [--manager n|nvm|skip]\n' "$0"
+            exit 0 ;;
+        *) die "Unknown argument: $1" ;;
     esac
-    
-    echo ""
-    log_success "Node.js version manager installation complete!"
-    log_info "You can now install Node.js versions using your chosen manager."
-}
+done
+case "$NODE_MANAGER" in
+    n|nvm|skip|"") ;;
+    *) die "Invalid manager: $NODE_MANAGER (expected n, nvm, or skip)" ;;
+esac
 
-# Run main function
-main "$@"
+if [[ -z "$NODE_MANAGER" ]]; then
+    if [[ "$DRY_RUN" == true || "$NON_INTERACTIVE" == true || ! -t 0 ]]; then
+        log_info "Skipping Node.js manager: no explicit --manager n or --manager nvm selected."
+        exit 0
+    fi
+    read -r -p "Node.js manager [n/nvm/skip] (default: skip): " NODE_MANAGER || NODE_MANAGER=skip
+    NODE_MANAGER="${NODE_MANAGER:-skip}"
+fi
+case "$NODE_MANAGER" in
+    skip) log_info "Skipping Node.js manager installation."; exit 0 ;;
+    n|nvm) ;;
+    *) die "Invalid manager: $NODE_MANAGER (expected n, nvm, or skip)" ;;
+esac
+
+export N_PREFIX="${N_PREFIX:-$HOME/n}"
+export NVM_DIR="${NVM_DIR:-${XDG_CONFIG_HOME:+$XDG_CONFIG_HOME/nvm}}"
+export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+if [[ "$NODE_MANAGER" == n ]]; then
+    [[ "$N_PREFIX" == /* ]] || die "N_PREFIX must be an absolute path"
+    if [[ "$DRY_RUN" == true ]]; then
+        log_info "[dry-run] Would install/verify n at $N_PREFIX/bin/n without changing profiles."
+        exit 0
+    fi
+    if [[ ! -f "$N_PREFIX/bin/n" || ! -x "$N_PREFIX/bin/n" ]]; then
+        require_command curl
+        require_command git
+        require_command make "GNU make is required to install n"
+        setup_cleanup_trap
+        create_temp_dir n-install temp_dir || die "Failed to create n staging directory"
+        installer="$temp_dir/n-install.sh"
+        curl --proto '=https' --proto-redir '=https' -fsSL -o "$installer" \
+            https://raw.githubusercontent.com/mklement0/n-install/stable/bin/n-install || die "Failed to download n installer"
+        [[ -f "$installer" && -s "$installer" ]] || die "Empty or missing n installer"
+        bash -n "$installer" || die "Invalid n installer syntax"
+        # Upstream -y is unattended, -n skips profiles, and '-' installs only the manager.
+        bash "$installer" -y -n - || die "n installation failed"
+    fi
+    [[ -f "$N_PREFIX/bin/n" && -x "$N_PREFIX/bin/n" ]] || die "n installation failed: prefix binary missing"
+    export PATH="$N_PREFIX/bin:$PATH"
+    "$N_PREFIX/bin/n" --version || die "n verification failed"
+    log_success "n is ready at $N_PREFIX/bin/n"
+    log_info "For future Bash/Zsh sessions, use these exports in your shell configuration:"
+    printf 'export N_PREFIX=%q\nexport PATH="$N_PREFIX/bin:$PATH"\n' "$N_PREFIX"
+else
+    [[ "$NVM_DIR" == /* ]] || die "NVM_DIR must be an absolute path"
+    if [[ "$DRY_RUN" == true ]]; then
+        log_info "[dry-run] Would install/verify $NVM_DIR/nvm.sh without changing profiles."
+        exit 0
+    fi
+    if [[ ! -f "$NVM_DIR/nvm.sh" || ! -s "$NVM_DIR/nvm.sh" ]]; then
+        require_command curl
+        require_command git
+        setup_cleanup_trap
+        create_temp_dir nvm-install temp_dir || die "Failed to create nvm staging directory"
+        installer="$temp_dir/nvm-install.sh"
+        curl --proto '=https' --proto-redir '=https' -fsSL -o "$installer" \
+            https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh || die "Failed to download nvm installer"
+        [[ -f "$installer" && -s "$installer" ]] || die "Empty or missing nvm installer"
+        bash -n "$installer" || die "Invalid nvm installer syntax"
+        mkdir -p -- "$NVM_DIR" || die "Failed to create $NVM_DIR"
+        PROFILE=/dev/null METHOD=git bash "$installer" || die "nvm installation failed"
+    fi
+    [[ -f "$NVM_DIR/nvm.sh" && -s "$NVM_DIR/nvm.sh" ]] || die "nvm installation failed: nvm.sh missing"
+    # Load only the manager in a clean child shell, not the user's shell startup files.
+    bash --noprofile --norc -c '. "$NVM_DIR/nvm.sh" --no-use && command -v nvm && nvm --version' || die "nvm verification failed"
+    log_success "nvm is ready at $NVM_DIR"
+    log_info "For future Bash/Zsh sessions, use these lines in your shell configuration:"
+    printf 'export NVM_DIR=%q\n. "$NVM_DIR/nvm.sh"\n' "$NVM_DIR"
+fi

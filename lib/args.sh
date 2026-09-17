@@ -8,8 +8,7 @@ fi
 _ARGS_SH_LOADED=1
 
 # Source logging functions
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/logging.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/logging.sh"
 
 # Global flags (defaults)
 DRY_RUN=false
@@ -48,6 +47,7 @@ show_help() {
     echo -e "  node          Install Node.js version manager"
     echo -e "  yubikey       Install YubiKey tools"
     echo -e "  stow          Setup symlinks with GNU Stow"
+    echo -e "  shell         Select default shell (requires stow selection)"
     echo -e "  theme         Setup Alacritty theme"
     echo -e "  backgrounds   Setup desktop backgrounds"
     echo -e "  tmux          Setup Tmux configuration"
@@ -56,7 +56,7 @@ show_help() {
     echo -e "${YELLOW}Examples:${NC}"
     echo -e "  $script_name                      # Interactive installation"
     echo -e "  $script_name --dry-run            # Preview changes only"
-    echo -e "  $script_name --only packages stow # Only install packages and stow"
+    echo -e "  $script_name --only packages --only stow # Only install packages and stow"
     echo -e "  $script_name --skip yubikey       # Skip YubiKey installation"
     echo -e "  $script_name -y                   # Non-interactive (defaults)"
     echo -e "  $script_name -v                   # Verbose output"
@@ -88,18 +88,19 @@ parse_args() {
             --help|-h)
                 show_help
                 ;;
-            --only)
-                if [[ -z "${2:-}" ]]; then
-                    die "--only requires a step name"
+            --only|--skip)
+                if [[ -z "${2:-}" || "$2" == -* ]]; then
+                    die "$1 requires a step name"
                 fi
-                RUN_STEPS+=("$2")
-                shift 2
-                ;;
-            --skip)
-                if [[ -z "${2:-}" ]]; then
-                    die "--skip requires a step name"
+                case "$2" in
+                    packages|yay|node|yubikey|stow|shell|theme|backgrounds|tmux|lazyvim) ;;
+                    *) die "Unknown step: $2" ;;
+                esac
+                if [[ "$1" == --only ]]; then
+                    RUN_STEPS+=("$2")
+                else
+                    SKIP_STEPS+=("$2")
                 fi
-                SKIP_STEPS+=("$2")
                 shift 2
                 ;;
             -*)
@@ -110,11 +111,23 @@ parse_args() {
                 ;;
         esac
     done
+    local requested skipped
+    for requested in "${RUN_STEPS[@]}"; do
+        for skipped in "${SKIP_STEPS[@]}"; do
+            [[ "$requested" != "$skipped" ]] || die "Step cannot be both --only and --skip: $requested"
+        done
+    done
+    return 0
 }
 
 # Check if a step should be run
 should_run_step() {
     local step=$1
+    local requested skipped
+
+    for skipped in "${SKIP_STEPS[@]}"; do
+        [[ "$skipped" != "$step" ]] || return 1
+    done
     
     # If specific steps were requested, only run those
     if [[ ${#RUN_STEPS[@]} -gt 0 ]]; then
@@ -125,13 +138,6 @@ should_run_step() {
         done
         return 1
     fi
-    
-    # If steps were skipped, don't run those
-    for skipped in "${SKIP_STEPS[@]}"; do
-        if [[ "$skipped" == "$step" ]]; then
-            return 1
-        fi
-    done
     
     return 0
 }

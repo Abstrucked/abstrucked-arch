@@ -6,21 +6,36 @@ DOTFILES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 SRC="$HOME/.config/awesome"
 
-DEST="$DOTFILES_DIR/awesome/.config/awesome/awesome"
+DEST="$DOTFILES_DIR/awesome/.config/awesome"
 
-if [ ! -d "$SRC" ]; then
-  echo "Source $SRC does not exist"
+# Share exact-destination backup, staging, and rollback behavior.
+source "$DOTFILES_DIR/bootstrap-configs.sh"
+for arg in "$@"; do
+  case "$arg" in
+    --dry-run) DRY_RUN=true ;;
+    --help) echo "Usage: $0 [--dry-run]"; exit 0 ;;
+    *) echo "Unknown option: $arg" >&2; exit 1 ;;
+  esac
+done
+
+if validate_paths "$SRC" "$DEST"; then :; else
+  status=$?
+  [[ "$status" -eq 2 ]] && exit 0
+  exit "$status"
+fi
+
+if check_sensitive_content "$SRC"; then
+  echo "Refusing to import potential sensitive content; review it and use bootstrap-configs.sh if an explicit override is needed." >&2
   exit 1
+else
+  status=$?
+  [[ "$status" -eq 1 ]] || exit "$status"
 fi
 
-if [ ! -d "$DEST" ]; then
-  echo "Destination $DEST does not exist, creating"
-  mkdir -p "$DEST"
+if copy_config "$SRC" "$DEST" awesome; then
+  exit 0
+else
+  status=$?
+  [[ "$status" -eq 2 ]] && exit 0
+  exit "$status"
 fi
-
-echo "Copying contents from $SRC to $DEST"
-
-cp -rf "$SRC"/* "$DEST"
-
-echo "✓ Awesome config copied"
-

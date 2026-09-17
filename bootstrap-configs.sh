@@ -42,6 +42,7 @@ FORCE_SENSITIVE=false
 COPIED_COUNT=0
 SKIPPED_COUNT=0
 SKIPPED_SENSITIVE_COUNT=0
+FAILED_COUNT=0
 
 # Functions
 print_header() {
@@ -164,14 +165,38 @@ scan_configs() {
   echo "${found_configs[@]}"
 }
 
-backup_existing() {
-  local dest_dir="$1"
-  if [[ -d "$dest_dir" ]] && [[ ! -L "$dest_dir" ]]; then
-    local backup_dir="${dest_dir}.backup.$(date +%Y%m%d_%H%M%S)"
-    echo -e "${YELLOW}📦 Backing up existing $dest_dir to $backup_dir${NC}"
-    if [[ "$DRY_RUN" != "true" ]]; then
-      mv "$dest_dir" "$backup_dir"
+validate_paths() {
+  local source="$1" dest="$2" parent source_path dest_path source_entry dest_entry
+  if [[ ! -f "$source" && ! -d "$source" ]]; then
+    echo "Error: source is not a file or directory: $source" >&2
+    return 1
+  fi
+  if ! source_path=$(realpath -e -- "$source") ||
+    ! dest_path=$(realpath -m -- "$dest") ||
+    ! source_entry=$(realpath -ms -- "$source") ||
+    ! dest_entry=$(realpath -ms -- "$dest"); then
+    echo "Error: cannot resolve copy paths" >&2
+    return 1
+  fi
+  if [[ "$source_path" == "$dest_path" ]]; then
+    echo "Already stowed: $source -> $dest (skipped)"
+    return 2
+  fi
+  # Inspect lexical ancestors before resolving symlinks.
+  parent=$(dirname -- "$dest")
+  while :; do
+    if [[ -L "$parent" ]]; then
+      echo "Error: destination ancestor is a symlink: $parent" >&2
+      return 1
     fi
+    [[ "$parent" == / || "$parent" == . ]] && break
+    parent=$(dirname -- "$parent")
+  done
+  if [[ "$source_path/" == "$dest_path/"* || "$dest_path/" == "$source_path/"* ||
+    "$source_entry/" == "$dest_entry/"* || "$dest_entry/" == "$source_entry/"* ||
+    "$dest_entry/" == "$source_path/"* || "$source_path/" == "$dest_entry/"* ]]; then
+    echo "Error: source and destination overlap: $source -> $dest" >&2
+    return 1
   fi
 }
 
@@ -180,125 +205,108 @@ copy_config() {
   local dest="$2"
   local config_name="$3"
 
-  # Create destination directory
-  local dest_dir
-  dest_dir="$(dirname "$dest")"
+  local dest_dir stage backup='' status
+  if validate_paths "$source" "$dest"; then :; else
+    status=$?
+    return "$status"
+  fi
+  dest_dir="$(dirname -- "$dest")"
 
   if [[ "$DRY_RUN" == "true" ]]; then
     echo -e "${BLUE}[DRY RUN] Would copy $source → $dest${NC}"
     return 0
   fi
 
-  # Backup existing destination if it exists
-  if [[ -d "$dest_dir" ]]; then
-    backup_existing "$dest_dir"
-  fi
-
-  echo -e "${BLUE}Copying $config_name...${NC}"
-
-  # Create destination directory
-  mkdir -p "$dest_dir"
-
-  # Copy the configuration
-  if [[ -d "$source" ]]; then
-    echo -e "${YELLOW}Copying directory $source to $dest...${NC}"
-    cp -rf "$source/" "$dest/"
-    echo -e "${GREEN}✓ Copied directory: $source → $dest${NC}"
-  elif [[ -f "$source" ]]; then
-    echo -e "${YELLOW}Copying file $source to $dest...${NC}"
-    cp "$source" "$dest"
-    echo -e "${GREEN}✓ Copied file: $source → $dest${NC}"
-  else
-    echo -e "${RED}✗ Source not found: $source${NC}"
+  if ! mkdir -p -- "$dest_dir" ||
+    ! stage=$(mktemp -d -- "$dest_dir/.bootstrap-stage.XXXXXXXXXX"); then
+    echo "Error: cannot create staging directory for $dest" >&2
     return 1
   fi
-
+  # Dereference links consistently with the scanner, including directory links.
+  if ! cp -RLp -- "$source" "$stage/payload"; then
+    echo "Error: copy failed for $source" >&2
+    rm -rf -- "$stage" || echo "Error: cannot clean $stage" >&2
+    return 1
+  fi
+  if [[ -e "$dest" || -L "$dest" ]]; then
+    if ! backup=$(mktemp -d -- "${dest}.backup.XXXXXXXXXX"); then
+      echo "Error: cannot reserve backup for $dest" >&2
+      rm -rf -- "$stage"
+      return 1
+    fi
+    backup="$backup/original"
+    if ! mv -T -- "$dest" "$backup"; then
+      echo "Error: cannot back up $dest" >&2
+      rmdir -- "${backup%/original}" || echo "Error: cannot clean backup reservation" >&2
+      rm -rf -- "$stage"
+      return 1
+    fi
+    echo "Backup: $backup"
+  fi
+  if ! mv -T -- "$stage/payload" "$dest"; then
+    echo "Error: cannot install $dest" >&2
+    if [[ -n "$backup" ]]; then
+      if mv -T -- "$backup" "$dest"; then
+        rmdir -- "${backup%/original}" || echo "Error: cannot clean backup reservation" >&2
+      else
+        echo "Error: rollback failed; original retained at $backup" >&2
+      fi
+    fi
+    rm -rf -- "$stage"
+    return 1
+  fi
+  if ! rmdir -- "$stage"; then
+    echo "Error: cannot clean $stage" >&2
+    return 1
+  fi
+  echo "Copied $config_name: $source -> $dest"
   return 0
 }
 
 check_sensitive_content() {
   local source="$1"
-  local config_name="$2"
-
-  # Check for potentially sensitive files
-  local sensitive_patterns=(
-    "id_rsa"
-    "id_ed25519"
-    "*.key"
-    "*secret*"
-    "*password*"
-    "*token*"
-    "*api_key*"
-    "*api_secret*"
-    "*access_token*"
-    "*auth_token*"
-    "auth.json"
-    "credentials"
-    ".env"
-    ".env.local"
-    ".env.production"
-    "*.gpg"
-    "secring.gpg"
-    "*.ovpn"
-    "cookies.sqlite"
-    "places.sqlite"
-    "keyring"
-    "keyrings"
-  )
-
-  if [[ -d "$source" ]]; then
-    for pattern in "${sensitive_patterns[@]}"; do
-      for sensitive_file in $(find "$source" -name "$pattern" -type f 2>/dev/null); do
-        # Check if the file contains safe export patterns
-        if grep -qE 'export [A-Z_]+_API_KEY=\$\(pass .*\)' "$sensitive_file"; then
-          # Whitelist: Safe export pattern, skip flagging
-          continue
-        fi
-        # Found sensitive content
-        return 0
-      done
+  local result
+  # Best effort only: filenames and common literal assignments are not a secret detector.
+  # Scan through links just as cp -L does; find errors cannot be overridden.
+  local credential_pattern="-----BEGIN .*PRIVATE KEY-----|[\"']?([[:alnum:]_]*[_-])?(api[_-]?key|secret|password|passwd|token|access[_-]?key[_-]?id)[\"']?[[:space:]]*[:=][[:space:]]*[\"']?[[:alnum:]][[:alnum:]_./+=:-]*|AKIA[0-9A-Z]{16}|gh[pousr]_[[:alnum:]]{20,}"
+  if ! result=$(find -L "$source" -exec bash -c '
+    pattern=$1; shift
+    for file do
+      name=${file##*/}
+      case "${name,,}" in
+        id_rsa*|id_ed25519*|id_dsa*|id_ecdsa*|*.key|*secret*|*password*|*token*|*api_key*|*api-key*|auth.json|*credentials*|.env|.env.*|*.gpg|*.ovpn|cookies.sqlite|places.sqlite|keyring*)
+          printf "SENSITIVE: %q\\n" "$file" ;;
+      esac
+      if [[ -d "$file" ]]; then
+        [[ -r "$file" && -x "$file" ]] || printf "ERROR\\n"
+        continue
+      fi
+      if [[ ! -f "$file" || ! -r "$file" ]]; then
+        printf "ERROR\\n"
+        continue
+      fi
+      # Do not use -q: read the whole file so read errors remain visible.
+      grep -aiE -- "$pattern" "$file" >/dev/null
+      status=$?
+      case $status in
+        0) printf "SENSITIVE: %q\\n" "$file" ;;
+        1) ;;
+        *) printf "ERROR\\n" ;;
+      esac
     done
+  ' bash "$credential_pattern" {} +); then
+    echo "Error: cannot traverse $source" >&2
+    return 3
   fi
-
-  return 1 # No sensitive content found
-}
-
-get_sensitive_files() {
-  local source="$1"
-
-  local sensitive_patterns=(
-    "id_rsa"
-    "id_ed25519"
-    "*.key"
-    "*secret*"
-    "*password*"
-    "*token*"
-    "*api*"
-    "auth.json"
-    "credentials"
-    "*.gpg"
-    "secring.gpg"
-    "*.ovpn"
-    "cookies.sqlite"
-    "places.sqlite"
-  )
-
-  local found_files=()
-
-  if [[ -d "$source" ]]; then
-    for pattern in "${sensitive_patterns[@]}"; do
-      while IFS= read -r -d '' file; do
-        # Check if the file contains safe export patterns
-        if grep -qE 'export [A-Z_]+_API_KEY=\$\(pass .*\)' "$file"; then
-          # Whitelist: Safe export pattern, skip
-          continue
-        fi
-        found_files+=("$(basename "$file")")
-      done < <(find "$source" -name "$pattern" -type f -print0 2>/dev/null)
-    done
+  if [[ $'\n'"$result"$'\n' == *$'\nERROR\n'* ]]; then
+    echo "Error: cannot completely scan $source" >&2
+    return 3
   fi
-
-  echo "${found_files[*]}"
+  if [[ -n "$result" ]]; then
+    printf '%s\n' "$result"
+    return 0
+  fi
+  return 1
 }
 
 prompt_user() {
@@ -307,17 +315,19 @@ prompt_user() {
   local config_name="$3"
 
   # Check for sensitive content first
-  if check_sensitive_content "$source" "$config_name"; then
+  local scan_status
+  if check_sensitive_content "$source"; then
     if [[ "$FORCE_SENSITIVE" != "true" ]]; then
-      local sensitive_files
-      sensitive_files=$(get_sensitive_files "$source")
-      echo -e "${RED}❌ Skipped: $config_name (contains sensitive files: ${sensitive_files[*]})${NC}"
+      echo "Skipped: $config_name (potential sensitive content)"
       echo -e "${CYAN}💡 Suggestion: Handle sensitive files separately with encryption or exclude from dotfiles${NC}"
       SKIPPED_SENSITIVE_COUNT=$((SKIPPED_SENSITIVE_COUNT + 1))
       return 2 # Special return code for sensitive skip
     else
       echo -e "${YELLOW}⚠️  FORCE: $config_name contains sensitive files but proceeding due to --force-sensitive${NC}"
     fi
+  else
+    scan_status=$?
+    [[ "$scan_status" -eq 1 ]] || return 4
   fi
 
   # In dry-run mode, just proceed
@@ -331,21 +341,24 @@ prompt_user() {
 
   echo ""
   echo -e "${PURPLE}Copy $source to $dest?${NC}"
-  echo -n "[Y/n/s(q)uit]? "
+  echo -n "[Y/n/s(kip)/q(uit)]? "
 
   local response
-  read -r response
+  if ! read -r response; then
+    echo "End of input; cancelled."
+    return 3
+  fi
 
   case "${response,,}" in
   "" | "y" | "yes")
     return 0
     ;;
-  "n" | "no")
+  "n" | "no" | "s" | "skip")
     return 1
     ;;
-  "s" | "q" | "quit")
+  "q" | "quit")
     echo -e "${YELLOW}Operation cancelled by user.${NC}"
-    exit 0
+    return 3
     ;;
   *)
     echo -e "${RED}Invalid response. Skipping.${NC}"
@@ -356,6 +369,7 @@ prompt_user() {
 
 process_configs() {
   local found_configs=("$@")
+  local i config_entry config_name config_type
 
   echo -e "${YELLOW}🚀 Starting copy process...${NC}"
   echo ""
@@ -388,23 +402,39 @@ process_configs() {
 
     echo -e "${BLUE}📂 Starting to copy $config_name ($config_type) from $source to $dest${NC}"
 
-    # Check if source exists
-    if [[ ! -e "$source" ]]; then
-      echo -e "${RED}✗ Source not found: $source${NC}"
+    local exit_code
+    if validate_paths "$source" "$dest"; then :; else
+      exit_code=$?
+      if [[ "$exit_code" -eq 2 ]]; then
+        SKIPPED_COUNT=$((SKIPPED_COUNT + 1))
+      else
+        FAILED_COUNT=$((FAILED_COUNT + 1))
+      fi
       continue
     fi
 
-    # Prompt user
-    local prompt_result
-    prompt_result=$(prompt_user "$source" "$dest" "$config_name")
-    local exit_code=$?
+    # Keep prompts and counter updates in the parent shell.
+    if prompt_user "$source" "$dest" "$config_name"; then
+      exit_code=0
+    else
+      exit_code=$?
+    fi
 
     if [[ $exit_code -eq 0 ]]; then
       if copy_config "$source" "$dest" "$config_name"; then
         COPIED_COUNT=$((COPIED_COUNT + 1))
       else
-        SKIPPED_COUNT=$((SKIPPED_COUNT + 1))
+        exit_code=$?
+        if [[ "$exit_code" -eq 2 ]]; then
+          SKIPPED_COUNT=$((SKIPPED_COUNT + 1))
+        else
+          FAILED_COUNT=$((FAILED_COUNT + 1))
+        fi
       fi
+    elif [[ $exit_code -eq 3 ]]; then
+      break
+    elif [[ $exit_code -eq 4 ]]; then
+      FAILED_COUNT=$((FAILED_COUNT + 1))
     elif [[ $exit_code -eq 2 ]]; then
       # Already handled sensitive skip in prompt_user
       SKIPPED_COUNT=$((SKIPPED_COUNT + 1))
@@ -419,7 +449,12 @@ print_summary() {
   echo ""
   echo -e "${BLUE}📊 Bootstrap Summary${NC}"
   echo -e "${BLUE}===================${NC}"
-  echo -e "${GREEN}✓ Copied: $COPIED_COUNT configuration(s)${NC}"
+  if [[ "$DRY_RUN" == true ]]; then
+    echo "Would copy: $COPIED_COUNT configuration(s)"
+  else
+    echo -e "${GREEN}✓ Copied: $COPIED_COUNT configuration(s)${NC}"
+  fi
+  echo "Failed: $FAILED_COUNT configuration(s)"
 
   if [[ $SKIPPED_COUNT -gt 0 ]]; then
     echo -e "${YELLOW}⏭️  Skipped: $SKIPPED_COUNT configuration(s)${NC}"
@@ -489,8 +524,10 @@ main() {
   process_configs "${found_configs[@]}"
 
   print_summary
+  [[ "$FAILED_COUNT" -eq 0 ]]
 }
 
 # Run main function
-main "$@"
-
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  main "$@"
+fi
