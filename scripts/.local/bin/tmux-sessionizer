@@ -1,25 +1,77 @@
 #!/usr/bin/env bash
+# Tmux sessionizer - quickly switch between project directories
 
+set -euo pipefail
+
+# Check dependencies
+if ! command -v tmux &>/dev/null; then
+  echo "Error: tmux is not installed" >&2
+  exit 1
+fi
+
+if ! command -v fzf &>/dev/null; then
+  echo "Error: fzf is not installed" >&2
+  echo "Install with: sudo pacman -S fzf" >&2
+  exit 1
+fi
+
+# Handle popup mode
+if [[ "${1:-}" == "--popup" ]]; then
+  # If already in a popup, just run normally
+  if [[ -n "${TMUX_PAD:-}" ]]; then
+    shift
+  else
+    # Open in popup and exit
+    tmux display-popup -E -w 80% -h 80% -d "$(pwd)" "$0"
+    exit 0
+  fi
+fi
+
+# Find project directories
+find_dirs() {
+  local dirs=()
+  
+  # Add common directories if they exist
+  [[ -d "$HOME" ]] && dirs+=("$HOME")
+  [[ -d "$HOME/.config" ]] && dirs+=("$HOME/.config")
+  [[ -d "$HOME/_dev" ]] && dirs+=("$HOME/_dev")
+  
+  # Add current directory
+  dirs+=("$(pwd)")
+  
+  # Find all directories (sorted, unique)
+  for dir in "${dirs[@]}"; do
+    find -L "$dir" -mindepth 1 -maxdepth 1 -type d 2>/dev/null
+  done | sort -u
+}
+
+# Get selection
 if [[ $# -eq 1 ]]; then
-  selected=$1
+  selected="$1"
 else
-  selected=$(find -L ${HOME} ~/_dev ~/.config -mindepth 1 -maxdepth 1 -type d | fzf)
+  selected=$(find_dirs | fzf --prompt="Select project> " --height=40% --reverse)
 fi
 
-if [[ -z $selected ]]; then
+if [[ -z "$selected" ]]; then
   exit 0
 fi
 
+# Create session name (replace dots with underscores for tmux compatibility)
 selected_name=$(basename "$selected" | tr . _)
-tmux_running=$(pgrep tmux)
 
-if [[ -z $TMUX ]] && [[ -z $tmux_running ]]; then
-  tmux new-session -s $selected_name -c $selected
+# Check if tmux is running
+tmux_running=$(pgrep tmux || true)
+
+# Create new session if not in tmux and no tmux running
+if [[ -z "${TMUX:-}" ]] && [[ -z "$tmux_running" ]]; then
+  tmux new-session -s "$selected_name" -c "$selected"
   exit 0
 fi
 
-if ! tmux has-session -t=$selected_name 2>/dev/null; then
-  tmux new-session -ds $selected_name -c $selected
+# Create session if it doesn't exist
+if ! tmux has-session -t="$selected_name" 2>/dev/null; then
+  tmux new-session -ds "$selected_name" -c "$selected"
 fi
 
-tmux switch-client -t $selected_name
+# Switch to session
+tmux switch-client -t "$selected_name"

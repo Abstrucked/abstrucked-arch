@@ -1,5 +1,7 @@
 #!/bin/bash
-tailscale ssh arch-omen \
+# Customize these for your setup
+HOSTNAME="${1:-your-hostname}"
+tailscale ssh "$HOSTNAME" \
   -L 3000:localhost:3000 \
   -L 3001:localhost:3001 \
   -L 5900:localhost:5900 \

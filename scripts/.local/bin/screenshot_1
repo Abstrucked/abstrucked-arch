@@ -1,7 +1,8 @@
 #!/bin/sh
+# Screenshot for primary monitor (3440x1440)
 
 timestamp="$(date +%Y%m%d%H%M%S)"
 targetbase="$HOME/screenshots"
-mkdir -p $targetbase
-[ -d $targetbase ] || exit 1
-scrot -a "0,0,3440,1440" $targetbase/$timestamp.png 
+mkdir -p "$targetbase"
+[ -d "$targetbase" ] || exit 1
+scrot -a "0,0,3440,1440" "$targetbase/$timestamp.png"

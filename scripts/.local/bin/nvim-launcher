@@ -1,4 +1,4 @@
 #!/bin/bash
 
-source ~/load-api-keys.sh
+source "$HOME/.local/bin/load-api-keys.sh"
 nvim

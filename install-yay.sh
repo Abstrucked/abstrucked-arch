@@ -3,40 +3,50 @@
 
 set -euo pipefail
 
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
+# Get script directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-echo -e "${YELLOW}Installing yay AUR helper...${NC}"
+# Source helper functions
+source "$SCRIPT_DIR/lib/logging.sh"
+source "$SCRIPT_DIR/lib/validation.sh"
+source "$SCRIPT_DIR/lib/cleanup.sh"
+
+# Set up cleanup trap
+setup_cleanup_trap
+
+log_header "Installing yay AUR helper"
 
 # Check if yay is already installed
-if command -v yay &> /dev/null; then
-    echo -e "${GREEN}yay is already installed!${NC}"
+if command_exists yay; then
+    log_success "yay is already installed!"
     exit 0
 fi
 
-# Check if git is installed
-if ! command -v git &> /dev/null; then
-    echo -e "${RED}Error: git is required but not installed.${NC}"
-    exit 1
-fi
+# Check prerequisites
+log_step "Checking prerequisites..."
+require_command git "git is required but not installed"
+require_command makepkg "makepkg is required but not installed"
 
-# Create temporary directory
-temp_dir=$(mktemp -d)
+# Create temp directory for building
+log_step "Creating temporary build directory..."
+temp_dir=$(create_temp_dir "yay-build") || die "Failed to create temp directory"
+log_debug "Build directory: $temp_dir"
+
+# Clone yay from AUR
+log_step "Cloning yay from AUR..."
 cd "$temp_dir"
+git clone https://aur.archlinux.org/yay.git || {
+    log_error "Failed to clone yay repository"
+    exit 1
+}
 
-echo "Cloning yay from AUR..."
-git clone https://aur.archlinux.org/yay.git
-
+# Build and install yay
+log_step "Building and installing yay..."
 cd yay
+makepkg -si --noconfirm || {
+    log_error "Failed to build/install yay"
+    log_info "You may need to install dependencies manually"
+    exit 1
+}
 
-echo "Building and installing yay..."
-makepkg -si --noconfirm
-
-# Clean up
-cd /
-rm -rf "$temp_dir"
-
-echo -e "${GREEN}yay installed successfully!${NC}"
+log_success "yay installed successfully!"

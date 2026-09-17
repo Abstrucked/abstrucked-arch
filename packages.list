@@ -6,6 +6,9 @@ base-devel
 # Terminal and shell
 zsh
 zsh-theme-powerlevel10k
+bash
+bash-completion
+starship
 tmux
 alacritty
 ghostty
@@ -49,6 +52,7 @@ lazydocker
 # AUR packages (install with yay)
 discord
 brave-bin
+herdr-bin
 inkscape
 gimp
 

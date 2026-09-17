@@ -1,3 +1,27 @@
 scripts/.local/share
 scripts/.local/state
 
+# Backup directories
+scripts.backup.*
+
+# Sensitive files
+*.key
+*.pem
+*.gpg
+id_rsa*
+id_ed25519*
+known_hosts
+.env
+.env.*
+*.env
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+*.swp
+*.swo
+*~
+.vscode/
+.idea/

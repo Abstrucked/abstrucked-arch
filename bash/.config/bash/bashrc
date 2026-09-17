@@ -1,0 +1,81 @@
+# Global theme setting
+export THEME=catppuccin-mocha
+export THEME_BG_DIR="$HOME/.backgrounds"
+
+export XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
+
+# Starship prompt
+eval "$(starship init bash)"
+
+# Source custom aliases
+source "${XDG_CONFIG_HOME}/bash/aliases.sh"
+
+# Keybindings
+
+# Home key (go to beginning of line)
+bind '"\e[H": beginning-of-line'
+
+# End key (go to end of line)
+bind '"\e[F": end-of-line'
+
+# Ctrl + Left (backward-word)
+bind '"\e[1;5D": backward-word'
+bind '"\e[5D": backward-word'
+
+# Ctrl + Right (forward-word)
+bind '"\e[1;5C": forward-word'
+bind '"\e[5C": forward-word'
+
+# History
+HISTFILE=~/.bash_history
+HISTSIZE=10000
+SAVEHIST=10000
+shopt -s histappend
+
+export EDITOR='nvim'
+export VISUAL='gedit'
+
+export N_PREFIX="$HOME/n"; [[ :$PATH: == *":$N_PREFIX/bin:"* ]] || PATH+=":$N_PREFIX/bin"  # Added by n-install (see http://git.io/n-install-repo).
+
+export PATH="$HOME/.local/bin:$PATH"
+
+export PATH="${ASDF_DATA_DIR:-$HOME/.asdf}/shims:$PATH"
+export ASDF_DATA_DIR="${HOME}/.asdf"
+
+# Set GTK dark theme
+export GTK_THEME=Adwaita:dark
+
+# Set Qt to use GTK theme
+export QT_QPA_PLATFORMTHEME=gtk2
+
+# Set QT5 configuration tool
+export QT_QPA_PLATFORMTHEME=qt5ct
+
+###-begin-pm2-completion-###
+### credits to npm for the completion file model
+#
+# Installation: pm2 completion >> ~/.bashrc
+#
+
+COMP_WORDBREAKS=${COMP_WORDBREAKS/=/}
+COMP_WORDBREAKS=${COMP_WORDBREAKS/@/}
+export COMP_WORDBREAKS
+
+if type complete &>/dev/null; then
+  _pm2_completion () {
+    local si="$IFS"
+    IFS=$'\n' COMPREPLY=($(COMP_CWORD="$COMP_CWORD" \
+                           COMP_LINE="$COMP_LINE" \
+                           COMP_POINT="$COMP_POINT" \
+                           pm2 completion -- "${COMP_WORDS[@]}" \
+                           2>/dev/null)) || return $?
+    IFS="$si"
+  }
+  complete -o default -F _pm2_completion pm2
+fi
+###-end-pm2-completion-###
+
+# asdf completions
+if [[ -f "${ASDF_DATA_DIR:-$HOME/.asdf}/completions/asdf.bash" ]]; then
+  source "${ASDF_DATA_DIR:-$HOME/.asdf}/completions/asdf.bash"
+fi

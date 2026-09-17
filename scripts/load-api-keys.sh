@@ -1,11 +1,20 @@
 #!/bin/bash
+# Load API keys from pass password manager
 
-# ~/load-api-keys.sh
-#export XAI_API_KEY=$(pass ai/xai_api_key)
-export OPENAI_API_KEY=$(pass ai/openai_api_key)
-#export ANTHROPIC_API_KEY=$(pass ai/anthropic_api_key)
-# export GEMINI_API_KEY=$(pass ai/gemini_api_key)
-# export TAVILY_API_KEY=$(pass ai/tavily_api_key)
-# export CONTEXT7_API_KEY=$(pass ai/context7)
-export OPENROUTER_API_KEY=$(pass ai/openrouter_api_key)
-#export OPENAI=$(pass ai/openai)
+# Check if pass is installed
+if ! command -v pass &>/dev/null; then
+  echo "Error: pass is not installed" >&2
+  echo "Install with: sudo pacman -S pass" >&2
+  exit 1
+fi
+
+# Check if pass is initialized
+if [[ ! -f "$HOME/.password-store/.gpg-id" ]]; then
+  echo "Error: pass is not initialized" >&2
+  echo "Run 'pass init <GPG_KEY_ID>' to initialize" >&2
+  exit 1
+fi
+
+# Load API keys
+export OPENAI_API_KEY=$(pass ai/openai_api_key 2>/dev/null || echo "")
+export OPENROUTER_API_KEY=$(pass ai/openrouter_api_key 2>/dev/null || echo "")

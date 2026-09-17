@@ -3,23 +3,23 @@
 
 set -euo pipefail
 
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-PURPLE='\033[0;35m'
-CYAN='\033[0;36m'
-NC='\033[0m' # No Color
+# Get script directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Source helper functions
+source "$SCRIPT_DIR/lib/logging.sh"
+source "$SCRIPT_DIR/lib/validation.sh"
+source "$SCRIPT_DIR/lib/cleanup.sh"
+
+# Set up cleanup trap
+setup_cleanup_trap
 
 # Script variables
 INSTALL_CHOICE=""
 
 print_header() {
-    echo -e "${BLUE}📦 Node.js Version Manager Installer${NC}"
-    echo -e "${BLUE}=====================================${NC}"
-    echo -e "${CYAN}Choose between n (simpler) or nvm (more features)${NC}"
-    echo ""
+    log_header "Node.js Version Manager Installer"
+    log_info "Choose between n (simpler) or nvm (more features)"
 }
 
 print_info() {
@@ -38,10 +38,10 @@ get_user_choice() {
     while true; do
         echo -e "${PURPLE}Which Node.js version manager would you like to install?${NC}"
         echo -n "[n/nvm/skip]? "
-
+        
         local response
         read -r response
-
+        
         case "${response,,}" in
             "n")
                 INSTALL_CHOICE="n"
@@ -52,85 +52,159 @@ get_user_choice() {
                 break
                 ;;
             "skip" | "s")
-                echo -e "${YELLOW}Skipping Node.js version manager installation.${NC}"
+                log_info "Skipping Node.js version manager installation."
                 exit 0
                 ;;
             *)
-                echo -e "${RED}Invalid choice. Please enter 'n', 'nvm', or 'skip'.${NC}"
+                log_error "Invalid choice. Please enter 'n', 'nvm', or 'skip'."
                 ;;
         esac
     done
 }
 
-install_n() {
-    echo -e "${YELLOW}Installing n (Node.js version manager)...${NC}"
+# Download a script safely and verify it
+download_script() {
+    local url=$1
+    local output_file=$2
+    
+    log_step "Downloading from: $url"
+    
+    # Download with error checking
+    if ! curl -fsSL -o "$output_file" "$url"; then
+        log_error "Failed to download from: $url"
+        return 1
+    fi
+    
+    # Verify the script is not empty
+    if [[ ! -s "$output_file" ]]; then
+        log_error "Downloaded script is empty"
+        return 1
+    fi
+    
+    # Basic sanity check - should be a shell script
+    if ! head -1 "$output_file" | grep -q '^#!/'; then
+        log_warn "Downloaded script does not appear to be a shell script"
+    fi
+    
+    return 0
+}
 
+install_n() {
+    log_step "Installing n (Node.js version manager)..."
+    
     # Check if n is already installed
-    if command -v n &> /dev/null; then
-        echo -e "${GREEN}n is already installed!${NC}"
+    if command_exists n; then
+        log_success "n is already installed!"
         return 0
     fi
-
-    # Install n using the official installer
-    curl -L https://git.io/n-install | bash
-
+    
+    # Check prerequisites
+    require_command curl "curl is required for installation"
+    
+    # Create temp directory
+    local temp_dir
+    temp_dir=$(create_temp_dir "n-install") || return 1
+    
+    # Download n installer
+    local installer="$temp_dir/n-install.sh"
+    download_script "https://git.io/n-install" "$installer" || {
+        log_error "Failed to download n installer"
+        return 1
+    }
+    
+    # Make executable and run
+    chmod +x "$installer"
+    
+    log_step "Running n installer..."
+    if ! bash "$installer"; then
+        log_error "n installation failed"
+        return 1
+    fi
+    
     # Source the updated profile to get n in PATH
-    if [[ -f "$HOME/.bashrc" ]]; then
-        source "$HOME/.bashrc"
-    fi
-    if [[ -f "$HOME/.zshrc" ]]; then
-        source "$HOME/.zshrc"
-    fi
-
+    for profile in "$HOME/.bashrc" "$HOME/.zshrc"; do
+        if [[ -f "$profile" ]]; then
+            # shellcheck disable=SC1090
+            source "$profile" 2>/dev/null || true
+        fi
+    done
+    
     # Verify installation
-    if command -v n &> /dev/null; then
-        echo -e "${GREEN}✓ n installed successfully!${NC}"
+    if command_exists n; then
+        log_success "n installed successfully!"
+        echo ""
         echo -e "${CYAN}Usage examples:${NC}"
         echo -e "${CYAN}  n latest          # Install latest Node.js${NC}"
         echo -e "${CYAN}  n lts             # Install LTS version${NC}"
         echo -e "${CYAN}  n 18              # Install Node.js 18${NC}"
         echo -e "${CYAN}  n                 # List installed versions${NC}"
     else
-        echo -e "${RED}✗ Failed to install n${NC}"
+        log_error "Failed to verify n installation"
         return 1
     fi
 }
 
 install_nvm() {
-    echo -e "${YELLOW}Installing nvm (Node Version Manager)...${NC}"
-
+    log_step "Installing nvm (Node Version Manager)..."
+    
     # Check if nvm is already installed
-    if command -v nvm &> /dev/null; then
-        echo -e "${GREEN}nvm is already installed!${NC}"
+    if [[ -d "$HOME/.nvm" ]] || command_exists nvm; then
+        log_success "nvm is already installed!"
         return 0
     fi
-
-    # Install nvm using the official installer
-    curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
-
-    # Source the updated profile to get nvm in PATH
+    
+    # Check prerequisites
+    require_command curl "curl is required for installation"
+    
+    # Create temp directory
+    local temp_dir
+    temp_dir=$(create_temp_dir "nvm-install") || return 1
+    
+    # Download nvm installer
+    local installer="$temp_dir/nvm-install.sh"
+    download_script "https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh" "$installer" || {
+        log_error "Failed to download nvm installer"
+        return 1
+    }
+    
+    # Make executable and run
+    chmod +x "$installer"
+    
+    log_step "Running nvm installer..."
+    if ! bash "$installer"; then
+        log_error "nvm installation failed"
+        return 1
+    fi
+    
+    # Source nvm
     export NVM_DIR="$HOME/.nvm"
-    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-    [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
-
+    if [[ -s "$NVM_DIR/nvm.sh" ]]; then
+        # shellcheck disable=SC1091
+        \. "$NVM_DIR/nvm.sh"
+    fi
+    
     # Add nvm to shell profiles if not already there
     local shell_profiles=("$HOME/.bashrc" "$HOME/.zshrc")
-
+    
     for profile in "${shell_profiles[@]}"; do
         if [[ -f "$profile" ]]; then
             if ! grep -q "NVM_DIR" "$profile"; then
-                echo "" >> "$profile"
-                echo "# NVM (Node Version Manager)" >> "$profile"
-                echo 'export NVM_DIR="$HOME/.nvm"' >> "$profile"
-                echo '[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"' >> "$profile"
-                echo '[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"' >> "$profile"
+                log_info "Adding nvm configuration to $profile"
+                cat >> "$profile" <<'EOF'
+
+# NVM (Node Version Manager)
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
+EOF
             fi
         fi
     done
-
+    
     # Verify installation
-    if command -v nvm &> /dev/null; then
-        echo -e "${GREEN}✓ nvm installed successfully!${NC}"
+    if [[ -d "$HOME/.nvm" ]]; then
+        log_success "nvm installed successfully!"
+        echo ""
         echo -e "${CYAN}Usage examples:${NC}"
         echo -e "${CYAN}  nvm install node     # Install latest Node.js${NC}"
         echo -e "${CYAN}  nvm install --lts    # Install LTS version${NC}"
@@ -138,9 +212,9 @@ install_nvm() {
         echo -e "${CYAN}  nvm list             # List installed versions${NC}"
         echo -e "${CYAN}  nvm use 18           # Switch to Node.js 18${NC}"
         echo ""
-        echo -e "${YELLOW}Note: Restart your terminal or run 'source ~/.bashrc' to use nvm${NC}"
+        log_warn "Restart your terminal or run 'source ~/.bashrc' to use nvm"
     else
-        echo -e "${RED}✗ Failed to install nvm${NC}"
+        log_error "Failed to verify nvm installation"
         return 1
     fi
 }
@@ -149,7 +223,7 @@ main() {
     print_header
     print_info
     get_user_choice
-
+    
     case "$INSTALL_CHOICE" in
         "n")
             install_n
@@ -158,10 +232,10 @@ main() {
             install_nvm
             ;;
     esac
-
+    
     echo ""
-    echo -e "${GREEN}🎉 Node.js version manager installation complete!${NC}"
-    echo -e "${CYAN}You can now install Node.js versions using your chosen manager.${NC}"
+    log_success "Node.js version manager installation complete!"
+    log_info "You can now install Node.js versions using your chosen manager."
 }
 
 # Run main function

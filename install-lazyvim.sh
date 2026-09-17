@@ -3,51 +3,83 @@
 
 set -euo pipefail
 
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+# Get script directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-echo -e "${BLUE}=== Installing LazyVim ===${NC}"
+# Source helper functions
+source "$SCRIPT_DIR/lib/logging.sh"
+source "$SCRIPT_DIR/lib/validation.sh"
+source "$SCRIPT_DIR/lib/cleanup.sh"
 
-# Check if Neovim is installed
-if ! command -v nvim &> /dev/null; then
-    echo -e "${RED}Error: Neovim is not installed. Please run install.sh first.${NC}"
-    exit 1
-fi
+# Set up cleanup trap
+setup_cleanup_trap
 
-# Check if git is installed
-if ! command -v git &> /dev/null; then
-    echo -e "${RED}Error: git is required but not installed.${NC}"
-    exit 1
-fi
+log_header "Installing LazyVim"
 
-# Create config directory
-mkdir -p "$HOME/.config"
+# Check prerequisites
+log_step "Checking prerequisites..."
+require_command nvim "Neovim is not installed. Please run install.sh first."
+require_command git "git is required but not installed."
 
 # Set config directory
 NVIM_CONFIG_DIR="$HOME/.config/nvim"
 
+# Check if LazyVim is already installed
+if [[ -d "$NVIM_CONFIG_DIR" ]]; then
+    log_warn "LazyVim config directory already exists at $NVIM_CONFIG_DIR"
+    read -r -p "Do you want to reinstall? (y/N) " response
+    if [[ ! "$response" =~ ^[Yy]$ ]]; then
+        log_info "Skipping LazyVim installation."
+        exit 0
+    fi
+    
+    # Backup existing config
+    log_step "Backing up existing configuration..."
+    backup_item "$NVIM_CONFIG_DIR" || log_warn "Failed to backup existing config"
+    
+    # Remove existing config
+    rm -rf "$NVIM_CONFIG_DIR"
+fi
+
+# Create config directory
+log_step "Creating config directory..."
+mkdir -p "$HOME/.config" || {
+    log_error "Failed to create config directory"
+    exit 1
+}
+
 # Clone LazyVim starter
-echo -e "${YELLOW}Cloning LazyVim starter configuration...${NC}"
-git clone https://github.com/LazyVim/starter "$NVIM_CONFIG_DIR"
+log_step "Cloning LazyVim starter configuration..."
+if ! git clone https://github.com/LazyVim/starter "$NVIM_CONFIG_DIR"; then
+    log_error "Failed to clone LazyVim starter"
+    exit 1
+fi
 
 # Remove .git directory to avoid confusion
+log_step "Cleaning up git repository..."
 rm -rf "$NVIM_CONFIG_DIR/.git"
 
 # Install LazyVim
-echo -e "${YELLOW}Installing LazyVim...${NC}"
-cd "$NVIM_CONFIG_DIR"
-if command -v nvim &> /dev/null; then
+log_step "Installing LazyVim plugins..."
+cd "$NVIM_CONFIG_DIR" || {
+    log_error "Failed to change to config directory"
+    exit 1
+}
+
+if command_exists nvim; then
     # Run Neovim to install plugins (headless mode)
-    nvim --headless "+Lazy! sync" +qa
+    log_info "Running Neovim to install plugins (this may take a while)..."
+    if nvim --headless "+Lazy! sync" +qa 2>/dev/null; then
+        log_success "LazyVim plugins installed successfully"
+    else
+        log_warn "LazyVim plugin installation may have completed with warnings"
+        echo -e "${YELLOW}Please run 'nvim' manually to verify plugin installation${NC}"
+    fi
 else
-    echo -e "${RED}Warning: Could not run Neovim to install plugins automatically.${NC}"
-    echo -e "${YELLOW}Please run 'nvim' manually after installation to complete plugin setup.${NC}"
+    log_warn "Could not run Neovim to install plugins automatically."
+    log_info "Please run 'nvim' manually after installation to complete plugin setup."
 fi
 
-echo -e "${GREEN}=== LazyVim installation complete! ===${NC}"
-echo -e "${YELLOW}Your LazyVim configuration is ready at $NVIM_CONFIG_DIR${NC}"
-echo -e "${YELLOW}Run 'nvim' to start using LazyVim${NC}"
+log_header "LazyVim Installation Complete!"
+log_info "Your LazyVim configuration is ready at $NVIM_CONFIG_DIR"
+log_info "Run 'nvim' to start using LazyVim"

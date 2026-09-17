@@ -49,15 +49,32 @@ fi
 # Define paths
 launcher_dir="$HOME/.local/bin"
 launcher_file="${launcher_dir}/${program}-launcher"
-aliases_file="$HOME/dotfiles/zsh/aliases.zsh"
-zshrc_file="$HOME/dotfiles/zsh/.zshrc"
+
+# Detect which shell is stowed
+if [[ -L "$HOME/.bashrc" ]] && [[ "$(readlink "$HOME/.bashrc")" == *"dotfiles/bash"* ]]; then
+    SHELL_TYPE="bash"
+    aliases_file="$HOME/.dotfiles/bash/.config/bash/aliases.sh"
+    shell_rc_file="$HOME/.dotfiles/bash/.bashrc"
+    source_pattern="source.*aliases.sh"
+elif [[ -L "$HOME/.zshrc" ]] && [[ "$(readlink "$HOME/.zshrc")" == *"dotfiles/zsh"* ]]; then
+    SHELL_TYPE="zsh"
+    aliases_file="$HOME/.dotfiles/zsh/.config/zsh/aliases.zsh"
+    shell_rc_file="$HOME/.dotfiles/zsh/.zshrc"
+    source_pattern="source.*aliases.zsh"
+else
+    # Default to zsh for backward compatibility
+    SHELL_TYPE="zsh"
+    aliases_file="$HOME/.dotfiles/zsh/.config/zsh/aliases.zsh"
+    shell_rc_file="$HOME/.dotfiles/zsh/.zshrc"
+    source_pattern="source.*aliases.zsh"
+fi
 
 # Create launcher script
 print_info "Creating launcher script: $launcher_file"
 cat >"$launcher_file" <<EOF
 #!/bin/bash
 
-source ~/load-api-keys.sh
+source "\$HOME/.local/bin/load-api-keys.sh"
 $program
 EOF
 
@@ -83,21 +100,25 @@ else
   print_success "Alias added to aliases file."
 fi
 
-# Ensure .zshrc sources the aliases file
-print_info "Checking if .zshrc sources the aliases file..."
-if ! grep -q "source.*aliases.zsh" "$zshrc_file"; then
-  print_info "Adding source line to .zshrc..."
-  # Find a good place to add it, perhaps after the existing aliases
-  # For now, add it at the end
-  echo "" >>"$zshrc_file"
-  echo "# Source custom aliases" >>"$zshrc_file"
-  echo "source ~/dotfiles/zsh/aliases.zsh" >>"$zshrc_file"
-  print_success "Source line added to .zshrc."
+# Ensure shell config sources the aliases file
+print_info "Checking if $SHELL_TYPE config sources the aliases file..."
+if ! grep -q "$source_pattern" "$shell_rc_file"; then
+    print_info "Adding source line to $SHELL_TYPE config..."
+    # Find a good place to add it, perhaps after the existing aliases
+    # For now, add it at the end
+    echo "" >>"$shell_rc_file"
+    echo "# Source custom aliases" >>"$shell_rc_file"
+    if [[ "$SHELL_TYPE" == "bash" ]]; then
+        echo "source \"\$HOME/.dotfiles/bash/.config/bash/aliases.sh\"" >>"$shell_rc_file"
+    else
+        echo "source \"\$HOME/.dotfiles/zsh/.config/zsh/aliases.zsh\"" >>"$shell_rc_file"
+    fi
+    print_success "Source line added to $SHELL_TYPE config."
 else
-  print_info ".zshrc already sources the aliases file."
+    print_info "$SHELL_TYPE config already sources the aliases file."
 fi
 
 print_success "App launcher setup complete!"
 print_info "You can now use the alias '${program}-${category}' to launch $program with API keys loaded."
-print_info "Run 'stow zsh' to symlink the updated .zshrc if needed."
+print_info "Run 'stow $SHELL_TYPE' to symlink the updated config if needed."
 
