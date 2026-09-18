@@ -22,11 +22,11 @@ export QT_QPA_PLATFORMTHEME=qt5ct
 # ═══════════════════════════════════════════════════════════════
 export PNPM_HOME="${HOME}/.local/share/pnpm"
 export ASDF_DATA_DIR="${HOME}/.asdf"
-export N_PREFIX="${HOME}/n"
+export N_PREFIX="${N_PREFIX:-$HOME/n}"
 
 path=(
   "$HOME/.local/bin"
-  "$N_PREFIX"
+  "$N_PREFIX/bin"
   "${ASDF_DATA_DIR}/shims"
   "$PNPM_HOME"
   $path

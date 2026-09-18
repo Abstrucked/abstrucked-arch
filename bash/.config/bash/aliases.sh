@@ -13,7 +13,7 @@ alias opencode-ai="$HOME/.local/bin/opencode-launcher"
 alias create-app="$HOME/.local/bin/create-app-launcher"
 alias pass-insert="$HOME/.local/bin/pass-insert-utility"
 
-alias batt='~/bin/batt-mode.sh'
+alias batt="$HOME/.local/bin/batt-save-mode.sh"
 alias balanced='~/bin/balanced-mode.sh'
 alias perf='~/bin/perf-mode.sh'
 alias checkmode='sensors | grep -E "Tctl|Tdie|Package" && grep MHz /proc/cpuinfo | head -1'

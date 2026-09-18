@@ -2,14 +2,13 @@
 
 set -euo pipefail
 
-DOTFILES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 SRC="$HOME/.config/awesome"
 
-DEST="$DOTFILES_DIR/awesome/.config/awesome"
-
 # Share exact-destination backup, staging, and rollback behavior.
-source "$DOTFILES_DIR/bootstrap-configs.sh"
+source "$SCRIPT_DIR/bootstrap-configs.sh"
+DEST="$BOOTSTRAP_DIR/awesome/.config/awesome"
 for arg in "$@"; do
   case "$arg" in
     --dry-run) DRY_RUN=true ;;

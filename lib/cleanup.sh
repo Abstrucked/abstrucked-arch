@@ -98,14 +98,19 @@ backup_item() {
     }
     backup_path="$backup_root$lexical_path"
     local backup_parent
-    backup_parent=$(dirname -- "$backup_path") || return 1
+    backup_parent=$(dirname -- "$backup_path") || {
+        rm -rf -- "$backup_root"
+        return 1
+    }
     mkdir -p -- "$backup_parent" || {
         log_error "Failed to create backup parent: $backup_parent"
+        rm -rf -- "$backup_root"
         return 1
     }
 
     cp -a -- "$item" "$backup_path" || {
         log_error "Failed to backup: $item"
+        rm -rf -- "$backup_root"
         return 1
     }
 

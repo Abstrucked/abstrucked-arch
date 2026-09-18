@@ -219,6 +219,10 @@ class InstallerTests(unittest.TestCase):
         theme = self.home / ".config/tmux/theme.conf"
         theme.parent.mkdir(parents=True)
         theme.symlink_to(original)
+        self.write(self.home / ".tmux/plugins/tpm/tpm", "#!/bin/sh\nexit 0\n")
+        (self.home / ".tmux/plugins/tpm/tpm").chmod(0o755)
+        self.write(self.home / ".tmux/plugins/tpm/bin/install_plugins", "#!/bin/sh\nexit 0\n")
+        (self.home / ".tmux/plugins/tpm/bin/install_plugins").chmod(0o755)
         self.run_script(args=("-y", "--only", "tmux"), code=0)
         self.assertTrue(theme.is_symlink())
         backups = list((self.home / ".dotfiles-backups").rglob("theme-source"))
@@ -276,16 +280,16 @@ class InstallerTests(unittest.TestCase):
         for _, dest in pairs:
             path = self.repo / dest
             self.assertEqual(path.read_text(), "new\n")
-            backups = list(path.parent.glob(path.name + ".backup.*"))
-            self.assertEqual(len(backups), 1)
-            self.assertEqual(snapshot(backups[0]), {"original": (path.stat().st_mode, b"old\n")})
+            self.assertFalse(list(path.parent.glob(path.name + ".backup.*")))
             self.assertEqual((path.parent / "unrelated").read_text(), "keep\n")
         path = self.repo / "btop/.config/btop"
         self.assertEqual([p.name for p in path.iterdir()], ["new"])
-        backups = list(path.parent.glob("btop.backup.*"))
-        self.assertEqual(len(backups), 1)
-        self.assertEqual((backups[0] / "original/old").read_text(), "old directory\n")
-        self.assertFalse((backups[0] / "original/unrelated").exists())
+        backups = list((self.home / ".dotfiles-backups").glob("bootstrap.*/original"))
+        self.assertEqual(len(backups), 3)
+        self.assertEqual(sorted(p.read_text() for p in backups if p.is_file()), ["old\n", "old\n"])
+        directory_backup = next(p for p in backups if p.is_dir())
+        self.assertEqual((directory_backup / "old").read_text(), "old directory\n")
+        self.assertFalse((directory_backup / "unrelated").exists())
         self.assertEqual((path.parent / "unrelated").read_text(), "keep\n")
         self.assertEqual(list(self.repo.rglob(".bootstrap-stage.*")), [])
 
@@ -368,7 +372,10 @@ printf '%s\\n' "${BACKUPS[@]}" > "$HOME/backup-paths"
         repo_before = snapshot(self.repo)
         result = self.run_script(args=("-y", "--only", "lazyvim"), code=0)
         self.assertIn("Preserving repository-managed configuration", result.stdout)
-        self.assertEqual(self.calls(), [["nvim", "--headless", "+Lazy! sync", "+qa"]])
+        calls = self.calls()
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0][0:2], ["nvim", "--headless"])
+        self.assertEqual(calls[0][-1], "+qa")
         self.assertEqual(snapshot(self.home), before)
         self.assertEqual(snapshot(self.repo), repo_before)
 

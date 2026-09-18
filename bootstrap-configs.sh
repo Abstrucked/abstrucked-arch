@@ -4,6 +4,11 @@
 
 set -euo pipefail
 
+# Resolve the repository from the script location so imports do not depend on
+# the caller's working directory.
+BOOTSTRAP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BOOTSTRAP_BACKUP_ROOT="${DOTFILES_BACKUP_ROOT:-$HOME/.dotfiles-backups}"
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -27,7 +32,7 @@ declare -A CONFIG_MAPPINGS=(
 declare -A HOME_MAPPINGS=(
   [".zshrc"]="zsh/.zshrc"
   [".p10k.zsh"]="zsh/.p10k.zsh"
-  [".tmux.conf"]="tmux/.tmux.conf"
+  [".tmux.conf"]="config/tmux/tmux.conf"
   ["load-api-keys.sh"]="scripts/load-api-keys.sh"
 )
 
@@ -99,11 +104,13 @@ parse_args() {
 check_requirements() {
   echo -e "${YELLOW}🔍 Checking requirements...${NC}"
 
-  # Check if we're in the dotfiles directory
-  if [[ ! -f "packages.list" ]] || [[ ! -f "install.sh" ]]; then
-    echo -e "${RED}Error: This script must be run from the dotfiles directory.${NC}"
+  # Check that the repository containing this script is complete.
+  if [[ ! -f "$BOOTSTRAP_DIR/packages.list" ]] || [[ ! -f "$BOOTSTRAP_DIR/install.sh" ]]; then
+    echo -e "${RED}Error: dotfiles repository files are missing.${NC}"
     exit 1
   fi
+
+  validate_backup_root || exit 1
 
   # Check if ~/.config exists
   if [[ ! -d "$HOME/.config" ]]; then
@@ -171,6 +178,7 @@ validate_paths() {
     echo "Error: source is not a file or directory: $source" >&2
     return 1
   fi
+  reject_directory_symlinks "$source" || return 1
   if ! source_path=$(realpath -e -- "$source") ||
     ! dest_path=$(realpath -m -- "$dest") ||
     ! source_entry=$(realpath -ms -- "$source") ||
@@ -198,6 +206,42 @@ validate_paths() {
     echo "Error: source and destination overlap: $source -> $dest" >&2
     return 1
   fi
+  return 0
+}
+
+validate_backup_root() {
+  local backup_root repository_root
+
+  if [[ "$BOOTSTRAP_BACKUP_ROOT" != /* ]]; then
+    echo "Error: DOTFILES_BACKUP_ROOT must be an absolute path" >&2
+    return 1
+  fi
+  if ! backup_root=$(realpath -m -- "$BOOTSTRAP_BACKUP_ROOT") ||
+    ! repository_root=$(realpath -e -- "$BOOTSTRAP_DIR"); then
+    echo "Error: cannot resolve backup or repository path" >&2
+    return 1
+  fi
+  if [[ "$backup_root" == "$repository_root" || "$backup_root/" == "$repository_root/"* ]]; then
+    echo "Error: backup root must be outside the dotfiles repository: $backup_root" >&2
+    return 1
+  fi
+  BOOTSTRAP_BACKUP_ROOT="$backup_root"
+}
+
+reject_directory_symlinks() {
+  local source="$1" directory_symlink
+
+  # cp -RL follows directory links. Reject them before either scanning or
+  # staging so an imported tree cannot expand into an overlapping tree.
+  if ! directory_symlink=$(find -P -- "$source" -type l -exec test -d {} \; -print -quit); then
+    echo "Error: cannot inspect symlinks in source: $source" >&2
+    return 1
+  fi
+  if [[ -n "$directory_symlink" ]]; then
+    echo "Error: source contains a directory symlink: $directory_symlink" >&2
+    return 1
+  fi
+  return 0
 }
 
 copy_config() {
@@ -205,7 +249,7 @@ copy_config() {
   local dest="$2"
   local config_name="$3"
 
-  local dest_dir stage backup='' status
+  local dest_dir stage backup='' backup_root='' status
   if validate_paths "$source" "$dest"; then :; else
     status=$?
     return "$status"
@@ -229,15 +273,30 @@ copy_config() {
     return 1
   fi
   if [[ -e "$dest" || -L "$dest" ]]; then
-    if ! backup=$(mktemp -d -- "${dest}.backup.XXXXXXXXXX"); then
+    validate_backup_root || {
+      rm -rf -- "$stage"
+      return 1
+    }
+    if ! mkdir -p -- "$BOOTSTRAP_BACKUP_ROOT"; then
+      echo "Error: cannot create backup root: $BOOTSTRAP_BACKUP_ROOT" >&2
+      rm -rf -- "$stage"
+      return 1
+    fi
+    if ! backup_root=$(mktemp -d -- "$BOOTSTRAP_BACKUP_ROOT/bootstrap.XXXXXXXXXX"); then
       echo "Error: cannot reserve backup for $dest" >&2
       rm -rf -- "$stage"
       return 1
     fi
-    backup="$backup/original"
-    if ! mv -T -- "$dest" "$backup"; then
+    backup="$backup_root/original"
+    if ! cp -a -- "$dest" "$backup"; then
       echo "Error: cannot back up $dest" >&2
-      rmdir -- "${backup%/original}" || echo "Error: cannot clean backup reservation" >&2
+      rm -rf -- "$backup_root"
+      rm -rf -- "$stage"
+      return 1
+    fi
+    if ! rm -rf -- "$dest"; then
+      echo "Error: cannot replace $dest after creating backup" >&2
+      rm -rf -- "$backup_root"
       rm -rf -- "$stage"
       return 1
     fi
@@ -246,8 +305,8 @@ copy_config() {
   if ! mv -T -- "$stage/payload" "$dest"; then
     echo "Error: cannot install $dest" >&2
     if [[ -n "$backup" ]]; then
-      if mv -T -- "$backup" "$dest"; then
-        rmdir -- "${backup%/original}" || echo "Error: cannot clean backup reservation" >&2
+      if cp -a -- "$backup" "$dest"; then
+        rm -rf -- "$backup_root" || echo "Error: cannot clean backup reservation" >&2
       else
         echo "Error: rollback failed; original retained at $backup" >&2
       fi
@@ -266,16 +325,23 @@ copy_config() {
 check_sensitive_content() {
   local source="$1"
   local result
-  # Best effort only: filenames and common literal assignments are not a secret detector.
-  # Scan through links just as cp -L does; find errors cannot be overridden.
-  local credential_pattern="-----BEGIN .*PRIVATE KEY-----|[\"']?([[:alnum:]_]*[_-])?(api[_-]?key|secret|password|passwd|token|access[_-]?key[_-]?id)[\"']?[[:space:]]*[:=][[:space:]]*[\"']?[[:alnum:]][[:alnum:]_./+=:-]*|AKIA[0-9A-Z]{16}|gh[pousr]_[[:alnum:]]{20,}"
+  reject_directory_symlinks "$source" || return 3
+  # Best effort only: detect high-confidence key material and literal values.
+  # Variable references such as "$API_KEY" and "${API_KEY}" are not values.
+  local credential_pattern="-----BEGIN .*PRIVATE KEY-----|(^|[^\$[:alnum:]_])AKIA[0-9A-Z]{16}|(^|[^\$[:alnum:]_])gh[pousr]_[[:alnum:]]{20,}"
+  local assignment_pattern="(^|[[:space:]])(export[[:space:]]+)?[[:alnum:]_-]*(api[_-]?key|secret|password|passwd|token|access[_-]?key[_-]?id)[[:alnum:]_-]*[[:space:]]*="
   if ! result=$(find -L "$source" -exec bash -c '
-    pattern=$1; shift
-    for file do
+    credential_pattern=$1
+     assignment_pattern=$2
+     shift 2
+     shopt -s nocasematch
+     for file do
       name=${file##*/}
       case "${name,,}" in
-        id_rsa*|id_ed25519*|id_dsa*|id_ecdsa*|*.key|*secret*|*password*|*token*|*api_key*|*api-key*|auth.json|*credentials*|.env|.env.*|*.gpg|*.ovpn|cookies.sqlite|places.sqlite|keyring*)
-          printf "SENSITIVE: %q\\n" "$file" ;;
+        id_rsa*|id_ed25519*|id_dsa*|id_ecdsa*|*.key|*.pem|*.gpg|*.ovpn|cookies.sqlite|places.sqlite|keyring*)
+          printf "SENSITIVE: %q\\n" "$file"
+          continue
+          ;;
       esac
       if [[ -d "$file" ]]; then
         [[ -r "$file" && -x "$file" ]] || printf "ERROR\\n"
@@ -286,15 +352,41 @@ check_sensitive_content() {
         continue
       fi
       # Do not use -q: read the whole file so read errors remain visible.
-      grep -aiE -- "$pattern" "$file" >/dev/null
+      sensitive=false
+      grep -aiE -- "$credential_pattern" "$file" >/dev/null
       status=$?
       case $status in
-        0) printf "SENSITIVE: %q\\n" "$file" ;;
+        0) sensitive=true ;;
         1) ;;
         *) printf "ERROR\\n" ;;
       esac
+      if [[ "$sensitive" == false ]]; then
+        matches=$(grep -aiE -- "$assignment_pattern" "$file")
+        status=$?
+        case $status in
+          0)
+            while IFS= read -r line; do
+              [[ "$line" =~ ^[[:space:]]*# ]] && continue
+              [[ "$line" =~ $assignment_pattern ]] || continue
+              value=${line#*=}
+              value="${value#"${value%%[![:space:]]*}"}"
+              # Ignore environment indirections, including a variable used
+              # inside the assigned value, but still inspect literal values
+              # on lines that merely mention a variable in a comment.
+              [[ -z "$value" || "$value" == *\$* || "$value" == env:* || "$value" == env\(* || "$value" == args.* || "$value" == *.* ]] && continue
+              sensitive=true
+              break
+            done <<< "$matches"
+            ;;
+          1) ;;
+          *) printf "ERROR\\n" ;;
+        esac
+      fi
+      if [[ "$sensitive" == true ]]; then
+        printf "SENSITIVE: %q\\n" "$file"
+      fi
     done
-  ' bash "$credential_pattern" {} +); then
+  ' bash "$credential_pattern" "$assignment_pattern" {} +); then
     echo "Error: cannot traverse $source" >&2
     return 3
   fi
@@ -380,19 +472,19 @@ process_configs() {
     case "$config_type" in
     "config")
       local source="$HOME/.config/$config_name"
-      local dest="${CONFIG_MAPPINGS[$config_name]}"
+      local dest="$BOOTSTRAP_DIR/${CONFIG_MAPPINGS[$config_name]}"
       ;;
     "home")
       local source="$HOME/$config_name"
-      local dest="${HOME_MAPPINGS[$config_name]}"
+      local dest="$BOOTSTRAP_DIR/${HOME_MAPPINGS[$config_name]}"
       ;;
     "ssh")
       local source="$SSH_CONFIG_SOURCE"
-      local dest="$SSH_CONFIG_DEST"
+      local dest="$BOOTSTRAP_DIR/$SSH_CONFIG_DEST"
       ;;
     "bin")
       local source="$HOME/.local/bin/$config_name"
-      local dest="scripts/.local/bin/$config_name"
+      local dest="$BOOTSTRAP_DIR/scripts/.local/bin/$config_name"
       ;;
     *)
       echo -e "${RED}Unknown config type: $config_type${NC}"
@@ -467,7 +559,7 @@ print_summary() {
     echo ""
     echo -e "${CYAN}💡 Next steps:${NC}"
     echo -e "${CYAN}   • Run 'git add .' to stage changes${NC}"
-    echo -e "${CYAN}   • Test with './install.sh' to verify symlinks work${NC}"
+    echo -e "${CYAN}   • Reconcile imported originals, then run './install.sh --only stow'${NC}"
     echo -e "${CYAN}   • Commit your dotfiles: 'git commit -m \"Add initial configurations\"'${NC}"
   fi
 

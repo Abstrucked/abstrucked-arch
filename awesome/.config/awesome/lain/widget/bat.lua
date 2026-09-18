@@ -10,6 +10,7 @@ local helpers  = require("lain.helpers")
 local fs       = require("gears.filesystem")
 local naughty  = require("naughty")
 local wibox    = require("wibox")
+local beautiful = require("beautiful")
 local math     = math
 local string   = string
 local ipairs   = ipairs
@@ -54,24 +55,24 @@ local function factory(args)
         title   = "Battery exhausted",
         text    = "Shutdown imminent",
         timeout = 15,
-        fg      = "#000000",
-        bg      = "#FFFFFF"
+        fg      = beautiful.notification_fg or "#cdd6f4",
+        bg      = beautiful.notification_bg or "#313244"
     }
 
     bat_notification_low_preset = {
         title   = "Battery low",
         text    = "Plug the cable!",
         timeout = 15,
-        fg      = "#202020",
-        bg      = "#CDCDCD"
+        fg      = beautiful.notification_fg or "#cdd6f4",
+        bg      = beautiful.notification_bg or "#313244"
     }
 
     bat_notification_charged_preset = {
         title   = "Battery full",
         text    = "You can unplug the cable",
         timeout = 15,
-        fg      = "#202020",
-        bg      = "#CDCDCD"
+        fg      = beautiful.notification_fg or "#cdd6f4",
+        bg      = beautiful.notification_bg or "#313244"
     }
 
     bat_now = {

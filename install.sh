@@ -13,6 +13,24 @@ source "$DOTFILES_DIR/lib/cleanup.sh"
 source "$DOTFILES_DIR/lib/args.sh"
 source "$DOTFILES_DIR/lib/components.sh"
 
+require_non_root
+
+# The installer currently writes fixed Home-relative configuration paths.
+# Reject alternate XDG locations before any installation work rather than
+# silently mixing two configuration roots.
+XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
+if [[ "$XDG_CONFIG_HOME" != "$HOME/.config" ]]; then
+    die "Non-default XDG_CONFIG_HOME is not supported by this installer: $XDG_CONFIG_HOME"
+fi
+export XDG_CONFIG_HOME
+
+load_theme_selector() {
+    # Keep selector implementation variables out of the installer's scope.
+    local DOTFILES_DIR="$1"
+    local THEME_FILE
+    source "$2"
+}
+
 # Set up cleanup trap
 setup_cleanup_trap
 
@@ -155,6 +173,17 @@ for component in "${SELECTED_COMPONENTS[@]}"; do
     fi
 done
 
+# Do not rewrite terminal configuration for a shell that is unavailable.
+if [[ -n "$SELECTED_SHELL" && "$DRY_RUN" != "true" ]]; then
+    require_command "$SELECTED_SHELL" "Selected shell is not installed: $SELECTED_SHELL"
+    if [[ "$SELECTED_SHELL" == "zsh" ]]; then
+        [[ -r /usr/share/zsh-theme-powerlevel10k/powerlevel10k.zsh-theme ]] ||
+            die "Powerlevel10k is required by the selected Zsh configuration"
+    else
+        require_command starship "Starship is required by the selected Bash configuration"
+    fi
+fi
+
 # Setup symlinks with GNU Stow
 for component in "${SELECTED_COMPONENTS[@]}"; do
     name=$(get_component_name "$component")
@@ -213,19 +242,19 @@ for component in "${SELECTED_COMPONENTS[@]}"; do
     
     if [[ "$name" == "theme" ]]; then
         progress_step "Setting up Alacritty theme"
-        theme_script="$DOTFILES_DIR/themes/theme.sh"
+        theme_script="$DOTFILES_DIR/btop/.config/btop/themes/theme.sh"
         
         if validate_file "$theme_script" false; then
             if [[ "$DRY_RUN" == "true" ]]; then
                 log_info "[dry-run] Would source theme and write Alacritty theme.toml"
             else
-                source "$theme_script" || die "Failed to source theme.sh"
+                load_theme_selector "$DOTFILES_DIR" "$theme_script" || die "Failed to source theme.sh"
                 validate_theme_variables || die "Invalid theme configuration"
 
-                mkdir -p "$HOME/.config/alacritty"
-                theme_target=$(readlink -f -- "$HOME/.config/alacritty/theme.toml")
+                mkdir -p "$XDG_CONFIG_HOME/alacritty"
+                theme_target=$(readlink -f -- "$XDG_CONFIG_HOME/alacritty/theme.toml")
                 backup_item "$theme_target" || die "Failed to back up Alacritty theme"
-                cat > "$HOME/.config/alacritty/theme.toml" <<EOF
+                cat > "$XDG_CONFIG_HOME/alacritty/theme.toml" <<EOF
 [colors.primary]
 background = "$PRIMARY_BACKGROUND"
 foreground = "$PRIMARY_FOREGROUND"
@@ -333,18 +362,26 @@ for component in "${SELECTED_COMPONENTS[@]}"; do
             break
         fi
 
-        mkdir -p "$HOME/.config/tmux"
+        mkdir -p "$XDG_CONFIG_HOME/tmux"
+
+        tpm_dir="$HOME/.tmux/plugins/tpm"
+        if [[ ! -x "$tpm_dir/tpm" ]]; then
+            execute git clone --depth 1 -- https://github.com/tmux-plugins/tpm "$tpm_dir" || die "Failed to install TPM"
+        fi
+        if [[ "$DRY_RUN" != "true" && ! -x "$tpm_dir/tpm" ]]; then
+            die "TPM installation did not produce an executable plugin manager"
+        fi
 
         tmux_conf="$DOTFILES_DIR/config/tmux/tmux.conf"
         if validate_file "$tmux_conf" false; then
-            safe_symlink "$tmux_conf" "$HOME/.config/tmux/tmux.conf" || die "Failed to symlink tmux.conf"
+            safe_symlink "$tmux_conf" "$XDG_CONFIG_HOME/tmux/tmux.conf" || die "Failed to symlink tmux.conf"
         else
             die "Tmux configuration not found"
         fi
 
-        theme_target=$(readlink -f -- "$HOME/.config/tmux/theme.conf")
+        theme_target=$(readlink -f -- "$XDG_CONFIG_HOME/tmux/theme.conf")
         backup_item "$theme_target" || die "Failed to back up tmux theme"
-        cat > "$HOME/.config/tmux/theme.conf" <<'EOF'
+        cat > "$XDG_CONFIG_HOME/tmux/theme.conf" <<'EOF'
 # Tmux theme colors
 set -g status-style bg=black,fg=white
 set -g status-left-style bg=black,fg=brightblue
@@ -356,7 +393,10 @@ set -g window-status-style bg=black,fg=white
 set -g message-style bg=brightyellow,fg=black
 EOF
 
-        safe_symlink "$HOME/.config/tmux/tmux.conf" "$HOME/.tmux.conf" || die "Failed to symlink tmux config"
+        safe_symlink "$XDG_CONFIG_HOME/tmux/tmux.conf" "$HOME/.tmux.conf" || die "Failed to symlink tmux config"
+        if [[ -x "$tpm_dir/bin/install_plugins" ]]; then
+            "$tpm_dir/bin/install_plugins" || die "Failed to install tmux plugins"
+        fi
         progress_complete "done"
         break
     fi
@@ -364,7 +404,7 @@ done
 
 # Edit resolved targets so GNU sed does not replace Stow symlinks.
 if [[ -n "$SELECTED_SHELL" ]]; then
-    for terminal_config in "$HOME/.config/alacritty/alacritty.toml" "$HOME/.config/tmux/tmux.conf"; do
+    for terminal_config in "$XDG_CONFIG_HOME/alacritty/alacritty.toml" "$XDG_CONFIG_HOME/tmux/tmux.conf"; do
         if [[ -f "$terminal_config" ]]; then
             target=$(readlink -f -- "$terminal_config")
             if [[ "$DRY_RUN" == "true" ]]; then

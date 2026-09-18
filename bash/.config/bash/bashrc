@@ -35,12 +35,10 @@ shopt -s histappend
 export EDITOR='nvim'
 export VISUAL='gedit'
 
-export N_PREFIX="$HOME/n"; [[ :$PATH: == *":$N_PREFIX/bin:"* ]] || PATH+=":$N_PREFIX/bin"  # Added by n-install (see http://git.io/n-install-repo).
+export N_PREFIX="${N_PREFIX:-$HOME/n}"
 
-export PATH="$HOME/.local/bin:$PATH"
-
-export PATH="${ASDF_DATA_DIR:-$HOME/.asdf}/shims:$PATH"
-export ASDF_DATA_DIR="${HOME}/.asdf"
+export ASDF_DATA_DIR="${ASDF_DATA_DIR:-$HOME/.asdf}"
+export PATH="$HOME/.local/bin:$N_PREFIX/bin:${ASDF_DATA_DIR}/shims:$PATH"
 
 # Set GTK dark theme
 export GTK_THEME=Adwaita:dark

@@ -46,8 +46,18 @@ curl
 wget
 unzip
 ffmpeg
-lazygit
+nodejs
+npm
 lazydocker
+
+# Desktop utilities used by the AwesomeWM and tmux configurations
+slock
+scrot
+brightnessctl
+playerctl
+xclip
+wl-clipboard
+ryzenadj
 
 # AUR packages (install with yay)
 discord
@@ -61,6 +71,3 @@ gimp
 # yubico-authenticator-bin
 # pcsclite
 # ccid
-
-
-# zsh-theme-powerlevel10k

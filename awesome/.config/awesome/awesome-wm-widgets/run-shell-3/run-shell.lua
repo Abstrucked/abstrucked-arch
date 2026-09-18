@@ -35,6 +35,7 @@ function widget.new()
 		local w = wibox({
 			visible = false,
 			ontop = true,
+			border_width = 0,
 			screen = s,
 			height = s.geometry.height,
 			width = s.geometry.width,
@@ -61,12 +62,10 @@ function widget.new()
 					layout = wibox.layout.fixed.horizontal,
 				},
 				widget = wibox.container.background,
-					bg = beautiful.bg_normal,
-				shape = function(cr, width, height)
-					gears.shape.rounded_rect(cr, width, height, 3)
-				end,
-					shape_border_color = beautiful.border_focus,
-				shape_border_width = 1,
+					bg = beautiful.popup_bg or "#313244",
+					shape = beautiful.popup_shape or function(cr, width, height)
+						gears.shape.rounded_rect(cr, width, height, 8)
+					end,
 					forced_width = 360,
 					forced_height = 56,
 			},
@@ -135,7 +134,7 @@ function widget.new()
 
 			w.visible = true
 			w.bgimage = image_path
-			awful.placement.top(w, { margins = { top = 20 }, parent = s })
+				awful.placement.top(w, { margins = { top = 2 }, parent = s })
 			awful.prompt.run({
 				prompt = "Run: ",
 					bg_cursor = beautiful.bg_focus,

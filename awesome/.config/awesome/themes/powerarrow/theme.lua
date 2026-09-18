@@ -9,9 +9,11 @@ local gears = require("gears")
 local gfs = require("gears.filesystem")
 local lain = require("lain")
 local awful = require("awful")
+local naughty = require("naughty")
 local wibox = require("wibox")
 local dpi = require("beautiful.xresources").apply_dpi
 local logout = require("awesome-wm-widgets.logout-widget.logout")
+local power_mode = require("awesome-wm-widgets.power-mode-widget.power-mode")
 local math, string, os, screen = math, string, os, screen
 local my_table = awful.util.table or gears.table -- 4.{0,1} compatibility
 
@@ -39,6 +41,44 @@ theme.bg_focus = "#C0C0A2" -- Bars BG Color
 
 theme.fg_urgent = "#aaaaaa"
 theme.bg_urgent = "#fab387"
+
+theme.popup_bg = "#313244"
+theme.popup_fg = theme.fg_normal
+theme.popup_shape = function(cr, width, height)
+	gears.shape.rounded_rect(cr, width, height, dpi(8))
+end
+
+theme.tooltip_bg = theme.popup_bg
+theme.tooltip_fg = theme.popup_fg
+theme.tooltip_border_width = 0
+theme.tooltip_shape = theme.popup_shape
+
+theme.notification_bg = theme.popup_bg
+theme.notification_fg = theme.popup_fg
+theme.notification_border_width = 0
+theme.notification_shape = theme.popup_shape
+theme.notification_margin = dpi(8)
+
+-- Keep all top-bar notifications aligned below the bar with consistent spacing.
+naughty.config.padding = dpi(8)
+naughty.config.spacing = dpi(4)
+naughty.config.defaults.position = "top_right"
+naughty.config.defaults.margin = theme.notification_margin
+naughty.config.presets.critical = {
+	bg = theme.popup_bg,
+	fg = theme.popup_fg,
+	border_width = 0,
+	shape = theme.popup_shape,
+	margin = theme.notification_margin,
+	position = "top_right",
+	timeout = 0,
+}
+naughty.config.notify_callback = function(args)
+	args.border_width = 0
+	args.border_color = "#00000000"
+	args.shape = theme.popup_shape
+	return args
+end
 
 theme.taglist_fg_focus = "#fab387"
 theme.taglist_bg_focus = "#00000000"
@@ -158,9 +198,7 @@ local function build_screen_widgets(s)
 		notification_preset = {
 			font = theme.font,
 			fg = theme.fg_normal,
-			bg = theme.bg_normal,
-			border_color = theme.border_focus,
-			border_width = dpi(2),
+			bg = theme.popup_bg,
 			timeout = 0,
 		},
 	})
@@ -182,7 +220,13 @@ local function build_screen_widgets(s)
 	local fsicon = wibox.widget.imagebox(theme.widget_hdd)
 	widgets.fs = lain.widget.fs({
 		followtag = true,
-		notification_preset = { fg = theme.fg_normal, bg = theme.bg_normal, font = "InputMono 8" },
+		notification_preset = {
+			fg = theme.fg_normal,
+			bg = theme.popup_bg,
+			font = theme.font,
+			border_width = 0,
+			shape = theme.popup_shape,
+		},
 		settings = function()
 			local root = fs_now["/"]
 			if root then
@@ -196,7 +240,7 @@ local function build_screen_widgets(s)
 	widgets.bat = lain.widget.bat({
 		-- Refresh promptly on power changes instead of Lain's 30-second default.
 		timeout = 2,
-		notification_preset = { fg = theme.fg_normal, bg = theme.bg_normal, font = "Monospace 10" },
+		notification_preset = { fg = theme.fg_normal, bg = theme.popup_bg, font = "Monospace 10" },
 		settings = function()
 			if bat_now.status and bat_now.status ~= "N/A" then
 				if bat_now.ac_status == 1 then
@@ -221,7 +265,7 @@ local function build_screen_widgets(s)
 	local neticon = wibox.widget.imagebox(theme.widget_net)
 	widgets.net = lain.widget.net({
 		screen = s,
-		notification_preset = { fg = theme.fg_normal, bg = theme.bg_normal, font = "Monospace 10" },
+		notification_preset = { fg = theme.fg_normal, bg = theme.popup_bg, font = "Monospace 10" },
 		settings = function()
 			widget:set_markup(
 				markup.fontfg(
@@ -236,10 +280,20 @@ local function build_screen_widgets(s)
 	-- Keep throughput updates from resizing the bar, without a wide empty slot.
 	widgets.net.widget.forced_width = dpi(120)
 	widgets.net.widget.align = "center"
-	widgets.net_tooltip = awful.tooltip({
-		objects = { widgets.net.widget },
-		text = "Download / upload rate: K = KiB/s, M = MiB/s, G = GiB/s",
-	})
+	widgets.net.widget:connect_signal("mouse::enter", function()
+		widgets.net_notification = naughty.notify({
+			title = "Network",
+			text = "Download / upload rate: K = KiB/s, M = MiB/s, G = GiB/s",
+			screen = s,
+			timeout = 0,
+		})
+	end)
+	widgets.net.widget:connect_signal("mouse::leave", function()
+		if widgets.net_notification then
+			naughty.destroy(widgets.net_notification)
+			widgets.net_notification = nil
+		end
+	end)
 
 	widgets.volume = volumebar_widget({
 		main_color = theme.bg_urgent,
@@ -340,6 +394,7 @@ function theme.at_screen_connect(s)
 	table.insert(right_widgets, pl(wibox.widget({ widgets.fsicon, widgets.fs.widget, layout = wibox.layout.align.horizontal }), "#4B3B5122"))
 	table.insert(right_widgets, pl(wibox.widget({ widgets.baticon, widgets.bat.widget, layout = wibox.layout.align.horizontal }), "#8DAA9A22"))
 	table.insert(right_widgets, pl(wibox.widget({ widgets.neticon, widgets.net.widget, layout = wibox.layout.align.horizontal }), "#C0C0A222"))
+	table.insert(right_widgets, power_mode.widget({}))
 	table.insert(right_widgets, pl(widgets.clock, "#4B3B5122"))
 	table.insert(right_widgets, logout.widget({}))
 	table.insert(right_widgets, pl(s.mylayoutbox, ""))

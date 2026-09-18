@@ -62,7 +62,7 @@ Dependencies are validated before installation, not automatically added: `packag
 
 Dry runs do not install packages, download installers, copy configurations, create backups, or sync plugins. They are previews, not proof that a real installation will succeed. Unattended yay installation requires usable cached sudo credentials (`sudo -v` beforehand).
 
-Backups use unique directories so repeated operations do not overwrite earlier backups. Shared installer backups live under `~/.dotfiles-backups/backup.*`; bootstrap and LazyVim replacements use unique backups beside the destination. Stow conflicts stop installation for manual reconciliation without deleting unrelated configurations. Earlier successful steps are not automatically rolled back.
+Backups use unique directories so repeated operations do not overwrite earlier backups. Shared installer, bootstrap, and LazyVim backups live outside the repository under `~/.dotfiles-backups/`. Stow conflicts stop installation for manual reconciliation without deleting unrelated configurations. Earlier successful steps are not automatically rolled back.
 
 Run the isolated regression suite with `python3 -B -m unittest discover -s tests -v`. It uses temporary homes and copied scripts with mocked install commands, not your real home or package manager.
 
@@ -125,7 +125,9 @@ The bootstrap script will:
 - Create backups of existing dotfiles configs
 - Provide security guidance for sensitive configurations
 
-**Review before committing:** The scanner is best effort, not a guarantee that copied files are free of secrets. Review all imported files and the staged diff before committing, including backups created inside the repository. `--yes` skips copy prompts, not sensitive-content checks. `--force-sensitive` overrides detected-content warnings, but does not override scan errors; use it only after reviewing the contents yourself.
+**Review before committing:** The scanner is best effort, not a guarantee that copied files are free of secrets. Review all imported files and the staged diff before committing, including external backups under `~/.dotfiles-backups/`. `--yes` skips copy prompts, not sensitive-content checks. `--force-sensitive` overrides detected-content warnings, but does not override scan errors; use it only after reviewing the contents yourself.
+
+Bootstrap copies configurations but deliberately leaves the original files in place. Before running Stow, compare the imported files, back up the originals, and remove or rename only the originals that Stow reports as conflicts. The installer will not adopt or delete those files automatically.
 
 ## 🟢 Node.js Version Manager
 
@@ -302,7 +304,6 @@ dotfiles/
 │   │   ├── .zshrc           # Zsh configuration
 │   │   ├── aliases.zsh      # Centralized aliases
 │   │   └── zsh-autocomplete/ # zsh-autocomplete plugin
-│   └── aliases.zsh          # Centralized aliases
 ├── bash/                    # Bash shell config (Starship)
 │   ├── .bashrc              # Main Bash config entry point
 │   └── .config/bash/
@@ -316,7 +317,7 @@ dotfiles/
 │       └── pass-insert-utility  # Pass helper
 ├── ghossty/                 # Ghostty configuration
 │   └── .config/ghostty/
-│       └── config.sh            # Dynamic config script
+│       └── config              # Ghostty configuration
 ├── packages.list            # Package list for installation
 ├── install.sh               # Main installation script
 ├── install-yay.sh           # Yay AUR helper installer
@@ -355,7 +356,7 @@ dotfiles/
 - Add your scripts here and they'll be available in `~/.local/bin`
 
 ### Ghostty
-- `ghossty/.config/ghostty/config.sh` - Dynamic config script (generates theme from `themes/theme.sh`)
+- `ghossty/.config/ghostty/config` - Ghostty configuration
 
 ## 📋 Manual Installation
 
@@ -403,7 +404,7 @@ If you prefer to install manually:
     source ~/.bashrc     # For bash
     ```
 
-7. **Configure pass** (optional):
+8. **Configure pass** (optional):
     ```bash
     pass init <gpg-key>
     # Add passwords and use pass-insert-utility
@@ -421,12 +422,13 @@ If you prefer to install manually:
 Add executable scripts to `scripts/.local/bin/` and they'll be available system-wide.
 
 ### Themes and Wallpapers
-- **Global Theme System**: Centralized theming for Alacritty, Neovim, Tmux, and AwesomeWM backgrounds
+- **Theme files**: Shared Alacritty color definitions and AwesomeWM themes
+- Alacritty theme selector: `btop/.config/btop/themes/theme.sh`
 - AwesomeWM themes: `awesome/.config/awesome/themes/`
 - Wallpapers: `backgrounds/` (linked to `~/.backgrounds`)
 
 #### Switching Themes
-The dotfiles include support for Catppuccin themes (Mocha, Latte, Frappe, Macchiato) and are extensible for others (e.g., Tokyo Night). Themes are abstracted via `themes/theme.sh` for dynamic app integration.
+The dotfiles include support for Catppuccin themes (Mocha, Latte, Frappe, Macchiato). The Alacritty installer uses `btop/.config/btop/themes/theme.sh` and the selected `THEME` value to generate `~/.config/alacritty/theme.toml`.
 
 1. Set the `THEME` environment variable (edit your shell config or export in shell):
     ```bash
@@ -446,24 +448,17 @@ The dotfiles include support for Catppuccin themes (Mocha, Latte, Frappe, Macchi
     source ~/.bashrc
 
     tmux source ~/.tmux.conf
-    # For Ghostty: Restart or use the launcher (theme updates dynamically)
+     # For Ghostty: Restart the application after changing its static config
     ```
 
-This will automatically update:
+This updates:
 - Alacritty colors (via generated `theme.toml`)
-- Neovim Catppuccin plugin flavor
-- Tmux status bar colors
-- AwesomeWM background directory
-- Ghostty theme (via `config.sh` sourcing `theme.sh`)
+- Tmux status bar colors when the tmux component is selected
 
 #### Adding New Themes
-1. Create a theme file: `touch themes/[theme-name].sh` (add color vars if needed).
-2. Update `themes/theme.sh` case statement to map `THEME=[theme-name]` to app-specific vars (e.g., `GHOSTTY_THEME="[Theme Name]"`).
-3. Example for Tokyo Night:
-   - Add `tokyo-night) ;;` to the flavour case.
-   - Add `tokyo-night) GHOSTTY_THEME="Tokyo Night" ;;` to the GHOSTTY_THEME case.
-   - Set `THEME=tokyo-night` and reload.
-4. For non-Catppuccin themes, ensure apps support the theme name (e.g., Ghostty built-ins).
+1. Create a theme file under `btop/.config/btop/themes/`, following the existing `catppuccin-*.sh` variable definitions.
+2. Update `btop/.config/btop/themes/theme.sh` if the new theme needs selector mapping.
+3. Set `THEME=tokyo-night` and rerun `./install.sh --only theme` after adding the required color variables.
 
 ## 🔄 Updating
 
@@ -510,7 +505,7 @@ git pull
     pass  # Test basic functionality
     ```
 
-6. **Theme not applying**: For Ghostty, ensure `config.sh` is executable and sourced correctly. Check `THEME` var and `themes/theme.sh` mappings.
+6. **Theme not applying**: Check `THEME` and the selector at `btop/.config/btop/themes/theme.sh`, then rerun `./install.sh --only theme`.
 
 ### Getting Help
 

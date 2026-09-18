@@ -43,7 +43,29 @@ if [[ "$NON_INTERACTIVE" == true ]]; then
     makepkg_args+=(--noconfirm)
     require_command sudo "sudo is required for unattended makepkg package installation"
     sudo -n -v || die "Unattended installation requires cached sudo credentials; run sudo -v first."
-    export PACMAN_AUTH='sudo -n'
+    sudo_path=$(command -v sudo) || die "Could not resolve sudo executable"
+    pacman_auth_wrapper="$temp_dir/pacman-auth"
+    printf '#!/bin/bash\nexec %q -n "$@"\n' "$sudo_path" > "$pacman_auth_wrapper" || die "Failed to create pacman authentication wrapper"
+    chmod 700 -- "$pacman_auth_wrapper" || die "Failed to secure pacman authentication wrapper"
+
+    # PACMAN_AUTH is a makepkg array, so pass it through a temporary config.
+    makepkg_config="$temp_dir/makepkg.conf"
+    makepkg_conf="${MAKEPKG_CONF:-/etc/makepkg.conf}"
+    printf -v makepkg_conf_q '%q' "$makepkg_conf"
+    printf -v pacman_auth_wrapper_q '%q' "$pacman_auth_wrapper"
+    {
+        printf 'source %s\n' "$makepkg_conf_q"
+        if [[ "$makepkg_conf" == /etc/makepkg.conf ]]; then
+            printf '%s\n' \
+                'if [[ -r "${XDG_CONFIG_HOME:-$HOME/.config}/pacman/makepkg.conf" ]]; then' \
+                '    source "${XDG_CONFIG_HOME:-$HOME/.config}/pacman/makepkg.conf"' \
+                'elif [[ -r "$HOME/.makepkg.conf" ]]; then' \
+                '    source "$HOME/.makepkg.conf"' \
+                'fi'
+        fi
+        printf 'PACMAN_AUTH=(%s)\n' "$pacman_auth_wrapper_q"
+    } > "$makepkg_config" || die "Failed to create makepkg configuration"
+    makepkg_args+=(--config "$makepkg_config")
 fi
 (
     cd "$temp_dir/yay" || exit 1

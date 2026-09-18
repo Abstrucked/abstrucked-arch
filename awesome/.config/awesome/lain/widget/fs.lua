@@ -164,9 +164,11 @@ local function factory(args)
 			end
 		end
 
-		local fmt = "%-" .. tostring(pathlen) .. "s %4s\t%6s\t%6s\n"
-		local notifytable = { [1] = string.format(fmt, "path", "used", "free", "size") }
-		fmt = "\n%-" .. tostring(pathlen) .. "s %3s%%\t%6.2f\t%6.2f %s"
+		local header_fmt = "%-" .. tostring(pathlen) .. "s  %5s  %8s  %8s"
+		local notifytable = {
+			[1] = "<b>" .. string.format(header_fmt, "PATH", "USED", "FREE", "SIZE") .. "</b>",
+		}
+		local fmt = "\n%-" .. tostring(pathlen) .. "s  %4s%%  %8.2f  %8.2f %s"
 		for _, path in ipairs(notifypaths) do
 			notifytable[#notifytable + 1] = string.format(
 				fmt,

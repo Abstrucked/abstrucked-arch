@@ -1,0 +1,39 @@
+#!/bin/bash
+# Setup passwordless sudo for ryzenadj
+# This allows the power mode widget to change CPU settings without prompting for password
+
+set -euo pipefail
+
+SUDOERS_FILE="/etc/sudoers.d/ryzenadj"
+USERNAME=$(whoami)
+
+echo "Setting up passwordless sudo for ryzenadj..."
+
+# Check if ryzenadj is installed
+if ! command -v ryzenadj &>/dev/null; then
+    echo "Error: ryzenadj is not installed"
+    echo "Install with: sudo pacman -S ryzenadj"
+    exit 1
+fi
+
+# Create sudoers file
+echo "Creating $SUDOERS_FILE..."
+echo "$USERNAME ALL=(ALL) NOPASSWD: /usr/bin/ryzenadj" | sudo tee "$SUDOERS_FILE" > /dev/null
+
+# Set proper permissions
+sudo chmod 440 "$SUDOERS_FILE"
+
+# Verify the syntax
+if sudo visudo -c -f "$SUDOERS_FILE"; then
+    echo "Sudoers file created successfully"
+    echo "Testing ryzenadj access..."
+    if sudo -n ryzenadj --info 2>/dev/null; then
+        echo "Success! ryzenadj can now be run without password"
+    else
+        echo "Warning: ryzenadj test failed, but sudoers file is valid"
+    fi
+else
+    echo "Error: Invalid sudoers file"
+    sudo rm -f "$SUDOERS_FILE"
+    exit 1
+fi

@@ -21,14 +21,16 @@ local WIDGET_DIR = gfs.get_configuration_dir() .. 'awesome-wm-widgets/logout-wid
 
 
 local w = wibox {
-    bg = beautiful.fg_normal,
+    bg = beautiful.popup_bg or "#313244",
     max_widget_size = 500,
     ontop = true,
+    border_width = 0,
+    shape_border_width = 0,
     height = 200,
     width = 400,
-    shape = function(cr, width, height)
+    shape = beautiful.popup_shape or function(cr, width, height)
         gears.shape.rounded_rect(cr, width, height, 8)
-    end
+    end,
 }
 
 local action = wibox.widget {
@@ -74,7 +76,7 @@ local function launch(args)
 
 	args = args or {}
 
-    local bg_color = args.bg_color or beautiful.bg_normal
+    local bg_color = args.bg_color or (beautiful.popup_bg or "#313244")
     local accent_color = args.accent_color or beautiful.bg_focus
     local text_color = args.text_color or beautiful.fg_normal
     local phrases = args.phrases or { "Choose an action" }
@@ -118,7 +120,6 @@ local function launch(args)
             layout = wibox.layout.fixed.vertical
         },
         id = 'a',
-        shape_border_width = 1,
         valign = 'center',
         layout = wibox.container.place
     }

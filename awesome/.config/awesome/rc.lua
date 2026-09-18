@@ -21,6 +21,7 @@ local freedesktop = require("freedesktop")
 --local run_shell = require("awesome-wm-widgets.run_shell-3.run_shell")
 local run_shell = require("awesome-wm-widgets.run-shell-3.run-shell")
 local logout = require("awesome-wm-widgets.logout-widget.logout")
+local power_mode = require("awesome-wm-widgets.power-mode-widget.power-mode")
 local hotkeys_popup = require("awful.hotkeys_popup").widget
 require("awful.hotkeys_popup.keys")
 local my_table = awful.util.table or gears.table -- 4.{0,1} compatibility
@@ -580,7 +581,11 @@ local globalkeys = my_table.join(
 	--awful.key({ modkey }, "r", function () awful.screen.focused().mypromptbox:run() end,
 	awful.key({ modkey }, "r", function()
 		run_shell.launch()
-	end, { description = "run prompt", group = "launcher" })
+	end, { description = "run prompt", group = "launcher" }),
+	-- Power mode selector
+	awful.key({ modkey, "Shift" }, "b", function()
+		power_mode.launch()
+	end, { description = "power mode selector", group = "launcher" })
 
 	--[[ awful.key({ modkey }, "x",
               function ()

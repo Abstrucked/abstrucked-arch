@@ -61,13 +61,13 @@ if [[ "$NODE_MANAGER" == n ]]; then
         curl --proto '=https' --proto-redir '=https' -fsSL -o "$installer" \
             https://raw.githubusercontent.com/mklement0/n-install/stable/bin/n-install || die "Failed to download n installer"
         [[ -f "$installer" && -s "$installer" ]] || die "Empty or missing n installer"
-        bash -n "$installer" || die "Invalid n installer syntax"
+        env -u BASH_ENV -u NODE_VERSION bash --noprofile --norc -n "$installer" || die "Invalid n installer syntax"
         # Upstream -y is unattended, -n skips profiles, and '-' installs only the manager.
-        bash "$installer" -y -n - || die "n installation failed"
+        env -u BASH_ENV -u NODE_VERSION bash --noprofile --norc "$installer" -y -n - || die "n installation failed"
     fi
     [[ -f "$N_PREFIX/bin/n" && -x "$N_PREFIX/bin/n" ]] || die "n installation failed: prefix binary missing"
     export PATH="$N_PREFIX/bin:$PATH"
-    "$N_PREFIX/bin/n" --version || die "n verification failed"
+    env -u BASH_ENV -u NODE_VERSION "$N_PREFIX/bin/n" --version || die "n verification failed"
     log_success "n is ready at $N_PREFIX/bin/n"
     log_info "For future Bash/Zsh sessions, use these exports in your shell configuration:"
     printf 'export N_PREFIX=%q\nexport PATH="$N_PREFIX/bin:$PATH"\n' "$N_PREFIX"
@@ -86,13 +86,15 @@ else
         curl --proto '=https' --proto-redir '=https' -fsSL -o "$installer" \
             https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh || die "Failed to download nvm installer"
         [[ -f "$installer" && -s "$installer" ]] || die "Empty or missing nvm installer"
-        bash -n "$installer" || die "Invalid nvm installer syntax"
+        env -u BASH_ENV -u NODE_VERSION bash --noprofile --norc -n "$installer" || die "Invalid nvm installer syntax"
         mkdir -p -- "$NVM_DIR" || die "Failed to create $NVM_DIR"
-        PROFILE=/dev/null METHOD=git bash "$installer" || die "nvm installation failed"
+        env -u BASH_ENV -u NODE_VERSION PROFILE=/dev/null METHOD=git \
+            bash --noprofile --norc "$installer" || die "nvm installation failed"
     fi
     [[ -f "$NVM_DIR/nvm.sh" && -s "$NVM_DIR/nvm.sh" ]] || die "nvm installation failed: nvm.sh missing"
     # Load only the manager in a clean child shell, not the user's shell startup files.
-    bash --noprofile --norc -c '. "$NVM_DIR/nvm.sh" --no-use && command -v nvm && nvm --version' || die "nvm verification failed"
+    env -u BASH_ENV -u NODE_VERSION \
+        bash --noprofile --norc -c '. "$NVM_DIR/nvm.sh" --no-use && command -v nvm && nvm --version' || die "nvm verification failed"
     log_success "nvm is ready at $NVM_DIR"
     log_info "For future Bash/Zsh sessions, use these lines in your shell configuration:"
     printf 'export NVM_DIR=%q\n. "$NVM_DIR/nvm.sh"\n' "$NVM_DIR"
