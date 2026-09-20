@@ -1,0 +1,11 @@
+#!/bin/sh
+
+set -eu
+
+if [ -n "${GUI_EDITOR:-}" ]; then
+    exec sh -c "$GUI_EDITOR"
+fi
+
+terminal=${TERMINAL:-alacritty}
+editor=${EDITOR:-nvim}
+exec "$terminal" -e "$editor"

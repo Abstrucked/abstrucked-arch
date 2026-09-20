@@ -89,7 +89,13 @@ window#waybar {
 }
 
 tooltip {
-    background: #313244;
+    background: #1e1e2e;
     color: #cdd6f4;
-    border: 1px solid #89dceb;
+    border: 1px solid #45475a;
+    border-radius: 8px;
+}
+
+tooltip label {
+    color: #cdd6f4;
+    padding: 4px 6px;
 }

@@ -1,0 +1,23 @@
+#!/bin/sh
+
+set -eu
+
+hypr-monitor-layout || true
+dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE || true
+systemctl --user import-environment WAYLAND_DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE || true
+
+hyprpaper >/dev/null 2>&1 &
+waybar >/dev/null 2>&1 &
+swaync >/dev/null 2>&1 &
+hypridle >/dev/null 2>&1 &
+
+# Match Awesome's XDG autostart behavior without making optional entries fatal.
+if command -v dex >/dev/null 2>&1; then
+    dex --environment Hyprland --autostart \
+        --search-paths "${XDG_CONFIG_DIRS:-/etc/xdg}/autostart:${XDG_CONFIG_HOME:-$HOME/.config}/autostart" || true
+fi
+
+# Give hyprpaper a moment to expose its IPC socket, then select the same
+# ultrawide wallpaper Awesome uses for the 3440x1440 output.
+sleep 1
+hypr-wallpaper || true

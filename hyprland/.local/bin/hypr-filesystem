@@ -1,0 +1,10 @@
+#!/bin/sh
+
+set -eu
+
+exec alacritty -e sh -c '
+    printf "Filesystem usage\n\n"
+    df -hT
+    printf "\nPress Enter to close."
+    read -r _
+'

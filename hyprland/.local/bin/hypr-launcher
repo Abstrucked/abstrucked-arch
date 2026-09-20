@@ -1,0 +1,19 @@
+#!/bin/sh
+
+set -eu
+
+case "${1:-combi}" in
+    run)
+        exec rofi -show run
+        ;;
+    drun)
+        exec rofi -show drun
+        ;;
+    combi)
+        exec rofi -show combi -combi-modi 'window,drun,run'
+        ;;
+    *)
+        printf 'Usage: %s [run|drun|combi]\n' "$0" >&2
+        exit 2
+        ;;
+esac

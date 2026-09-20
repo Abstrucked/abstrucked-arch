@@ -1,0 +1,19 @@
+#!/bin/sh
+
+set -eu
+
+monitors=$(hyprctl monitors -j)
+primary=$(printf '%s\n' "$monitors" | jq -r 'first(.[] | select(.width == 3440 and .height == 1440) | "\(.name)|\(.refreshRate)") // empty')
+secondary=$(printf '%s\n' "$monitors" | jq -r 'first(.[] | select(.width == 1920 and .height == 1080) | "\(.name)|\(.refreshRate)") // empty')
+
+if [ -n "$primary" ]; then
+    primary_name=${primary%%|*}
+    primary_rate=${primary#*|}
+    hyprctl keyword monitor "$primary_name,3440x1440@${primary_rate},0x0,1" >/dev/null
+fi
+
+if [ -n "$secondary" ]; then
+    secondary_name=${secondary%%|*}
+    secondary_rate=${secondary#*|}
+    hyprctl keyword monitor "$secondary_name,1920x1080@${secondary_rate},3440x0,1" >/dev/null
+fi
