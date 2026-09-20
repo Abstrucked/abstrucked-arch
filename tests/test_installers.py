@@ -32,7 +32,9 @@ with open(os.environ["COMMAND_LOG"], "a") as log:
     log.write(json.dumps([name, *sys.argv[1:]]) + "\n")
 if name == os.environ.get("FAIL_COMMAND"):
     sys.exit(42)
-if name not in ("git", "yay", "stow", "nvim"):
+if name == "sudo" and len(sys.argv) > 1:
+    os.execvp(sys.argv[1], sys.argv[1:])
+if name not in ("git", "yay", "stow", "nvim", "chsh"):
     sys.exit("Unexpected external command: " + name)
 '''
 
@@ -73,7 +75,7 @@ class InstallerTests(unittest.TestCase):
         (self.repo / "nvim/.config/nvim/lua").mkdir()
         for name in ("bash", "basename", "dirname", "date", "mkdir", "mktemp",
                      "cp", "mv", "rm", "rmdir", "ln", "readlink", "realpath",
-                     "find", "grep", "sed", "cat", "sleep"):
+                     "find", "grep", "sed", "cat", "sleep", "id"):
             executable = shutil.which(name)
             self.assertIsNotNone(executable, f"Required test utility: {name}")
             (self.bin / name).symlink_to(executable)
@@ -251,6 +253,46 @@ printf 'WM=%s SHELL=%s\\n' "$WINDOW_MANAGER" "$SELECTED_SHELL"
 ''')
         result = self.run_script("test-gum.sh", code=0)
         self.assertIn("WM=hyprland SHELL=bash", result.stdout)
+
+    LOGIN_SHELL_SCRIPT = """#!/bin/bash
+set -euo pipefail
+source ./lib/components.sh
+set_login_shell "${1:-bash}"
+"""
+
+    def login_shell_run(self, shell="bash", code=0):
+        self.env["USER"] = "tester"
+        self.write(self.repo / "test-login-shell.sh", self.LOGIN_SHELL_SCRIPT)
+        return self.run_script("test-login-shell.sh", args=(shell,), code=code)
+
+    def test_login_shell_is_changed_to_the_selected_shell(self):
+        # command -v resolves to the stub, which links to the real interpreter.
+        expected = str((self.bin / "bash").resolve())
+        self.login_shell_run()
+        self.assertEqual(self.calls(), [
+            ["sudo", "chsh", "-s", expected, "tester"],
+            ["chsh", "-s", expected, "tester"],
+        ])
+
+    def test_login_shell_is_left_alone_when_already_current(self):
+        self.env["SHELL"] = str((self.bin / "bash").resolve())
+        result = self.login_shell_run()
+        self.assertEqual(self.calls(), [])
+        self.assertIn("Login shell is already", result.stdout)
+
+    def test_login_shell_dry_run_changes_nothing(self):
+        self.env["DRY_RUN"] = "true"
+        self.write(self.repo / "test-login-shell.sh",
+                   "#!/bin/bash\nset -euo pipefail\nsource ./lib/components.sh\n"
+                   'DRY_RUN=true\nset_login_shell bash\n')
+        result = self.run_script("test-login-shell.sh", code=0)
+        self.assertEqual(self.calls(), [])
+        self.assertIn("Would set the login shell", result.stdout)
+
+    def test_login_shell_missing_interpreter_is_reported(self):
+        result = self.login_shell_run(shell="fish", code=1)
+        self.assertIn("Selected shell is not installed", result.stdout)
+        self.assertEqual(self.calls(), [])
 
     def test_stow_failure_is_fatal(self):
         self.env["FAIL_COMMAND"] = "stow"

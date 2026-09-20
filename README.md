@@ -22,6 +22,7 @@ With the default components selected, the installation script will:
 - Prompt you to select a default shell (zsh or bash)
 - Set up symlinks using GNU Stow
 - Configure terminal defaults for the selected shell
+- Set your account's login shell with `chsh`
 - Install and configure LazyVim
 
 ### Installer Flags
@@ -99,7 +100,7 @@ You can switch shells at any time by re-running the installer:
 ./install.sh --only stow --only shell
 ```
 
-Select both "stow" and "shell", then choose your shell (GNU Stow must already be installed for this command). The installer stows the selected shell configuration and updates existing Alacritty and tmux shell settings through their resolved targets, preserving symlinks. It does not unstow the old shell or change your account's login shell. Stow also processes the base configuration packages, not just the shell.
+Select both "stow" and "shell", then choose your shell (GNU Stow must already be installed for this command). The installer stows the selected shell configuration and updates existing Alacritty and tmux shell settings through their resolved targets, preserving symlinks. It then sets your account's login shell with `sudo chsh`, skipping that when the shell is already current. It does not unstow the old shell. Stow also processes the base configuration packages, not just the shell.
 
 ### Customizing Starship (Bash)
 
@@ -420,7 +421,7 @@ If you prefer to install manually:
    ./install.sh -y --only tmux
    ```
 
-4. **Configure terminal shell**: Back up and edit the resolved targets of `~/.config/alacritty/alacritty.toml` and `~/.config/tmux/tmux.conf` (use `readlink -f` to locate them). Set the Alacritty shell and tmux `default-shell` to your chosen shell. Do not replace the Stow symlinks with regular files. Alternatively, use `./install.sh --only stow --only shell` to apply the installer's backed-up, symlink-preserving updates.
+4. **Configure terminal shell**: Back up and edit the resolved targets of `~/.config/alacritty/alacritty.toml` and `~/.config/tmux/tmux.conf` (use `readlink -f` to locate them). Set the Alacritty shell and tmux `default-shell` to your chosen shell. Do not replace the Stow symlinks with regular files. Alternatively, use `./install.sh --only stow --only shell` to apply the installer's backed-up, symlink-preserving updates and set the login shell.
 
 5. **Install LazyVim**:
    ```bash

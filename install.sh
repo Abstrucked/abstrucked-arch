@@ -437,6 +437,8 @@ if [[ -n "$SELECTED_SHELL" ]]; then
             fi
         fi
     done
+
+    set_login_shell "$SELECTED_SHELL" || die "Failed to set the login shell to $SELECTED_SHELL"
 fi
 
 # Install LazyVim if selected
