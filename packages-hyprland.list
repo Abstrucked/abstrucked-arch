@@ -15,3 +15,6 @@ grim
 slurp
 jq
 pavucontrol
+
+# Autostart of XDG desktop entries from hypr-session-start
+dex
