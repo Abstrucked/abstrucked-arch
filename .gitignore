@@ -25,3 +25,7 @@ Thumbs.db
 *~
 .vscode/
 .idea/
+
+# Python bytecode from the test suite
+__pycache__/
+*.pyc
