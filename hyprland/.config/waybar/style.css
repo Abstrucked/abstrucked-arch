@@ -79,9 +79,48 @@ window#waybar {
     color: #fab387;
 }
 
+/* Usage and battery states: yellow warns, red is critical (orange stays the
+   "active" accent and is never used for alerts). */
 #battery.warning,
-#battery.critical {
+#cpu.warning,
+#memory.warning,
+#disk.warning {
+    color: #f9e2af;
+}
+
+#battery.critical,
+#cpu.critical,
+#memory.critical,
+#disk.critical {
+    color: #f38ba8;
+}
+
+#pulseaudio.muted {
+    color: #585b70;
+}
+
+#network.disconnected {
+    color: #f38ba8;
+}
+
+/* Notification bell: accent when something is waiting, dim in do-not-disturb */
+#custom-notification.notification {
     color: #fab387;
+}
+
+#custom-notification.dnd-none,
+#custom-notification.dnd-notification,
+#custom-notification.inhibited-none,
+#custom-notification.inhibited-notification {
+    color: #585b70;
+}
+
+/* Clickable modules */
+#clock:hover,
+#pulseaudio:hover,
+#custom-notification:hover,
+#custom-power:hover {
+    background: #313244;
 }
 
 #battery.charging {

@@ -42,15 +42,19 @@
             "actions": [
                 {
                     "label": "Lock",
-                    "command": "hyprlock"
+                    "command": "sh -c 'pidof hyprlock || hyprlock'"
                 },
                 {
                     "label": "Logout",
-                    "command": "hyprctl dispatch exit"
+                    "command": "hyprctl dispatch 'hl.dsp.exit()'"
                 },
                 {
                     "label": "Suspend",
                     "command": "systemctl suspend"
+                },
+                {
+                    "label": "Reboot",
+                    "command": "systemctl reboot"
                 },
                 {
                     "label": "Power off",

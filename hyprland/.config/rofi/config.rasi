@@ -15,9 +15,9 @@ configuration {
     background: #1e1e2e;
     foreground: #cdd6f4;
     lightbg: #313244;
-    selected-normal-background: #89dceb;
+    selected-normal-background: #fab387;
     selected-normal-foreground: #1e1e2e;
-    selected-active-background: #89dceb;
+    selected-active-background: #fab387;
     selected-active-foreground: #1e1e2e;
     active-background: #313244;
     active-foreground: #cdd6f4;

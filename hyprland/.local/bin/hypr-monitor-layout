@@ -1,4 +1,7 @@
 #!/bin/sh
+# Apply the known monitor layout once the real connectors are reported: the
+# 3440x1440 ultrawide first, the 1920x1080 panel to its right. With no
+# ultrawide attached (laptop alone) the panel keeps its automatic placement.
 
 set -eu
 
@@ -6,14 +9,14 @@ monitors=$(hyprctl monitors -j)
 primary=$(printf '%s\n' "$monitors" | jq -r 'first(.[] | select(.width == 3440 and .height == 1440) | "\(.name)|\(.refreshRate)") // empty')
 secondary=$(printf '%s\n' "$monitors" | jq -r 'first(.[] | select(.width == 1920 and .height == 1080) | "\(.name)|\(.refreshRate)") // empty')
 
-if [ -n "$primary" ]; then
-    primary_name=${primary%%|*}
-    primary_rate=${primary#*|}
-    hyprctl keyword monitor "$primary_name,3440x1440@${primary_rate},0x0,1" >/dev/null
-fi
+[ -n "$primary" ] || exit 0
+
+apply() {
+    hyprctl eval "hl.monitor({ output = \"$1\", mode = \"$2\", position = \"$3\", scale = 1 })" >/dev/null
+}
+
+apply "${primary%%|*}" "3440x1440@${primary#*|}" "0x0"
 
 if [ -n "$secondary" ]; then
-    secondary_name=${secondary%%|*}
-    secondary_rate=${secondary#*|}
-    hyprctl keyword monitor "$secondary_name,1920x1080@${secondary_rate},3440x0,1" >/dev/null
+    apply "${secondary%%|*}" "1920x1080@${secondary#*|}" "3440x0"
 fi

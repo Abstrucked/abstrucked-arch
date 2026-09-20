@@ -32,7 +32,11 @@
     "hyprland/window": {
         "format": "{}",
         "max-length": 80,
-        "separate-outputs": true
+        "separate-outputs": true,
+        "rewrite": {
+            "(.*) [-—] Brave": "$1",
+            "(.*) [-—] Discord": "$1"
+        }
     },
     "clock": {
         "format": "{:%H:%M}",
@@ -58,7 +62,15 @@
     },
     "custom/notification": {
         "tooltip": false,
-        "format": "{}",
+        "format": "{icon} {text}",
+        "format-icons": {
+            "none": "",
+            "notification": "",
+            "dnd-none": "",
+            "dnd-notification": "",
+            "inhibited-none": "",
+            "inhibited-notification": ""
+        },
         "return-type": "json",
         "exec": "swaync-client -swb",
         "on-click": "swaync-client -t -sw",
@@ -74,14 +86,26 @@
         "on-click-right": "pavucontrol"
     },
     "memory": {
-        "format": "󰍛 {used:0.1f}G"
+        "format": "󰍛 {used:0.1f}G",
+        "states": {
+            "warning": 70,
+            "critical": 90
+        }
     },
     "cpu": {
-        "format": "󰻠 {usage}%"
+        "format": "󰻠 {usage}%",
+        "states": {
+            "warning": 70,
+            "critical": 90
+        }
     },
     "disk": {
         "path": "/",
         "format": "󰋊 {percentage_used}%",
+        "states": {
+            "warning": 80,
+            "critical": 90
+        },
         "tooltip-format": "{used} used of {total} on /"
     },
     "battery": {
