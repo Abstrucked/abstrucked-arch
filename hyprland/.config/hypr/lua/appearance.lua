@@ -50,8 +50,19 @@ hl.curve("easeOut", {
     points = {{0.05, 0.9}, {0.1, 1.05}},
 })
 
+-- Linear, to match picom's constant opacity step per fade-delta tick in the
+-- AwesomeWM session.
+hl.curve("picomFade", {
+    type = "bezier",
+    points = {{0, 0}, {1, 1}},
+})
+
 hl.animation({ leaf = "windows", enabled = true, speed = 4, bezier = "easeOut" })
 hl.animation({ leaf = "windowsOut", enabled = true, speed = 4, bezier = "easeOut", style = "popin 80%" })
 hl.animation({ leaf = "border", enabled = true, speed = 4, bezier = "default" })
 hl.animation({ leaf = "fade", enabled = true, speed = 4, bezier = "default" })
-hl.animation({ leaf = "workspaces", enabled = false, speed = 4, bezier = "easeOut" })
+-- Workspace switching crossfades like picom does on tag switch. Speeds are
+-- picom's fade-in-step 0.028 and fade-out-step 0.03 at fade-delta 10ms, which
+-- come to 360ms in and 340ms out.
+hl.animation({ leaf = "workspaces", enabled = true, speed = 3.6, bezier = "picomFade", style = "fade" })
+hl.animation({ leaf = "workspacesOut", enabled = true, speed = 3.4, bezier = "picomFade", style = "fade" })
