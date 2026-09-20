@@ -20,6 +20,8 @@ SHOW_HELP=false
 # Array of steps to run (empty = all)
 RUN_STEPS=()
 SKIP_STEPS=()
+WINDOW_MANAGER="awesome"
+WINDOW_MANAGER_EXPLICIT=false
 
 # Show usage information
 show_help() {
@@ -40,6 +42,7 @@ show_help() {
     echo -e "${YELLOW}Selective Installation:${NC}"
     echo -e "  ${GREEN}--only STEP${NC}         Only run specific step(s) (can be repeated)"
     echo -e "  ${GREEN}--skip STEP${NC}         Skip specific step(s) (can be repeated)"
+    echo -e "  ${GREEN}--wm MODE${NC}           Window manager: awesome, both, or hyprland"
     echo ""
     echo -e "${YELLOW}Available Steps:${NC}"
     echo -e "  packages      Install system packages"
@@ -58,6 +61,7 @@ show_help() {
     echo -e "  $script_name --dry-run            # Preview changes only"
     echo -e "  $script_name --only packages --only stow # Only install packages and stow"
     echo -e "  $script_name --skip yubikey       # Skip YubiKey installation"
+    echo -e "  $script_name -y --wm hyprland     # Non-interactive Hyprland install"
     echo -e "  $script_name -y                   # Non-interactive (defaults)"
     echo -e "  $script_name -v                   # Verbose output"
     exit 0
@@ -101,6 +105,21 @@ parse_args() {
                 else
                     SKIP_STEPS+=("$2")
                 fi
+                shift 2
+                ;;
+            --window-manager|--wm)
+                if [[ -z "${2:-}" || "$2" == -* ]]; then
+                    die "$1 requires awesome, both, or hyprland"
+                fi
+                case "${2,,}" in
+                    awesome|both|hyprland)
+                        WINDOW_MANAGER="${2,,}"
+                        WINDOW_MANAGER_EXPLICIT=true
+                        ;;
+                    *)
+                        die "Unknown window manager: $2 (expected awesome, both, or hyprland)"
+                        ;;
+                esac
                 shift 2
                 ;;
             -*)

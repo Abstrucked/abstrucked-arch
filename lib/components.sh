@@ -10,6 +10,7 @@ _COMPONENTS_SH_LOADED=1
 # Source logging functions
 source "$(dirname "${BASH_SOURCE[0]}")/logging.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/args.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/ui.sh"
 
 # Component definitions
 # Format: "name|description|default_enabled|step_name"
@@ -28,6 +29,15 @@ declare -a COMPONENTS=(
 
 # Global shell selection
 SELECTED_SHELL=""
+
+window_manager_description() {
+    case "${1:-awesome}" in
+        awesome) echo "AwesomeWM" ;;
+        both) echo "AwesomeWM + Hyprland" ;;
+        hyprland) echo "Hyprland" ;;
+        *) echo "Unknown" ;;
+    esac
+}
 
 # Get component name
 get_component_name() {
@@ -73,8 +83,85 @@ component_enabled() {
     return $?
 }
 
-# Interactive shell selection
+# Select the window manager only when packages or Stow are selected.
+select_window_manager() {
+    local component step needs_window_manager=false selection
+
+    for component in "${SELECTED_COMPONENTS[@]}"; do
+        step=$(get_component_step "$component")
+        if [[ "$step" == "packages" || "$step" == "stow" ]]; then
+            needs_window_manager=true
+            break
+        fi
+    done
+
+    [[ "$needs_window_manager" == true ]] || return 0
+    if [[ "$WINDOW_MANAGER_EXPLICIT" == true ]]; then
+        log_info "Selected window manager: $(window_manager_description "$WINDOW_MANAGER")"
+        return 0
+    fi
+    if [[ "$NON_INTERACTIVE" == "true" ]]; then
+        WINDOW_MANAGER=awesome
+        log_info "Non-interactive mode: using AwesomeWM."
+        return 0
+    fi
+
+    if [[ "${UI_MODE:-plain}" == "gum" ]]; then
+        if ! selection=$(ui_choose_one "Select window manager" \
+            "AwesomeWM" "AwesomeWM + Hyprland" "Hyprland"); then
+            log_info "Installation cancelled."
+            exit 0
+        fi
+        case "$selection" in
+            AwesomeWM) WINDOW_MANAGER=awesome ;;
+            "AwesomeWM + Hyprland") WINDOW_MANAGER=both ;;
+            Hyprland) WINDOW_MANAGER=hyprland ;;
+            *) log_error "Invalid window-manager selection: $selection"; return 1 ;;
+        esac
+    else
+        echo ""
+        echo "Window manager selection:"
+        echo "  1) AwesomeWM"
+        echo "  2) AwesomeWM + Hyprland"
+        echo "  3) Hyprland"
+        read -r -p "Selection [1]: " selection || return 1
+        case "${selection:-1}" in
+            1) WINDOW_MANAGER=awesome ;;
+            2) WINDOW_MANAGER=both ;;
+            3) WINDOW_MANAGER=hyprland ;;
+            *) log_error "Invalid window-manager selection: $selection"; return 1 ;;
+        esac
+    fi
+
+    log_info "Selected window manager: $(window_manager_description "$WINDOW_MANAGER")"
+}
+
+# Interactive shell selection.
 select_shell() {
+    local shell_choice
+
+    if [[ "$NON_INTERACTIVE" == "true" ]]; then
+        echo -e "${BLUE}  (Non-interactive: defaulting to zsh)${NC}"
+        SELECTED_SHELL="zsh"
+        return 0
+    fi
+
+    if [[ "${UI_MODE:-plain}" == "gum" ]]; then
+        if ! shell_choice=$(ui_choose_one "Select your default shell" \
+            "zsh - Powerlevel10k prompt, zsh-autocomplete" \
+            "bash - Starship prompt, bash-completion"); then
+            log_info "Installation cancelled."
+            exit 0
+        fi
+        case "$shell_choice" in
+            zsh\ -\ *) SELECTED_SHELL="zsh" ;;
+            bash\ -\ *) SELECTED_SHELL="bash" ;;
+            *) log_error "Invalid shell selection: $shell_choice"; return 1 ;;
+        esac
+        log_info "Selected shell: $SELECTED_SHELL"
+        return 0
+    fi
+
     echo ""
     echo -e "${CYAN}╔═══════════════════════════════════════════════════════════╗${NC}"
     echo -e "${CYAN}║                 Default Shell Selection                ║${NC}"
@@ -85,12 +172,6 @@ select_shell() {
     echo -e "  ${GREEN}1${NC}) ${GREEN}zsh${NC}   - Powerlevel10k prompt, zsh-autocomplete"
     echo -e "  ${GREEN}2${NC}) ${GREEN}bash${NC}  - Starship prompt, bash-completion"
     echo ""
-
-    if [[ "$NON_INTERACTIVE" == "true" ]]; then
-        echo -e "${BLUE}  (Non-interactive: defaulting to zsh)${NC}"
-        SELECTED_SHELL="zsh"
-        return 0
-    fi
 
     read -r -p "  Selection [1-2]: " shell_choice
 
@@ -132,14 +213,48 @@ select_components() {
     SELECTED_COMPONENTS=()
     SELECTED_SHELL=""
     
-    echo ""
-    echo -e "${CYAN}╔═══════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${CYAN}║              Component Selection Menu                   ║${NC}"
-    echo -e "${CYAN}╚═══════════════════════════════════════════════════════════╝${NC}"
-    echo ""
-    echo -e "  Select which components to install:"
-    echo -e "  Enter numbers separated by commas (e.g., 1,3,5)"
-    echo ""
+    if [[ "${UI_MODE:-plain}" == "gum" ]]; then
+        local -a options=() selected_labels=() gum_command
+        local label selected_index
+
+        for i in "${!COMPONENTS[@]}"; do
+            component="${COMPONENTS[$i]}"
+            name=$(get_component_name "$component")
+            desc=$(get_component_desc "$component")
+            label="$((i + 1)). $name - $desc"
+            options+=("$label")
+            if [[ "$(get_component_default "$component")" == "true" ]]; then
+                selected_labels+=("$label")
+            fi
+        done
+
+        gum_command=(gum choose --no-limit --header "Select components (space toggles, enter continues)")
+        for label in "${selected_labels[@]}"; do
+            gum_command+=(--selected "$label")
+        done
+        gum_command+=("${options[@]}")
+
+        if ! selection=$("${gum_command[@]}"); then
+            log_info "Installation cancelled."
+            exit 0
+        fi
+        while IFS= read -r label; do
+            [[ -n "$label" ]] || continue
+            selected_index=${label%%.*}
+            if [[ "$selected_index" =~ ^[0-9]+$ ]] &&
+                ((selected_index >= 1 && selected_index <= component_count)); then
+                selected+=("${COMPONENTS[$((selected_index - 1))]}")
+            fi
+        done <<< "$selection"
+    else
+        echo ""
+        echo -e "${CYAN}╔═══════════════════════════════════════════════════════════╗${NC}"
+        echo -e "${CYAN}║              Component Selection Menu                   ║${NC}"
+        echo -e "${CYAN}╚═══════════════════════════════════════════════════════════╝${NC}"
+        echo ""
+        echo -e "  Select which components to install:"
+        echo -e "  Enter numbers separated by commas (e.g., 1,3,5)"
+        echo ""
     
     for i in "${!COMPONENTS[@]}"; do
         local component="${COMPONENTS[$i]}"
@@ -207,6 +322,7 @@ select_components() {
                 done
                 ;;
         esac
+        fi
     fi
     
     # Store selected components globally
@@ -266,7 +382,12 @@ show_summary() {
     fi
     
     echo -e "  ${GREEN}Will install:${NC}"
+    local has_window_manager_component=false
     for component in "${SELECTED_COMPONENTS[@]}"; do
+        if [[ "$(get_component_step "$component")" == "packages" ||
+            "$(get_component_step "$component")" == "stow" ]]; then
+            has_window_manager_component=true
+        fi
         local desc
         desc=$(get_component_desc "$component")
         if [[ "$desc" == *"shell"* ]] && [[ -n "$SELECTED_SHELL" ]]; then
@@ -275,6 +396,9 @@ show_summary() {
             echo -e "    ${GREEN}✓${NC} $desc"
         fi
     done
+    if [[ "$has_window_manager_component" == true ]]; then
+        echo -e "    ${GREEN}✓${NC} Window manager: ${GREEN}$(window_manager_description "$WINDOW_MANAGER")${NC}"
+    fi
     
     # Show skipped components
     local skipped=()
@@ -316,6 +440,16 @@ confirm_installation() {
     [[ ${#SELECTED_COMPONENTS[@]} -gt 0 ]] || return 0
     if [[ "$NON_INTERACTIVE" == "true" ]]; then
         log_info "Proceeding with installation (non-interactive)..."
+        return 0
+    fi
+
+    if [[ "${UI_MODE:-plain}" == "gum" ]]; then
+        if ui_confirm "Proceed with installation?"; then
+            log_info "Proceeding with installation..."
+        else
+            log_info "Installation cancelled."
+            exit 0
+        fi
         return 0
     fi
     

@@ -1,0 +1,17 @@
+# Hyprland and Wayland packages
+hyprland
+waybar
+swaync
+hyprpaper
+hyprlock
+hypridle
+xdg-desktop-portal-hyprland
+xdg-desktop-portal-gtk
+rofi-wayland
+xorg-xwayland
+qt5-wayland
+qt6-wayland
+grim
+slurp
+jq
+pavucontrol

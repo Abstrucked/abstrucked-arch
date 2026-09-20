@@ -55,6 +55,7 @@ require_arch
 require_command git "git is required but not installed"
 require_command curl "curl is required but not installed"
 validate_directory "$DOTFILES_DIR"
+ui_initialize
 
 # Interactive component selection
 select_components
@@ -64,20 +65,20 @@ if [[ ${#SELECTED_COMPONENTS[@]} -eq 0 ]]; then
     exit 0
 fi
 
-# Show summary and confirm
-show_summary
-confirm_installation
+select_window_manager || exit 1
 
-# Shell selection (if shell component is selected)
+# Select the shell before the summary so the confirmation reflects the full plan.
 for component in "${SELECTED_COMPONENTS[@]}"; do
     name=$(get_component_name "$component")
-    step=$(get_component_step "$component")
-    
     if [[ "$name" == "shell" ]]; then
-        select_shell
+        select_shell || exit 1
         break
     fi
 done
+
+# Show summary and confirm
+show_summary
+confirm_installation
 
 # Count selected components for progress
 progress_init ${#SELECTED_COMPONENTS[@]}
@@ -119,15 +120,24 @@ for component in "${SELECTED_COMPONENTS[@]}"; do
     if [[ "$name" == "packages" ]]; then
         progress_step "Installing system packages"
         
-        packages_file="$DOTFILES_DIR/packages.list"
-        validate_file "$packages_file" || die "packages.list not found"
-        validate_packages_file "$packages_file" || die "Invalid packages in packages.list"
-        
-        while IFS= read -r pkg || [[ -n "$pkg" ]]; do
-            [[ -z "$pkg" || "$pkg" == \#* ]] && continue
-            log_info "Installing: $pkg"
-            execute yay -S --needed --noconfirm -- "$pkg" || die "Failed to install: $pkg"
-        done < "$packages_file"
+        package_files=("$DOTFILES_DIR/packages.list")
+        case "$WINDOW_MANAGER" in
+            awesome) package_files+=("$DOTFILES_DIR/packages-awesome.list") ;;
+            both) package_files+=("$DOTFILES_DIR/packages-awesome.list" "$DOTFILES_DIR/packages-hyprland.list") ;;
+            hyprland) package_files+=("$DOTFILES_DIR/packages-hyprland.list") ;;
+            *) die "Invalid window manager: $WINDOW_MANAGER" ;;
+        esac
+
+        for packages_file in "${package_files[@]}"; do
+            validate_file "$packages_file" || die "Package manifest not found: $packages_file"
+            validate_packages_file "$packages_file" || die "Invalid packages in $packages_file"
+
+            while IFS= read -r pkg || [[ -n "$pkg" ]]; do
+                [[ -z "$pkg" || "$pkg" == \#* ]] && continue
+                log_info "Installing: $pkg"
+                execute yay -S --needed --noconfirm -- "$pkg" || die "Failed to install: $pkg"
+            done < "$packages_file"
+        done
         
         progress_complete "done"
         break
@@ -196,8 +206,16 @@ for component in "${SELECTED_COMPONENTS[@]}"; do
         fi
         execute git -C "$DOTFILES_DIR" submodule update --init --recursive || die "Failed to update git submodules"
         
-        # Base packages (without shell - added dynamically based on selection)
-        stow_packages=("awesome" "ssh" "alacritty" "btop" "nvim" "picom" "pcmanfm" "scripts" "ghossty" "gnupg")
+        # Select exactly the requested window-manager package(s); shared
+        # configuration is stowed for every mode.
+        stow_packages=()
+        case "$WINDOW_MANAGER" in
+            awesome) stow_packages+=("awesome" "picom") ;;
+            both) stow_packages+=("awesome" "hyprland" "picom") ;;
+            hyprland) stow_packages+=("hyprland") ;;
+            *) die "Invalid window manager: $WINDOW_MANAGER" ;;
+        esac
+        stow_packages+=("ssh" "alacritty" "btop" "nvim" "pcmanfm" "scripts" "ghossty" "gnupg")
         
         # Add selected shell if shell component was selected
         if [[ -n "$SELECTED_SHELL" ]]; then

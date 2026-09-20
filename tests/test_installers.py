@@ -16,10 +16,15 @@ import unittest
 
 
 ROOT = Path(__file__).resolve().parents[1]
-STOW_PACKAGES = (
-    "awesome", "ssh", "alacritty", "btop", "nvim", "picom", "pcmanfm",
-    "scripts", "ghossty", "gnupg",
+COMMON_STOW_PACKAGES = (
+    "ssh", "alacritty", "btop", "nvim", "pcmanfm", "scripts", "ghossty", "gnupg",
 )
+STOW_PACKAGES = ("awesome", "picom", *COMMON_STOW_PACKAGES)
+STOW_PACKAGES_BY_WM = {
+    "awesome": STOW_PACKAGES,
+    "both": ("awesome", "hyprland", "picom", *COMMON_STOW_PACKAGES),
+    "hyprland": ("hyprland", *COMMON_STOW_PACKAGES),
+}
 MOCK = r'''
 import json, os, sys
 name = os.path.basename(sys.argv[0])
@@ -55,10 +60,11 @@ class InstallerTests(unittest.TestCase):
         for path in (self.home, self.repo, self.bin, self.tmp):
             path.mkdir()
         for name in ("install.sh", "bootstrap-configs.sh", "copy-awesome-config.sh", "install-lazyvim.sh",
-                     "install-node-manager.sh", "install-yay.sh", "packages.list"):
+                     "install-node-manager.sh", "install-yay.sh", "packages.list",
+                     "packages-awesome.list", "packages-hyprland.list"):
             shutil.copyfile(ROOT / name, self.repo / name)
         shutil.copytree(ROOT / "lib", self.repo / "lib", symlinks=True)
-        for name in (*STOW_PACKAGES, "zsh", "bash", "backgrounds"):
+        for name in (*STOW_PACKAGES, "hyprland", "zsh", "bash", "backgrounds"):
             (self.repo / name).mkdir()
         # Data fixtures avoid copying personal configs or links out of the repository.
         self.write(self.repo / "config/tmux/tmux.conf", 'set -g default-shell "/bin/zsh"\n')
@@ -172,6 +178,79 @@ class InstallerTests(unittest.TestCase):
               for pkg in STOW_PACKAGES],
         ])
         self.assertEqual(snapshot(self.home), before)
+
+    def test_window_manager_controls_stow_packages(self):
+        for mode, expected_packages in STOW_PACKAGES_BY_WM.items():
+            with self.subTest(mode=mode):
+                self.log.write_text("")
+                result = self.run_script(
+                    args=("-y", "--only", "stow", "--skip", "shell", "--wm", mode),
+                    code=0,
+                )
+                self.assertIn(f"Selected window manager", result.stdout)
+                self.assertEqual(self.calls(), [
+                    ["git", "-C", str(self.repo), "submodule", "update", "--init", "--recursive"],
+                    *[["stow", "-d", str(self.repo), "-t", str(self.home), pkg]
+                      for pkg in expected_packages],
+                ])
+
+    def test_window_manager_controls_package_manifests(self):
+        manifests = {
+            "awesome": ("packages.list", "packages-awesome.list"),
+            "both": ("packages.list", "packages-awesome.list", "packages-hyprland.list"),
+            "hyprland": ("packages.list", "packages-hyprland.list"),
+        }
+        for mode, files in manifests.items():
+            with self.subTest(mode=mode):
+                self.log.write_text("")
+                self.run_script(args=("-y", "--only", "packages", "--wm", mode), code=0)
+                expected = []
+                for filename in files:
+                    expected.extend(
+                        line for line in (self.repo / filename).read_text().splitlines()
+                        if line and not line.startswith("#")
+                    )
+                self.assertEqual(
+                    [call[-1] for call in self.calls() if call[0] == "yay"],
+                    expected,
+                )
+
+    def test_invalid_window_manager_is_rejected_before_work(self):
+        result = self.run_script(args=("-y", "--only", "stow", "--wm", "sway"))
+        self.assert_failed(result)
+        self.assertIn("Unknown window manager: sway", result.stdout)
+        self.assertEqual(self.calls(), [])
+
+    def test_gum_ui_selects_components_window_manager_shell_and_confirmation(self):
+        self.write(self.bin / "gum", r'''#!/bin/bash
+if [[ "$1" == "choose" ]]; then
+    if [[ "$*" == *"Select components"* ]]; then
+        printf '%s\n' '2. packages' '4. stow'
+    elif [[ "$*" == *"Select window manager"* ]]; then
+        printf '%s\n' 'Hyprland'
+    else
+        printf '%s\n' 'bash - Starship prompt, bash-completion'
+    fi
+elif [[ "$1" == "confirm" ]]; then
+    exit 0
+else
+    exit 1
+fi
+''')
+        (self.bin / "gum").chmod(0o755)
+        self.write(self.repo / "test-gum.sh", '''#!/bin/bash
+set -euo pipefail
+source ./lib/components.sh
+UI_MODE=gum
+select_components
+[[ ${#SELECTED_COMPONENTS[@]} -eq 2 ]]
+select_window_manager
+select_shell
+confirm_installation
+printf 'WM=%s SHELL=%s\\n' "$WINDOW_MANAGER" "$SELECTED_SHELL"
+''')
+        result = self.run_script("test-gum.sh", code=0)
+        self.assertIn("WM=hyprland SHELL=bash", result.stdout)
 
     def test_stow_failure_is_fatal(self):
         self.env["FAIL_COMMAND"] = "stow"

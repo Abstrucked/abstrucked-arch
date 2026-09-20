@@ -13,10 +13,9 @@ tmux
 alacritty
 ghostty
 
-# Window manager and desktop
-awesome
-picom
+# Shared desktop applications and utilities
 pcmanfm
+dex
 
 # System monitoring
 btop
@@ -39,7 +38,6 @@ ttf-nerd-fonts-symbols
 ttf-jetbrains-mono-nerd
 ttf-octicons
 ttf-font-logos
-ttf-codeicons
 
 # Development tools
 curl
@@ -50,12 +48,9 @@ nodejs
 npm
 lazydocker
 
-# Desktop utilities used by the AwesomeWM and tmux configurations
-slock
-scrot
+# Desktop utilities shared by the window-manager configurations and tmux
 brightnessctl
 playerctl
-xclip
 wl-clipboard
 ryzenadj
 

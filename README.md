@@ -1,6 +1,6 @@
 # Dotfiles
 
-A comprehensive dotfiles setup for Arch Linux featuring AwesomeWM, LazyVim, and various productivity tools.
+A comprehensive dotfiles setup for Arch Linux featuring AwesomeWM, Hyprland, LazyVim, and various productivity tools.
 
 ## 🚀 Quick Start
 
@@ -18,6 +18,7 @@ Run the installer as a regular user on Arch Linux, with `git` and `curl` install
 With the default components selected, the installation script will:
 - Install yay (AUR helper) if not present
 - Install all required packages
+- Use AwesomeWM by default, or select AwesomeWM + Hyprland / Hyprland only
 - Prompt you to select a default shell (zsh or bash)
 - Set up symlinks using GNU Stow
 - Configure terminal defaults for the selected shell
@@ -33,6 +34,7 @@ These flags belong to `install.sh`; standalone helpers support only their own op
 | `--non-interactive`, `-y` | Use default selections without prompting; shell selection defaults to zsh and Node manager installation is skipped. |
 | `--only STEP` | Restrict selection to a step; repeat the flag for each additional step. |
 | `--skip STEP` | Exclude a step; repeat the flag for each additional exclusion. |
+| `--window-manager MODE`, `--wm MODE` | Select `awesome` (default), `both`, or `hyprland`. |
 | `--verbose`, `-v` | Enable debug output. |
 | `--quiet`, `-q` | Suppress non-error logging. |
 | `--help`, `-h` | Show usage. |
@@ -48,6 +50,20 @@ Supported steps: `yay`, `packages`, `node`, `yubikey`, `stow`, `shell`, `theme`,
 ```
 
 Dependencies are validated before installation, not automatically added: `packages` and `yubikey` require yay already installed or the `yay` step selected; `stow` requires GNU Stow already installed or `packages` selected; `shell` requires the `stow` step selected. Package list entries are validated, and package installation failures stop the installer.
+
+### Interactive UI and Window Managers
+
+Normal terminal runs use [Gum](https://github.com/charmbracelet/gum) for keyboard-driven component, window-manager, shell, and confirmation menus. If Gum is missing, the installer offers to install it with `sudo pacman -S --needed gum`; declining or failing falls back to the plain-text menus. Gum is never installed during `--non-interactive`, redirected-input, or `--dry-run` runs.
+
+The window-manager choice is shown only when `packages` or `stow` is selected. The default is AwesomeWM. Use an explicit mode for automation or repeatable installs:
+
+```bash
+./install.sh -y --wm awesome
+./install.sh -y --wm both
+./install.sh -y --wm hyprland
+```
+
+Shared packages are in `packages.list`; WM-specific packages are in `packages-awesome.list` and `packages-hyprland.list`. Stow follows the same choice, so a Hyprland-only install does not stow the AwesomeWM or Picom packages.
 
 ### Helpers and Safety
 
@@ -293,6 +309,11 @@ dotfiles/
 │       ├── themes/
 │       ├── plugins/
 │       └── backgrounds/
+├── hyprland/                # Hyprland/Wayland configuration
+│   ├── .config/hypr/        # Lua config for 0.55+ and legacy fallback
+│   ├── .config/waybar/      # Status bar
+│   ├── .config/swaync/      # Notifications and control center
+│   └── .local/bin/          # Session and workflow helpers
 ├── ssh/                     # SSH configuration
 ├── alacritty/               # Alacritty terminal config
 ├── btop/                    # System monitor config
@@ -318,7 +339,9 @@ dotfiles/
 ├── ghossty/                 # Ghostty configuration
 │   └── .config/ghostty/
 │       └── config              # Ghostty configuration
-├── packages.list            # Package list for installation
+├── packages.list            # Shared package list
+├── packages-awesome.list    # AwesomeWM/X11 package list
+├── packages-hyprland.list   # Hyprland/Wayland package list
 ├── install.sh               # Main installation script
 ├── install-yay.sh           # Yay AUR helper installer
 ├── install-lazyvim.sh       # LazyVim installer
@@ -333,6 +356,20 @@ dotfiles/
 - `awesome/.config/awesome/themes/` - Custom themes
 - `awesome/.config/awesome/plugins/` - Custom plugins
 - `awesome/.config/awesome/backgrounds/` - Wallpaper files
+
+### Hyprland and Wayland
+- `hyprland/.config/hypr/hyprland.lua` - Hyprland 0.55+ entry point
+- `hyprland/.config/hypr/lua/` - Modular Lua settings and bindings
+- `hyprland/.config/hypr/hyprland.conf` - Legacy fallback for Hyprland 0.54 and earlier
+- `hyprland/.config/waybar/` - Status bar configuration
+- `hyprland/.config/swaync/` - Notification center configuration
+- `hyprland/.local/bin/` - Launchers, layout, monitor, wallpaper, and session helpers
+
+AwesomeWM remains the X11 session and Hyprland is the Wayland session. LightDM
+discovers both session desktop files after the corresponding packages are
+installed. The Hyprland setup keeps the existing Awesome keybindings where
+possible; dynamic Awesome tags are represented with fixed workspaces and named
+special workspaces.
 
 ### Neovim (LazyVim)
 - `nvim/.config/nvim/` - LazyVim configuration
@@ -369,20 +406,19 @@ If you prefer to install manually:
 
 2. **Install packages**:
    ```bash
-    ./install.sh -y --only packages
+   ./install.sh -y --only packages --wm awesome
    ```
 
-3. **Set up symlinks** (choose your shell):
-    ```bash
-    # For zsh:
-     stow -t ~ awesome ssh alacritty btop nvim picom zsh pcmanfm scripts ghossty gnupg
+3. **Set up symlinks** (choose a window manager and shell):
+   ```bash
+   # The installer handles conditional WM Stow packages:
+   ./install.sh -y --only stow --wm awesome
+   ./install.sh -y --only stow --wm both
+   ./install.sh -y --only stow --wm hyprland
 
-    # For bash:
-     stow -t ~ awesome ssh alacritty btop nvim picom bash pcmanfm scripts ghossty gnupg
-
-     # Tmux uses config/tmux rather than a Stow package:
-     ./install.sh -y --only tmux
-    ```
+   # Tmux uses config/tmux rather than a Stow package:
+   ./install.sh -y --only tmux
+   ```
 
 4. **Configure terminal shell**: Back up and edit the resolved targets of `~/.config/alacritty/alacritty.toml` and `~/.config/tmux/tmux.conf` (use `readlink -f` to locate them). Set the Alacritty shell and tmux `default-shell` to your chosen shell. Do not replace the Stow symlinks with regular files. Alternatively, use `./install.sh --only stow --only shell` to apply the installer's backed-up, symlink-preserving updates.
 
@@ -415,8 +451,8 @@ If you prefer to install manually:
 ### Adding New Configurations
 1. Create a new directory: `mkdir newtool`
 2. Add your config files with proper directory structure
-3. Update `packages.list` if needed
-4. Add the directory to the stow list in `install.sh`
+3. Update the appropriate package manifest (`packages.list`, `packages-awesome.list`, or `packages-hyprland.list`) if needed
+4. Add the directory to the shared or window-manager-specific Stow list in `install.sh`
 
 ### Custom Scripts
 Add executable scripts to `scripts/.local/bin/` and they'll be available system-wide.
@@ -425,6 +461,7 @@ Add executable scripts to `scripts/.local/bin/` and they'll be available system-
 - **Theme files**: Shared Alacritty color definitions and AwesomeWM themes
 - Alacritty theme selector: `btop/.config/btop/themes/theme.sh`
 - AwesomeWM themes: `awesome/.config/awesome/themes/`
+- Hyprland configuration: `hyprland/.config/hypr/`
 - Wallpapers: `backgrounds/` (linked to `~/.backgrounds`)
 
 #### Switching Themes
@@ -510,6 +547,7 @@ git pull
 ### Getting Help
 
 - Check the [AwesomeWM documentation](https://awesomewm.org/doc/)
+- Check the [Hyprland documentation](https://wiki.hypr.land/)
 - Visit [LazyVim](https://www.lazyvim.org/) for Neovim help
 - Review [GNU Stow documentation](https://www.gnu.org/software/stow/)
 - See [pass documentation](https://www.passwordstore.org/) for password management
