@@ -1,7 +1,7 @@
 """Run with: python3 -B -m unittest discover -s tests -v.
 
-Only copied installers execute. All fixture state lives under /tmp/opencode;
-PATH is an allowlist, not the host PATH with a few commands prepended.
+Only copied installers execute. All fixture state lives in a private temporary
+directory; PATH is an allowlist, not the host PATH with a few commands prepended.
 """
 
 import json
@@ -50,7 +50,7 @@ def snapshot(root):
 
 class InstallerTests(unittest.TestCase):
     def setUp(self):
-        self.temp = tempfile.TemporaryDirectory(prefix="installer-tests-", dir="/tmp/opencode")
+        self.temp = tempfile.TemporaryDirectory(prefix="installer-tests-")
         self.addCleanup(self.temp.cleanup)
         self.base = Path(self.temp.name)
         self.home = self.base / "home"
