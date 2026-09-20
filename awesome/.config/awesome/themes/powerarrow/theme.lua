@@ -14,7 +14,7 @@ local wibox = require("wibox")
 local dpi = require("beautiful.xresources").apply_dpi
 local logout = require("awesome-wm-widgets.logout-widget.logout")
 local power_mode = require("awesome-wm-widgets.power-mode-widget.power-mode")
-local math, string, os, screen = math, string, os, screen
+local string, os, screen = string, os, screen
 local my_table = awful.util.table or gears.table -- 4.{0,1} compatibility
 
 local theme = {}

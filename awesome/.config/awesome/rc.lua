@@ -6,8 +6,8 @@
 --]]
 
 -- {{{ Required libraries
-local awesome, client, mouse, screen, tag = awesome, client, mouse, screen, tag
-local ipairs, string, os, table, tostring, tonumber, type = ipairs, string, os, table, tostring, tonumber, type
+local awesome, client, screen = awesome, client, screen
+local ipairs, string, os, table, tostring, type = ipairs, string, os, table, tostring, type
 
 local gears = require("gears")
 local gfs = require("gears.filesystem")
@@ -497,7 +497,7 @@ local globalkeys = my_table.join(
 	-- Yubico -----------------------------------------
 	awful.key({ altkey }, "y", function()
 		require("abstrucked-plugins/yubico").show_list()
-	end),
+	end, { description = "show YubiKey credentials", group = "launcher" }),
 	-- Brightness - MONITOR ---------------------------
 	awful.key({}, "XF86MonBrightnessUp", function()
 		awful.spawn("brightnessctl set 10%+")
@@ -651,35 +651,35 @@ for i = 1, 9 do
 		globalkeys,
 		-- View tag only.
 		awful.key({ modkey }, "#" .. i + 9, function()
-			local screen = awful.screen.focused()
-			local tag = screen.tags[i]
-			if tag then
-				tag:view_only()
+			local s = awful.screen.focused()
+			local t = s.tags[i]
+			if t then
+				t:view_only()
 			end
 		end, descr_view),
 		-- Toggle tag display.
 		awful.key({ modkey, "Control" }, "#" .. i + 9, function()
-			local screen = awful.screen.focused()
-			local tag = screen.tags[i]
-			if tag then
-				awful.tag.viewtoggle(tag)
+			local s = awful.screen.focused()
+			local t = s.tags[i]
+			if t then
+				awful.tag.viewtoggle(t)
 			end
 		end, descr_toggle),
 		-- Move client to tag.
 		awful.key({ modkey, "Shift" }, "#" .. i + 9, function()
 			if client.focus then
-				local tag = client.focus.screen.tags[i]
-				if tag then
-					client.focus:move_to_tag(tag)
+				local t = client.focus.screen.tags[i]
+				if t then
+					client.focus:move_to_tag(t)
 				end
 			end
 		end, descr_move),
 		-- Toggle tag on focused client.
 		awful.key({ modkey, "Control", "Shift" }, "#" .. i + 9, function()
 			if client.focus then
-				local tag = client.focus.screen.tags[i]
-				if tag then
-					client.focus:toggle_tag(tag)
+				local t = client.focus.screen.tags[i]
+				if t then
+					client.focus:toggle_tag(t)
 				end
 			end
 		end, descr_toggle_focus)
