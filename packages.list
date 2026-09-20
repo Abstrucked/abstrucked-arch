@@ -53,6 +53,15 @@ playerctl
 wl-clipboard
 ryzenadj
 
+# Audio: wpctl drives the volume keys in both window managers
+wireplumber
+pipewire-pulse
+pipewire-alsa
+
+# Networking: nmtui wrapper and the tailscale-ssh helper
+networkmanager
+tailscale
+
 # AUR packages (install with yay)
 discord
 brave-bin

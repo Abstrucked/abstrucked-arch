@@ -5,3 +5,6 @@ slock
 scrot
 xclip
 xsel
+
+# rc.lua guards its XDG autostart with xrdb
+xorg-xrdb
