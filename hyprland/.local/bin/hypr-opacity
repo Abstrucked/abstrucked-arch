@@ -1,0 +1,34 @@
+#!/bin/sh
+# Toggle window transparency, matching picom's active-opacity 0.95 and
+# inactive-opacity 0.75 in the AwesomeWM session. The opaque state sets both to
+# 1.0; window rules that force 1.0 are unaffected either way.
+
+set -eu
+
+ACTIVE=0.95
+INACTIVE=0.75
+
+apply() {
+    hyprctl eval "hl.config({ decoration = { active_opacity = $1, inactive_opacity = $2 } })" >/dev/null
+}
+
+# Any active opacity below 1 means transparency is currently on.
+translucent() {
+    [ "$(hyprctl getoption decoration:active_opacity -j |
+        jq -r 'if .float < 1 then "yes" else "no" end')" = yes ]
+}
+
+case "${1:-toggle}" in
+    on) apply "$ACTIVE" "$INACTIVE" ;;
+    off) apply 1.0 1.0 ;;
+    status)
+        if translucent; then echo on; else echo off; fi
+        ;;
+    toggle)
+        if translucent; then apply 1.0 1.0; else apply "$ACTIVE" "$INACTIVE"; fi
+        ;;
+    *)
+        printf 'Usage: %s [toggle|on|off|status]\n' "$0" >&2
+        exit 2
+        ;;
+esac

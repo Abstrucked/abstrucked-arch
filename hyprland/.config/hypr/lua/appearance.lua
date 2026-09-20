@@ -12,8 +12,11 @@ hl.config({
     },
     decoration = {
         rounding = 8,
-        active_opacity = 1.0,
-        inactive_opacity = 1.0,
+        -- picom's active-opacity and inactive-opacity in the AwesomeWM
+        -- session. Toggle at runtime with hypr-opacity.
+        active_opacity = 0.95,
+        inactive_opacity = 0.75,
+        fullscreen_opacity = 1.0,
         shadow = {
             enabled = false,
         },

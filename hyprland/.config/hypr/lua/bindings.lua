@@ -122,6 +122,7 @@ exec(mainMod .. " + SHIFT + W", terminal .. " -e nvim")
 exec(mainMod .. " + X", "hypr-launcher run")
 exec(mainMod .. " + R", "hypr-launcher run")
 exec(mainMod .. " + SHIFT + B", "hypr-power-menu modes")
+exec(mainMod .. " + SHIFT + O", "hypr-opacity toggle")
 
 -- Client keys.
 exec(altMod .. " + SHIFT + M", "hypr-magnify")

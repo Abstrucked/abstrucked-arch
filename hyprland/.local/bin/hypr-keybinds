@@ -28,6 +28,7 @@ Alt+Ctrl+/-   gaps
 Super+Z       toggle dropdown terminal
 Super+Space   toggle dwindle/master layout
 Super+B       toggle Waybar
+Super+Shift+O toggle window transparency
 Alt+P         primary screenshot
 Alt+Shift+P   secondary screenshot
 Alt+Ctrl+@    lock screen (Alt+Ctrl+Shift+2)
