@@ -1,0 +1,39 @@
+#!/bin/sh
+
+set -eu
+
+direction=${1:-next}
+workspace=$(hyprctl activeworkspace -j | jq -r '.name')
+current=$(hyprctl workspaces -j | jq -r --arg workspace "$workspace" '.[] | select(.name == $workspace) | .tiledLayout // "dwindle"')
+
+case "$direction" in
+    next)
+        case "$current" in
+            dwindle) next=master ;;
+            master) next=scrolling ;;
+            scrolling) next=monocle ;;
+            *) next=dwindle ;;
+        esac
+        ;;
+    previous)
+        case "$current" in
+            dwindle) next=monocle ;;
+            master) next=dwindle ;;
+            scrolling) next=master ;;
+            *) next=scrolling ;;
+        esac
+        ;;
+    *)
+        printf '%s\n' "Usage: hypr-layout [next|previous]" >&2
+        exit 2
+        ;;
+esac
+
+if [ "$next" = monocle ]; then
+    no_rounding=true
+else
+    no_rounding=false
+fi
+
+command=$(jq -nr --arg workspace "$workspace" --arg layout "$next" --argjson no_rounding "$no_rounding" '"hl.workspace_rule({ workspace = \($workspace | @json), layout = \($layout | @json), no_rounding = \($no_rounding) })"')
+hyprctl eval "$command" >/dev/null

@@ -1,0 +1,21 @@
+#!/bin/sh
+
+set -eu
+
+direction=${1:-next}
+layout=$(hyprctl activeworkspace -j | jq -r '.tiledLayout // ""')
+
+case "$direction" in
+    next) message=cyclenext ;;
+    previous) message=cycleprev ;;
+    *)
+        printf '%s\n' "Usage: hypr-monocle-cycle [next|previous]" >&2
+        exit 2
+        ;;
+esac
+
+if [ "$layout" = monocle ]; then
+    hyprctl eval "hl.dispatch(hl.dsp.layout(\"$message\"))" >/dev/null
+else
+    hyprctl dispatch "$message" >/dev/null
+fi
