@@ -1,0 +1,25 @@
+#!/bin/sh
+
+set -eu
+
+mode=${1:-session}
+if [ "$mode" = modes ]; then
+    choices='Battery save\nBalanced\nPerformance'
+    choice=$(printf '%b' "$choices" | rofi -dmenu -i -p 'Power mode' -no-custom || true)
+    case "$choice" in
+        'Battery save') exec batt-save-mode.sh ;;
+        Balanced) exec balanced-mode.sh ;;
+        Performance) exec perf-mode.sh ;;
+        *) exit 0 ;;
+    esac
+fi
+
+choice=$(printf '%s\n' Lock Logout Suspend Reboot 'Power off' | rofi -dmenu -i -p 'Session' -no-custom || true)
+case "$choice" in
+    Lock) exec hyprlock ;;
+    Logout) exec hyprctl dispatch 'hl.dsp.exit()' ;;
+    Suspend) exec systemctl suspend ;;
+    Reboot) exec systemctl reboot ;;
+    'Power off') exec systemctl poweroff ;;
+    *) exit 0 ;;
+esac

@@ -1,0 +1,25 @@
+#!/bin/sh
+# Awesome-style minimize/restore. Hyprland has no minimize primitive, so a
+# hidden special workspace holds minimized windows.
+#
+#   hypr-minimize            minimize the focused window   (Super+N)
+#   hypr-minimize restore    restore one window and focus it (Super+Ctrl+N)
+
+set -eu
+
+case "${1:-minimize}" in
+    minimize)
+        hyprctl eval 'hl.dispatch(hl.dsp.window.move({ workspace = "special:minimized", follow = false }))' >/dev/null
+        ;;
+    restore)
+        address=$(hyprctl clients -j | jq -r 'first(.[] | select(.workspace.name == "special:minimized") | .address) // empty')
+        [ -n "$address" ] || exit 0
+        workspace=$(hyprctl activeworkspace -j | jq -r '.id')
+        hyprctl eval "hl.dispatch(hl.dsp.window.move({ workspace = $workspace, follow = false, window = \"address:$address\" }))" >/dev/null
+        hyprctl eval "hl.dispatch(hl.dsp.focus({ window = \"address:$address\" }))" >/dev/null
+        ;;
+    *)
+        printf 'Usage: %s [minimize|restore]\n' "$0" >&2
+        exit 2
+        ;;
+esac

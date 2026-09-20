@@ -1,0 +1,19 @@
+#!/bin/sh
+# Awesome's useless_gaps_resize: grow or shrink inner and outer gaps by one.
+
+set -eu
+
+case "${1:-}" in
+    +1) delta=1 ;;
+    -1) delta=-1 ;;
+    *)
+        printf 'Usage: %s [+1|-1]\n' "$0" >&2
+        exit 2
+        ;;
+esac
+
+# getoption reports a CSS-style "top right bottom left" string.
+current=$(hyprctl getoption general:gaps_out -j | jq -r '.css | split(" ")[0] | tonumber')
+next=$((current + delta))
+[ "$next" -lt 0 ] && next=0
+hyprctl eval "hl.config({ general = { gaps_in = $next, gaps_out = $next } })" >/dev/null

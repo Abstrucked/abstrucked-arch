@@ -1,0 +1,36 @@
+#!/bin/sh
+
+set -eu
+
+cat <<'EOF' | rofi -dmenu -i -p 'Hyprland keys'
+Super+Return  terminal
+Super+Q       browser
+Super+D       Discord
+Super+A       editor
+Super+W       app/window launcher
+Super+X/R     command launcher
+Super+H/J/K/L focus left/down/up/right
+Alt+J/K       cycle next/previous client
+Super+1..9    switch workspace
+Super+Shift+1..9 move client to workspace
+Super+Shift+C close client
+Super+Ctrl+Space toggle floating
+Super+F       fullscreen
+Super+N       minimize client
+Super+Ctrl+N  restore minimized client
+Super+Left/Right   previous/next workspace
+Alt+Left/Right     previous/next non-empty workspace
+Super+Shift+Left/Right  swap workspace with neighbour
+Super+Shift+Q exit Hyprland
+Alt+Shift+M   magnify client
+Alt+Y         YubiKey codes
+Alt+Ctrl+/-   gaps
+Super+Z       toggle dropdown terminal
+Super+Space   toggle dwindle/master layout
+Super+B       toggle Waybar
+Alt+P         primary screenshot
+Alt+Shift+P   secondary screenshot
+Alt+Ctrl+@    lock screen (Alt+Ctrl+Shift+2)
+Alt+Ctrl+L    power/session menu
+XF86 audio    volume and media controls
+EOF

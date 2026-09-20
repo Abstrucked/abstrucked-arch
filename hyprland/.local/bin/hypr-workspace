@@ -1,0 +1,96 @@
+#!/bin/sh
+# Awesome tag helpers for Hyprland's Lua config (hyprctl dispatch/keyword are
+# not available there, so everything goes through hyprctl eval).
+#
+#   rename            rename the current workspace          (Super+Shift+R)
+#   view next|previous  cycle workspaces 1-9, wrapping       (Super+Left/Right)
+#   nonempty next|previous  cycle workspaces holding windows (Alt+Left/Right)
+#   move next|previous  swap contents with the neighbour     (Super+Shift+Left/Right)
+
+set -eu
+
+readonly TAGS=9
+
+usage() {
+    printf 'Usage: %s rename | view|nonempty|move next|previous\n' "$0" >&2
+    exit 2
+}
+
+eval_lua() {
+    hyprctl eval "$1" >/dev/null
+}
+
+focus_workspace() {
+    eval_lua "hl.dispatch(hl.dsp.focus({ workspace = $1 }))"
+}
+
+# Wrap n into 1..TAGS (n may be 0 or negative).
+wrap() {
+    echo $(( (($1 - 1) % TAGS + TAGS) % TAGS + 1 ))
+}
+
+direction() {
+    case "${1:-}" in
+        next) echo 1 ;;
+        previous) echo -1 ;;
+        *) usage ;;
+    esac
+}
+
+current_id() {
+    hyprctl activeworkspace -j | jq -r '.id'
+}
+
+window_count() {
+    hyprctl workspaces -j | jq -r --argjson id "$1" '[.[] | select(.id == $id) | .windows] | first // 0'
+}
+
+window_addresses() {
+    hyprctl clients -j | jq -r --argjson id "$1" '.[] | select(.workspace.id == $id) | .address'
+}
+
+move_all() {
+    for address in $1; do
+        eval_lua "hl.dispatch(hl.dsp.window.move({ workspace = $2, follow = false, window = \"address:$address\" }))"
+    done
+}
+
+case "${1:-}" in
+    rename)
+        current=$(current_id)
+        # No -no-custom: the list is empty, so the name has to be free text.
+        name=$(printf '' | rofi -dmenu -p 'Workspace name' || true)
+        [ -n "$name" ] || exit 0
+        eval_lua "hl.dispatch(hl.dsp.workspace.rename({ workspace = $current, name = $(printf '%s' "$name" | jq -Rs .) }))"
+        ;;
+    view)
+        step=$(direction "${2:-}")
+        focus_workspace "$(wrap $(($(current_id) + step)))"
+        ;;
+    nonempty)
+        step=$(direction "${2:-}")
+        current=$(current_id)
+        i=1
+        while [ "$i" -lt "$TAGS" ]; do
+            target=$(wrap $((current + step * i)))
+            if [ "$(window_count "$target")" -gt 0 ]; then
+                focus_workspace "$target"
+                break
+            fi
+            i=$((i + 1))
+        done
+        ;;
+    move)
+        step=$(direction "${2:-}")
+        current=$(current_id)
+        target=$(wrap $((current + step)))
+        here=$(window_addresses "$current")
+        there=$(window_addresses "$target")
+        # Park the neighbour's windows on the current workspace first so the
+        # two sets never share a workspace mid-swap.
+        move_all "$there" "$current"
+        move_all "$here" "$target"
+        focus_workspace "$target"
+        ;;
+    *) usage ;;
+esac

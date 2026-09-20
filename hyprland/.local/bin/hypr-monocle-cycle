@@ -1,4 +1,6 @@
 #!/bin/sh
+# Alt+J / Alt+K: focus next/previous client by index. In the monocle layout
+# the layout itself owns the ordering, so it gets the message instead.
 
 set -eu
 
@@ -6,8 +8,8 @@ direction=${1:-next}
 layout=$(hyprctl activeworkspace -j | jq -r '.tiledLayout // ""')
 
 case "$direction" in
-    next) message=cyclenext ;;
-    previous) message=cycleprev ;;
+    next) message=cyclenext forward=true ;;
+    previous) message=cycleprev forward=false ;;
     *)
         printf '%s\n' "Usage: hypr-monocle-cycle [next|previous]" >&2
         exit 2
@@ -17,5 +19,5 @@ esac
 if [ "$layout" = monocle ]; then
     hyprctl eval "hl.dispatch(hl.dsp.layout(\"$message\"))" >/dev/null
 else
-    hyprctl dispatch "$message" >/dev/null
+    hyprctl eval "hl.dispatch(hl.dsp.window.cycle_next({ next = $forward }))" >/dev/null
 fi

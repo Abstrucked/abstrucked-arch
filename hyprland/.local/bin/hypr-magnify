@@ -1,0 +1,28 @@
+#!/bin/sh
+# Port of lain's magnify_client: float the focused window centred at
+# sqrt(mfact) of the monitor, or tile it again if it is already floating
+# (Alt+Shift+M).
+
+set -eu
+
+readonly MFACT=0.5
+
+window=$(hyprctl activewindow -j)
+[ -n "$window" ] || exit 0
+
+if [ "$(printf '%s' "$window" | jq -r '.floating')" = true ]; then
+    hyprctl eval 'hl.dispatch(hl.dsp.window.float({ action = "set", state = false }))' >/dev/null 2>&1 ||
+        hyprctl eval 'hl.dispatch(hl.dsp.window.float({ action = "toggle" }))' >/dev/null
+    exit 0
+fi
+
+monitor=$(printf '%s' "$window" | jq -r '.monitor')
+size=$(hyprctl monitors -j | jq -r --argjson id "$monitor" --argjson f "$MFACT" \
+    '.[] | select(.id == $id) | "\((.width / .scale * ($f | sqrt)) | floor) \((.height / .scale * ($f | sqrt)) | floor)"')
+width=${size% *}
+height=${size#* }
+
+hyprctl eval 'hl.dispatch(hl.dsp.window.float({ action = "set" }))' >/dev/null 2>&1 ||
+    hyprctl eval 'hl.dispatch(hl.dsp.window.float({ action = "toggle" }))' >/dev/null
+hyprctl eval "hl.dispatch(hl.dsp.window.resize({ x = $width, y = $height }))" >/dev/null
+hyprctl eval 'hl.dispatch(hl.dsp.window.center())' >/dev/null

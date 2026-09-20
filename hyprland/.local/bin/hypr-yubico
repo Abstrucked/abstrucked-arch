@@ -1,0 +1,39 @@
+#!/bin/sh
+# Wayland port of abstrucked-plugins/yubico.lua (Alt+Y): pick an OATH account
+# from the YubiKey, copy its code, and clear the clipboard after 30 seconds.
+
+set -eu
+
+notify() {
+    notify-send "$1" "$2"
+}
+
+accounts=$(ykman oath accounts list 2>&1) || {
+    notify 'YubiKey unavailable' "${accounts:-Insert a YubiKey to access the account list}"
+    exit 1
+}
+[ -n "$accounts" ] || {
+    notify 'No accounts' 'No OATH accounts found on the YubiKey'
+    exit 1
+}
+
+account=$(printf '%s\n' "$accounts" | rofi -dmenu -i -p 'YubiKey' -no-custom) || exit 0
+[ -n "$account" ] || exit 0
+
+output=$(ykman oath accounts code "$account" 2>&1) || {
+    notify 'YubiKey error' "${output:-Could not retrieve the account code}"
+    exit 1
+}
+code=$(printf '%s\n' "$output" | grep -Eo '[0-9]{6,8}[[:space:]]*$' | tail -n 1 | tr -d '[:space:]')
+[ -n "$code" ] || {
+    notify 'YubiKey error' 'Could not retrieve a six- or eight-digit code'
+    exit 1
+}
+
+printf '%s' "$code" | wl-copy
+notify 'Clipboard' 'Code ready; clipboard will be cleared in 30 seconds'
+
+(
+    sleep 30
+    [ "$(wl-paste --no-newline 2>/dev/null || true)" = "$code" ] && wl-copy --clear
+) >/dev/null 2>&1 &
