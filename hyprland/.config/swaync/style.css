@@ -1,0 +1,173 @@
+/* Catppuccin Mocha, matching waybar/rofi/Hyprland: orange is the active accent,
+   cyan the secondary, red for critical. */
+@define-color base     #1e1e2e;
+@define-color surface0 #313244;
+@define-color surface1 #45475a;
+@define-color surface2 #585b70;
+@define-color text     #cdd6f4;
+@define-color subtext  #a6adc8;
+@define-color accent   #fab387;
+@define-color cyan     #89dceb;
+@define-color red      #f38ba8;
+
+* {
+    font-family: "JetBrains Mono Nerd Font";
+    font-size: 11px;
+    color: @text;
+}
+
+/* Popups and control center */
+.notification-row {
+    outline: none;
+    background: transparent;
+}
+
+.notification,
+.control-center {
+    background: @base;
+    color: @text;
+    border: 1px solid @surface1;
+    border-radius: 8px;
+}
+
+.notification-row:focus .notification,
+.notification-row:hover .notification {
+    border-color: @accent;
+}
+
+.notification.low {
+    border-color: @surface0;
+}
+
+.notification.critical {
+    border-color: @red;
+}
+
+.notification-content {
+    background: transparent;
+    padding: 6px;
+}
+
+.summary {
+    color: @text;
+    font-weight: bold;
+}
+
+.body {
+    color: @subtext;
+}
+
+.time {
+    color: @surface2;
+}
+
+.notification.critical .summary {
+    color: @red;
+}
+
+.close-button {
+    background: @surface0;
+    color: @subtext;
+    border-radius: 50%;
+    min-width: 20px;
+    min-height: 20px;
+    margin: 4px;
+}
+
+.close-button:hover {
+    background: @red;
+    color: @base;
+}
+
+.notification-action {
+    background: @surface0;
+    border: none;
+    border-radius: 6px;
+    margin: 4px;
+}
+
+.notification-action:hover {
+    background: @accent;
+    color: @base;
+}
+
+/* Control center widgets */
+.widget-title,
+.widget-dnd,
+.widget-mpris,
+.widget-volume,
+.widget-backlight,
+.widget-buttons-grid,
+.widget-inhibitors {
+    background: @surface0;
+    color: @text;
+    border-radius: 6px;
+    margin: 4px;
+    padding: 8px;
+}
+
+.widget-title > label {
+    color: @text;
+    font-weight: bold;
+}
+
+button {
+    background: @surface1;
+    color: @text;
+    border: none;
+    border-radius: 6px;
+}
+
+button:hover {
+    background: @accent;
+    color: @base;
+}
+
+/* Do not disturb switch */
+.widget-dnd > switch {
+    background: @surface1;
+    border: none;
+    border-radius: 12px;
+}
+
+.widget-dnd > switch:checked {
+    background: @accent;
+}
+
+.widget-dnd > switch slider {
+    background: @text;
+    border-radius: 12px;
+}
+
+.widget-dnd > switch:checked slider {
+    background: @base;
+}
+
+/* Volume and backlight sliders */
+trough {
+    background: @surface1;
+    border-radius: 6px;
+}
+
+highlight,
+progressbar progress {
+    background: @accent;
+    border-radius: 6px;
+}
+
+slider {
+    background: @text;
+    border-radius: 50%;
+}
+
+.widget-mpris-title {
+    color: @text;
+}
+
+.widget-mpris-subtitle {
+    color: @subtext;
+}
+
+.blank-window {
+    background: transparent;
+}
