@@ -1,0 +1,8 @@
+# Load the normal terminal palette, then override nmtui's color-3 highlight.
+general.import = ["~/.config/alacritty/theme.toml"]
+
+[colors.normal]
+yellow = "#89dceb"
+
+[colors.bright]
+yellow = "#89dceb"

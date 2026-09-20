@@ -1,0 +1,3 @@
+#!/bin/sh
+
+exec alacritty --config-file "$HOME/.config/alacritty/nmtui.toml" --command /usr/bin/nmtui "$@"
