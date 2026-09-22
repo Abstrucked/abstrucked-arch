@@ -1,0 +1,38 @@
+#compdef pluginctl
+# Completion for pluginctl (see ~/.dotfiles/plugins).
+#
+# `enable` only offers plugins that are off and `disable` only those that are
+# on, both read from `pluginctl list`, whose lines are "[x] <id> <name>".
+#
+# `commands` is a special parameter once compinit loads zsh/parameter, hence
+# the name below.
+
+local -a subcommands ids
+
+subcommands=(
+  'list:list the plugins and whether each is enabled'
+  'enable:enable a plugin and reload'
+  'disable:disable a plugin and reload'
+  'refresh:regenerate the plugin wiring without reloading'
+  'help:show usage'
+)
+
+if (( CURRENT == 2 )); then
+  _describe -t commands 'pluginctl command' subcommands
+  return
+fi
+
+if (( CURRENT == 3 )); then
+  case $words[2] in
+    enable) ids=(${(f)"$(pluginctl list 2>/dev/null | sed -n 's/^\[ \] \([^ ]*\).*/\1/p')"}) ;;
+    disable) ids=(${(f)"$(pluginctl list 2>/dev/null | sed -n 's/^\[x\] \([^ ]*\).*/\1/p')"}) ;;
+    *) return ;;
+  esac
+  ids=(${ids:#})
+  if (( ${#ids} )); then
+    _describe -t plugins 'plugin' ids
+  fi
+  # Nothing valid to offer is still a handled word, so do not let zsh fall
+  # back to completing filenames here.
+  return 0
+fi

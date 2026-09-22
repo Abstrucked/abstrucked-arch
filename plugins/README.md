@@ -5,6 +5,9 @@ being wired into it permanently.
 
     pluginctl list | enable <id> | disable <id> | refresh
 
+Stowed onto PATH from scripts/.local/bin; bash and zsh complete the
+subcommands, and `enable` and `disable` complete the plugins each can act on.
+
 - `<id>/manifest.conf` - `NAME="Display Name"`, and if the plugin has a bar
   widget, `WAYBAR_MODULE="custom/<id>"` plus optionally
   `WAYBAR_SECTION="left|center|right"` (default `right`).
