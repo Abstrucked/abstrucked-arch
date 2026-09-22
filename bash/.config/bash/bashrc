@@ -77,3 +77,9 @@ fi
 if [[ -f "${ASDF_DATA_DIR:-$HOME/.asdf}/completions/asdf.bash" ]]; then
   source "${ASDF_DATA_DIR:-$HOME/.asdf}/completions/asdf.bash"
 fi
+
+# Local completions
+for _completion in "${XDG_CONFIG_HOME:-$HOME/.config}"/bash/completions/*.bash; do
+  [[ -r "$_completion" ]] && source "$_completion"
+done
+unset _completion

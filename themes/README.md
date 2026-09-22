@@ -4,6 +4,9 @@ One palette, rendered into every app's config.
 
     themectl list | current | set <name> | next | apply | render <name>
 
+Stowed onto PATH from scripts/.local/bin; bash and zsh complete the
+subcommands, and the theme names for `set` and `render`.
+
 - `palettes/<name>.lua` - semantic colors (bg, fg, accent, ansi.*, ...).
 - `palettes/_defaults.lua` - fills in every key a palette omits, deriving
   shades with `mix(a, b, amount)`. A palette always wins over it.
