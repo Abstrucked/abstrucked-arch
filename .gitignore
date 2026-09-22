@@ -29,3 +29,17 @@ Thumbs.db
 # Python bytecode from the test suite
 __pycache__/
 *.pyc
+
+# Rendered by themes/themectl from templates/ and palettes/. These land inside
+# stowed package directories, so git would otherwise track a compositor's or a
+# terminal's generated colors. Run `themectl apply` after a fresh clone.
+alacritty/.config/alacritty/theme.toml
+awesome/.config/awesome/themes/powerarrow/colors.lua
+btop/.config/btop/themes/themectl.theme
+ghossty/.config/ghostty/theme
+hyprland/.config/hypr/lua/theme.lua
+hyprland/.config/hypr/theme.conf
+hyprland/.config/rofi/config.rasi
+hyprland/.config/swaync/colors.css
+hyprland/.config/waybar/colors.css
+hyprland/.config/waybar/config.jsonc

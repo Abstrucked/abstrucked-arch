@@ -48,11 +48,11 @@
             "on-scroll": 1,
             "on-click-right": "mode",
             "format": {
-                "months": "<span color='#fab387'><b>{}</b></span>",
-                "weekdays": "<span color='#89dceb'><b>{}</b></span>",
-                "weeks": "<span color='#585b70'>{}</span>",
-                "days": "<span color='#cdd6f4'>{}</span>",
-                "today": "<span color='#1e1e2e' bgcolor='#fab387'><b>{}</b></span>"
+                "months": "<span color='{{accent}}'><b>{}</b></span>",
+                "weekdays": "<span color='{{accent_alt}}'><b>{}</b></span>",
+                "weeks": "<span color='{{ansi.bright.black}}'>{}</span>",
+                "days": "<span color='{{fg}}'>{}</span>",
+                "today": "<span color='{{bg}}' bgcolor='{{accent}}'><b>{}</b></span>"
             }
         }
     },

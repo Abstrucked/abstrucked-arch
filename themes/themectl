@@ -1,0 +1,152 @@
+#!/bin/bash
+# themectl - render one palette into every app's config and reload the apps.
+set -euo pipefail
+
+SELF="$(readlink -f "${BASH_SOURCE[0]}")"
+THEME_DIR="$(dirname "$SELF")"
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/themes"
+BACKUP_DIR="${DOTFILES_BACKUP_ROOT:-$HOME/.dotfiles-backups}/themes"
+DEFAULT_THEME="mocha-peach"
+staged=""
+
+usage() {
+  cat <<USAGE
+Usage: themectl <command> [args]
+
+  list             List available themes
+  current          Print the active theme
+  set <name>       Render, link and reload with <name>
+  next             Switch to the next theme
+  apply            Re-render and reload the active theme
+  render <name>    Render <name> into out/ only (no linking, no reload)
+USAGE
+}
+
+die() { echo "themectl: $*" >&2; exit 1; }
+
+themes() {
+  local f
+  for f in "$THEME_DIR"/palettes/*.lua; do
+    basename "$f" .lua
+  done
+}
+
+current() {
+  if [[ -r "$STATE_DIR/current" ]]; then
+    cat "$STATE_DIR/current"
+  else
+    echo "$DEFAULT_THEME"
+  fi
+}
+
+# Read targets.conf, calling: fn template dest reload
+each_target() {
+  local fn="$1" line template dest reload
+  while IFS= read -r line; do
+    [[ -z "${line//[[:space:]]/}" || "$line" =~ ^[[:space:]]*# ]] && continue
+    IFS='|' read -r template dest reload <<<"$line"
+    template="$(echo "$template" | xargs)"
+    dest="$(echo "$dest" | xargs)"
+    reload="$(echo "$reload" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+    dest="${dest/#\~/$HOME}"
+    reload="${reload//\~/$HOME}"
+    "$fn" "$template" "$dest" "$reload"
+  done <"$THEME_DIR/targets.conf"
+}
+
+render_target() {
+  local template="$1" name="$2" out
+  out="$THEME_DIR/out/$template"
+  lua "$THEME_DIR/render.lua" "$THEME_DIR/palettes/$name.lua" "$THEME_DIR/templates/$template.tpl" >"$out.new"
+  mv "$out.new" "$out"
+}
+
+render_all() {
+  local name="$1"
+  [[ -r "$THEME_DIR/palettes/$name.lua" ]] || die "unknown theme '$name' (try: themectl list)"
+  mkdir -p "$THEME_DIR/out"
+  # Render everything to a scratch dir first so one bad template cannot leave
+  # a half-updated theme behind.
+  staged="$(mktemp -d)"
+  trap 'rm -rf "$staged"' EXIT
+  local fn
+  fn() {
+    lua "$THEME_DIR/render.lua" "$THEME_DIR/palettes/$name.lua" "$THEME_DIR/templates/$1.tpl" >"$staged/$1" \
+      || die "rendering $1 failed; nothing was changed"
+  }
+  each_target fn
+  local f
+  for f in "$staged"/*; do
+    mv "$f" "$THEME_DIR/out/$(basename "$f")"
+  done
+}
+
+link_target() {
+  local template="$1" dest="$2" out rel
+  [[ "$dest" == "-" ]] && return 0
+  out="$THEME_DIR/out/$template"
+  mkdir -p "$(dirname "$dest")"
+  if [[ -L "$dest" && "$(readlink -f "$dest")" == "$out" ]]; then
+    return
+  fi
+  if [[ -e "$dest" || -L "$dest" ]]; then
+    mkdir -p "$BACKUP_DIR"
+    cp -P --backup=numbered "$dest" "$BACKUP_DIR/$template.orig"
+    rm -f "$dest"
+  fi
+  rel="$(realpath -m --relative-to="$(readlink -f "$(dirname "$dest")")" "$out")"
+  ln -s "$rel" "$dest"
+}
+
+reload_target() {
+  local reload="$3"
+  [[ -n "$reload" ]] || return 0
+  bash -c "$reload" >/dev/null 2>&1 || echo "themectl: reload failed: $reload" >&2
+}
+
+# hooks/*.sh update apps whose config files themectl cannot own outright.
+# They get THEME_DIR and everything in out/env.sh in their environment.
+run_hooks() {
+  local hook
+  for hook in "$THEME_DIR"/hooks/*.sh; do
+    [[ -x "$hook" ]] || continue
+    (
+      set -a
+      # shellcheck disable=SC1091
+      source "$THEME_DIR/out/env.sh"
+      set +a
+      export THEME_DIR
+      "$hook"
+    ) || echo "themectl: hook failed: $(basename "$hook")" >&2
+  done
+}
+
+apply() {
+  local name="$1"
+  render_all "$name"
+  each_target link_target
+  mkdir -p "$STATE_DIR"
+  echo "$name" >"$STATE_DIR/current"
+  run_hooks
+  each_target reload_target
+  echo "theme: $name"
+}
+
+cmd="${1:-}"
+case "$cmd" in
+  list) themes ;;
+  current) current ;;
+  set) [[ -n "${2:-}" ]] || die "usage: themectl set <name>"; apply "$2" ;;
+  apply) apply "$(current)" ;;
+  next)
+    mapfile -t all < <(themes)
+    cur="$(current)"; nxt="${all[0]}"
+    for i in "${!all[@]}"; do
+      [[ "${all[$i]}" == "$cur" ]] && nxt="${all[$(((i + 1) % ${#all[@]}))]}"
+    done
+    apply "$nxt"
+    ;;
+  render) [[ -n "${2:-}" ]] || die "usage: themectl render <name>"; render_all "$2"; echo "rendered $2 -> $THEME_DIR/out" ;;
+  ""|-h|--help|help) usage ;;
+  *) usage >&2; exit 2 ;;
+esac

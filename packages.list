@@ -2,6 +2,8 @@
 stow
 git
 base-devel
+# themes/themectl renders palettes through themes/render.lua
+lua
 
 # Terminal and shell
 zsh
