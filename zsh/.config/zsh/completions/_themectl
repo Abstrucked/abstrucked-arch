@@ -1,0 +1,31 @@
+#compdef themectl
+# Completion for themectl (see ~/.dotfiles/themes).
+#
+# The first word is a subcommand; `set` and `render` take a theme name, which
+# themectl itself can list, so the names never have to be remembered.
+
+local -a commands themes
+
+commands=(
+  'list:list the available themes'
+  'current:print the active theme'
+  'set:render, link and reload a theme'
+  'next:switch to the next theme'
+  'apply:re-render and reload the active theme'
+  'render:render a theme into out/ without linking or reloading'
+  'help:show usage'
+)
+
+if (( CURRENT == 2 )); then
+  _describe -t commands 'themectl command' commands
+  return
+fi
+
+if (( CURRENT == 3 )); then
+  case $words[2] in
+    set|render)
+      themes=(${(f)"$(themectl list 2>/dev/null)"})
+      _describe -t themes 'theme' themes
+      ;;
+  esac
+fi

@@ -89,7 +89,7 @@ setopt appendhistory
 # ═══════════════════════════════════════════════════════════════
 # Completions
 # ═══════════════════════════════════════════════════════════════
-fpath=(${ASDF_DATA_DIR}/completions $fpath)
+fpath=("${XDG_CONFIG_HOME}/zsh/completions" ${ASDF_DATA_DIR}/completions $fpath)
 autoload -Uz compinit && compinit
 
 # ═══════════════════════════════════════════════════════════════
