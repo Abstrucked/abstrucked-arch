@@ -1,0 +1,38 @@
+#!/bin/sh
+# Prints the active AI provider's plan usage, either as waybar custom-module
+# JSON with --waybar or as a plain one-line string, for reuse by the
+# awesome.lua widget. Any further arguments are passed to ai-usagebar, which
+# is how waybar.jsonc hands it the palette's usage colours.
+# Requires: ai-usagebar, jq.
+#
+# ai-usagebar renders for a human when stdout is a TTY, so --json is passed
+# explicitly rather than relying on it detecting the bar.
+set -eu
+
+FORMAT='{vendor_short} {session_pct}% · {session_reset}'
+FALLBACK='ai ?'
+
+mode=plain
+if [ "${1:-}" = "--waybar" ]; then
+    mode=waybar
+    shift
+fi
+
+json=''
+if ! json="$(ai-usagebar --json --format "$FORMAT" "$@" 2>/dev/null)" || [ -z "$json" ]; then
+    # A missing binary or an unreachable vendor must not empty the bar.
+    if [ "$mode" = waybar ]; then
+        printf '{"text":"%s","tooltip":"ai-usagebar: no usage available","class":"unavailable"}\n' "$FALLBACK"
+    else
+        printf '%s\n' "$FALLBACK"
+    fi
+    exit 0
+fi
+
+if [ "$mode" = waybar ]; then
+    printf '%s\n' "$json"
+else
+    # Awesome's textbox is set with plain text, and the bar already colours
+    # the widget from the palette, so drop ai-usagebar's Pango span.
+    printf '%s\n' "$json" | jq -r --arg fallback "$FALLBACK" '.text // $fallback' | sed 's/<[^>]*>//g'
+fi

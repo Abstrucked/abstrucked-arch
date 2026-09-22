@@ -1,0 +1,6 @@
+#!/bin/sh
+# Opens the ai-usagebar TUI in a terminal. A bar click has no terminal of its
+# own, so both the Waybar module and the Awesome widget go through this.
+# Requires: ai-usagebar (ships ai-usagebar-tui), alacritty.
+
+exec alacritty --command ai-usagebar-tui "$@"

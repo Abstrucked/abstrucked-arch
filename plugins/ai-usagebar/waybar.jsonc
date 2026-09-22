@@ -1,0 +1,10 @@
+{
+    "exec": "ai-usage-text --waybar --color-low '{{green}}' --color-mid '{{yellow}}' --color-high '{{accent}}' --color-critical '{{red}}'",
+    "return-type": "json",
+    "interval": 300,
+    "signal": 13,
+    "tooltip": true,
+    "on-click": "ai-usage-tui",
+    "on-scroll-up": "ai-usagebar --cycle-next",
+    "on-scroll-down": "ai-usagebar --cycle-prev"
+}
