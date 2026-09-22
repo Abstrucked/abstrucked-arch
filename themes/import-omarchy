@@ -1,0 +1,82 @@
+#!/bin/bash
+# import-omarchy - turn an Omarchy colors.toml into a themectl palette.
+#
+# Usage: import-omarchy <colors.toml> [name]
+#
+# Omarchy's palette carries 28 of the 66 keys the templates ask for; the rest
+# come from palettes/_defaults.lua. Only what is genuinely in colors.toml is
+# written here, so a later edit to the defaults reaches every imported palette.
+set -euo pipefail
+
+SELF="$(readlink -f "${BASH_SOURCE[0]}")"
+THEME_DIR="$(dirname "$SELF")"
+
+src="${1:-}"
+[[ -n "$src" && -r "$src" ]] || { echo "usage: import-omarchy <colors.toml> [name]" >&2; exit 2; }
+name="${2:-$(basename "$(dirname "$(readlink -f "$src")")")}"
+[[ "$name" == _* ]] && { echo "import-omarchy: a palette name cannot start with _" >&2; exit 1; }
+
+# Flat "key = "#value"" lines; Omarchy's colors.toml has no sections.
+get() { sed -nE "s/^[[:space:]]*$1[[:space:]]*=[[:space:]]*\"?([^\"]*)\"?[[:space:]]*$/\1/p" "$src" | head -1; }
+
+require() {
+  local value
+  value="$(get "$1")"
+  [[ -n "$value" ]] || { echo "import-omarchy: $src has no '$1'" >&2; exit 1; }
+  printf '%s' "$value"
+}
+
+# Fall back to a second key when Omarchy omits the first.
+either() {
+  local value
+  value="$(get "$1")"
+  [[ -n "$value" ]] || value="$(get "$2")"
+  printf '%s' "$value"
+}
+
+mode="$(get mode)"
+[[ -n "$mode" ]] || mode=dark
+
+out="$THEME_DIR/palettes/$name.lua"
+cat > "$out" <<LUA
+-- Imported from an Omarchy colors.toml by import-omarchy.
+-- Everything the templates need beyond these keys comes from _defaults.lua.
+return {
+  name = "$name",
+  variant = "$mode",
+
+  bg = "$(require background)",
+  bg_alt = "$(require dark_background)",
+  bg_dark = "$(require darker_background)",
+  surface = "$(require lighter_background)",
+
+  fg = "$(require foreground)",
+  fg_dim = "$(require dark_foreground)",
+  fg_subtle = "$(require light_foreground)",
+  muted = "$(require muted)",
+
+  accent = "$(require accent)",
+  selection = "$(require selection)",
+
+  red = "$(require red)",
+  orange = "$(either orange red)",
+  yellow = "$(require yellow)",
+  green = "$(require green)",
+  cyan = "$(require cyan)",
+  blue = "$(require blue)",
+  magenta = "$(require magenta)",
+
+  ansi = {
+    normal = {
+      black = "$(require selection)", red = "$(require red)", green = "$(require green)", yellow = "$(require yellow)",
+      blue = "$(require blue)", magenta = "$(require magenta)", cyan = "$(require cyan)", white = "$(require light_foreground)",
+    },
+    bright = {
+      black = "$(require muted)", red = "$(either bright_red red)", green = "$(either bright_green green)", yellow = "$(either bright_yellow yellow)",
+      blue = "$(either bright_blue blue)", magenta = "$(either bright_magenta magenta)", cyan = "$(either bright_cyan cyan)", white = "$(require bright_foreground)",
+    },
+  },
+}
+LUA
+
+echo "wrote $out"

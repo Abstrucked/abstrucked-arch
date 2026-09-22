@@ -25,9 +25,12 @@ USAGE
 die() { echo "themectl: $*" >&2; exit 1; }
 
 themes() {
-  local f
+  local f name
   for f in "$THEME_DIR"/palettes/*.lua; do
-    basename "$f" .lua
+    name="$(basename "$f" .lua)"
+    # _defaults.lua fills in what a palette omits; it is not a theme.
+    [[ "$name" == _* ]] && continue
+    echo "$name"
   done
 }
 

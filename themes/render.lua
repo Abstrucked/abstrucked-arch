@@ -2,6 +2,10 @@
 -- Renders <template> to stdout, replacing {{key}} / {{key|format}} with values
 -- from the palette. Keys may be nested with dots (ansi.normal.red).
 --
+-- palettes/_defaults.lua, when present, returns a function(palette, mix) whose
+-- table fills in every key the palette leaves out, so a palette imported from
+-- an Omarchy colors.toml only has to carry the colors it actually has.
+--
 -- Formats (colors only):
 --   (none)     #rrggbb
 --   nohash     rrggbb
@@ -23,6 +27,43 @@ end
 
 local ok, palette = pcall(dofile, palette_path)
 if not ok then fail("cannot load palette " .. palette_path .. ": " .. tostring(palette)) end
+
+-- Blend two #rrggbb colors. amount is 0..1, 0 being all of `a`.
+local function mix(a, b, amount)
+  local ha, hb = tostring(a):match("^#(%x%x%x%x%x%x)$"), tostring(b):match("^#(%x%x%x%x%x%x)$")
+  if not ha or not hb then fail("mix needs two #rrggbb colors, got " .. tostring(a) .. " and " .. tostring(b)) end
+  local out = "#"
+  for i = 1, 5, 2 do
+    local ca = tonumber(ha:sub(i, i + 1), 16)
+    local cb = tonumber(hb:sub(i, i + 1), 16)
+    out = out .. ("%02x"):format(math.floor(ca * (1 - amount) + cb * amount + 0.5))
+  end
+  return out
+end
+
+-- Recursively fill only the keys the palette does not already define.
+local function fill(target, source)
+  for key, value in pairs(source) do
+    if type(value) == "table" then
+      if type(target[key]) ~= "table" then target[key] = {} end
+      fill(target[key], value)
+    elseif target[key] == nil then
+      target[key] = value
+    end
+  end
+end
+
+local defaults_path = (palette_path:match("^(.*[/\\])") or "./") .. "_defaults.lua"
+local defaults_file = io.open(defaults_path, "r")
+if defaults_file then
+  defaults_file:close()
+  local loaded_ok, build_defaults = pcall(dofile, defaults_path)
+  if not loaded_ok then fail("cannot load " .. defaults_path .. ": " .. tostring(build_defaults)) end
+  if type(build_defaults) ~= "function" then fail(defaults_path .. " must return a function(palette, mix)") end
+  local built_ok, defaults = pcall(build_defaults, palette, mix)
+  if not built_ok then fail("building defaults failed: " .. tostring(defaults)) end
+  fill(palette, defaults)
+end
 
 local function lookup(key)
   local v = palette
