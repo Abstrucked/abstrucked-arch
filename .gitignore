@@ -43,3 +43,8 @@ hyprland/.config/rofi/config.rasi
 hyprland/.config/swaync/colors.css
 hyprland/.config/waybar/colors.css
 hyprland/.config/waybar/config.jsonc
+
+# Written by plugins/pluginctl from enabled plugins' hypr.lua fragments.
+# hyprland.lua requires this unconditionally, so it must always exist;
+# run `pluginctl refresh` after a fresh clone.
+hyprland/.config/hypr/lua/plugins.lua

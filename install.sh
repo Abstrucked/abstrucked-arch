@@ -241,6 +241,10 @@ for component in "${SELECTED_COMPONENTS[@]}"; do
             fi
         done
 
+        # pluginctl regenerates the waybar template and hypr plugins module
+        # that themectl/hyprland.lua expect to already exist.
+        execute "$DOTFILES_DIR/plugins/pluginctl" refresh || log_warn "pluginctl refresh failed; run it manually"
+
         # Generated theme files are symlinks into themes/out, which is not
         # tracked; render them so the stowed configs do not dangle.
         execute "$DOTFILES_DIR/themes/themectl" apply || log_warn "themectl apply failed; run it manually"

@@ -1,0 +1,149 @@
+#!/bin/bash
+# pluginctl - enable/disable optional widgets (waybar modules, hyprland
+# bindings, helper scripts) built on top of this dotfiles stack.
+set -euo pipefail
+
+SELF="$(readlink -f "${BASH_SOURCE[0]}")"
+PLUGIN_DIR="$(dirname "$SELF")"
+DOTFILES_DIR="$(dirname "$PLUGIN_DIR")"
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/plugins"
+STATE_FILE="$STATE_DIR/enabled"
+BASE_TPL="$DOTFILES_DIR/themes/templates/waybar-config.jsonc.base.tpl"
+GEN_TPL="$DOTFILES_DIR/themes/templates/waybar-config.jsonc.tpl"
+HYPR_PLUGINS_LUA="$HOME/.config/hypr/lua/plugins.lua"
+BIN_DIR="$HOME/.local/bin"
+
+usage() {
+  cat <<USAGE
+Usage: pluginctl <command> [args]
+
+  list             List discovered plugins and whether each is enabled
+  enable <id>      Enable a plugin and reload
+  disable <id>     Disable a plugin and reload
+  refresh          Regenerate waybar/hyprland plugin wiring without reloading
+USAGE
+}
+
+die() { echo "pluginctl: $*" >&2; exit 1; }
+
+# Every directory under plugins/ with a manifest.conf is a plugin, id == dirname.
+plugin_ids() {
+  local d
+  for d in "$PLUGIN_DIR"/*/; do
+    [[ -f "$d/manifest.conf" ]] && basename "$d"
+  done
+}
+
+manifest_get() {
+  local id="$1" key="$2"
+  ( . "$PLUGIN_DIR/$id/manifest.conf"; echo "${!key:-}" )
+}
+
+enabled_ids() { [[ -r "$STATE_FILE" ]] && cat "$STATE_FILE" || true; }
+
+is_enabled() { [[ -r "$STATE_FILE" ]] && grep -qxF "$1" "$STATE_FILE"; }
+
+list() {
+  local id mark
+  for id in $(plugin_ids); do
+    if is_enabled "$id"; then mark="[x]"; else mark="[ ]"; fi
+    printf '%s %-20s %s\n' "$mark" "$id" "$(manifest_get "$id" NAME)"
+  done
+}
+
+# Rebuild the generated waybar template by splicing enabled plugins' module
+# defs into the %%PLUGIN_MODULES%% / %%PLUGIN_DEFS%% markers in the base
+# template. themectl's normal render pipeline treats the result like any
+# other template, so it stays unaware plugins exist at all.
+sync_waybar() {
+  [[ -r "$BASE_TPL" ]] || die "missing $BASE_TPL"
+  local tpl modules="" defs="" id module frag
+  tpl="$(cat "$BASE_TPL")"
+  for id in $(enabled_ids); do
+    [[ -f "$PLUGIN_DIR/$id/waybar.jsonc" ]] || continue
+    module="$(manifest_get "$id" WAYBAR_MODULE)"
+    [[ -n "$module" ]] || die "$id: waybar.jsonc present but WAYBAR_MODULE not set in manifest.conf"
+    frag="$(cat "$PLUGIN_DIR/$id/waybar.jsonc")"
+    modules+=$',\n        "'"$module"'"'
+    defs+=$',\n    "'"$module"'": '"$frag"
+  done
+  tpl="${tpl//%%PLUGIN_MODULES%%/$modules}"
+  tpl="${tpl//%%PLUGIN_DEFS%%/$defs}"
+  printf '%s\n' "$tpl" >"$GEN_TPL.new"
+  mv "$GEN_TPL.new" "$GEN_TPL"
+}
+
+# hyprland.lua requires("./lua/plugins") unconditionally, so this must
+# always exist, even as an empty module, with zero plugins enabled.
+sync_hypr() {
+  local id
+  mkdir -p "$(dirname "$HYPR_PLUGINS_LUA")"
+  : >"$HYPR_PLUGINS_LUA.new"
+  for id in $(enabled_ids); do
+    [[ -f "$PLUGIN_DIR/$id/hypr.lua" ]] || continue
+    {
+      echo "-- plugin: $id"
+      cat "$PLUGIN_DIR/$id/hypr.lua"
+      echo
+    } >>"$HYPR_PLUGINS_LUA.new"
+  done
+  mv "$HYPR_PLUGINS_LUA.new" "$HYPR_PLUGINS_LUA"
+}
+
+# Symlink each enabled plugin's bin/* into ~/.local/bin, dropping symlinks
+# for anything no longer enabled.
+sync_bin() {
+  local id f base
+  for id in $(plugin_ids); do
+    [[ -d "$PLUGIN_DIR/$id/bin" ]] || continue
+    for f in "$PLUGIN_DIR/$id/bin"/*; do
+      base="$(basename "$f")"
+      [[ -L "$BIN_DIR/$base" ]] && rm -f "$BIN_DIR/$base"
+    done
+  done
+  for id in $(enabled_ids); do
+    [[ -d "$PLUGIN_DIR/$id/bin" ]] || continue
+    mkdir -p "$BIN_DIR"
+    for f in "$PLUGIN_DIR/$id/bin"/*; do
+      ln -sf "$f" "$BIN_DIR/$(basename "$f")"
+    done
+  done
+}
+
+refresh() {
+  sync_waybar
+  sync_hypr
+  sync_bin
+}
+
+enable() {
+  local id="$1"
+  [[ -d "$PLUGIN_DIR/$id" ]] || die "unknown plugin '$id' (try: pluginctl list)"
+  is_enabled "$id" && { echo "already enabled: $id"; return; }
+  mkdir -p "$STATE_DIR"
+  { enabled_ids; echo "$id"; } | sort -u >"$STATE_FILE.new"
+  mv "$STATE_FILE.new" "$STATE_FILE"
+  refresh
+  "$DOTFILES_DIR/themes/themectl" apply
+  echo "enabled: $id"
+}
+
+disable() {
+  local id="$1"
+  is_enabled "$id" || { echo "not enabled: $id"; return; }
+  grep -vxF "$id" "$STATE_FILE" >"$STATE_FILE.new" || true
+  mv "$STATE_FILE.new" "$STATE_FILE"
+  refresh
+  "$DOTFILES_DIR/themes/themectl" apply
+  echo "disabled: $id"
+}
+
+cmd="${1:-}"
+case "$cmd" in
+  list) list ;;
+  enable) [[ -n "${2:-}" ]] || die "usage: pluginctl enable <id>"; enable "$2" ;;
+  disable) [[ -n "${2:-}" ]] || die "usage: pluginctl disable <id>"; disable "$2" ;;
+  refresh) refresh ;;
+  ""|-h|--help|help) usage ;;
+  *) usage >&2; exit 2 ;;
+esac

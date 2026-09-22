@@ -19,7 +19,7 @@
         "disk",
         "battery",
         "network",
-        "custom/power"
+        "custom/power"%%PLUGIN_MODULES%%
     ],
     "hyprland/workspaces": {
         "disable-scroll": true,
@@ -128,5 +128,5 @@
         "format": "",
         "tooltip": false,
         "on-click": "hypr-power-menu"
-    }
+    }%%PLUGIN_DEFS%%
 }
