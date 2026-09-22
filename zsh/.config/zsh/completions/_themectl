@@ -4,9 +4,9 @@
 # The first word is a subcommand; `set` and `render` take a theme name, which
 # themectl itself can list, so the names never have to be remembered.
 
-local -a commands themes
+local -a subcommands themes
 
-commands=(
+subcommands=(
   'list:list the available themes'
   'current:print the active theme'
   'set:render, link and reload a theme'
@@ -17,7 +17,7 @@ commands=(
 )
 
 if (( CURRENT == 2 )); then
-  _describe -t commands 'themectl command' commands
+  _describe -t commands 'themectl command' subcommands
   return
 fi
 
