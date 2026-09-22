@@ -44,7 +44,8 @@ hyprland/.config/swaync/colors.css
 hyprland/.config/waybar/colors.css
 hyprland/.config/waybar/config.jsonc
 
-# Written by plugins/pluginctl from enabled plugins' hypr.lua fragments.
-# hyprland.lua requires this unconditionally, so it must always exist;
-# run `pluginctl refresh` after a fresh clone.
+# Written by plugins/pluginctl from enabled plugins' hypr.lua / awesome.lua
+# fragments. hyprland.lua and theme.lua both require these unconditionally,
+# so they must always exist; run `pluginctl refresh` after a fresh clone.
 hyprland/.config/hypr/lua/plugins.lua
+awesome/.config/awesome/plugins.lua

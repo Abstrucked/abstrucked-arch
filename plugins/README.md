@@ -15,17 +15,30 @@ being wired into it permanently.
   concatenated into `~/.config/hypr/lua/plugins.lua` when enabled. Only wired
   into the Lua entry point (`hyprland.lua`, 0.55+); there is no legacy
   `hyprland.conf` equivalent.
+- `<id>/awesome.lua` - arbitrary Lua with `right_widgets`, `pl`, `c`, `s` in
+  scope, concatenated into `~/.config/awesome/plugins.lua` when enabled and
+  called once per connected screen from `theme.lua`, right after the
+  built-in widgets. Unlike `waybar.jsonc`, this isn't declarative data - the
+  fragment must `table.insert(right_widgets, ...)` its own widget, exactly
+  like the built-ins in `themes/powerarrow/theme.lua` do (`pl(...)` themes
+  the widget's background, `c` is the palette, `s` the screen).
 - `<id>/bin/*` - helper scripts, symlinked into `~/.local/bin/` when enabled.
+
+A pure-waybar plugin is a no-op under Awesome (it has its own wibox bar, not
+waybar); a pure-`hypr.lua` plugin is a no-op under Awesome and vice versa. A
+widget meant to show up in both sessions needs both a `waybar.jsonc` and an
+`awesome.lua`.
 
 Enabled state lives in `~/.local/state/plugins/enabled`, one id per line.
 Enabling/disabling regenerates the generated files above and runs `themectl
 apply`, which re-renders, re-links and reloads everything (waybar, hyprland,
-...) the same way a theme change does.
+awesome, ...) the same way a theme change does.
 
-`themes/templates/waybar-config.jsonc.tpl` and
-`hyprland/.config/hypr/lua/plugins.lua` are generated (gitignored) from
+`themes/templates/waybar-config.jsonc.tpl`, `hyprland/.config/hypr/lua/plugins.lua`
+and `awesome/.config/awesome/plugins.lua` are generated (gitignored) from
 `waybar-config.jsonc.base.tpl` and enabled plugins respectively. Run
-`pluginctl refresh` after a fresh clone, same as `themectl apply`.
+`pluginctl refresh` after a fresh clone, same as `themectl apply`. Validate
+Awesome's side with `awesome --check` before reloading a live session.
 
 Porting an Omarchy shell plugin means reading what it does and writing a
 native version here (a waybar module + script, usually) - Omarchy's plugins
