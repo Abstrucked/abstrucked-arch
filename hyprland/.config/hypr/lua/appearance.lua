@@ -1,11 +1,13 @@
+local theme = require("./lua/theme")
+
 hl.config({
     general = {
         gaps_in = 4,
         gaps_out = 4,
         border_size = 0,
         col = {
-            active_border = "rgba(fab387ff)",
-            inactive_border = "rgba(89dcebff)",
+            active_border = theme.active_border,
+            inactive_border = theme.inactive_border,
         },
         layout = "dwindle",
         allow_tearing = false,

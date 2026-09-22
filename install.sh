@@ -24,13 +24,6 @@ if [[ "$XDG_CONFIG_HOME" != "$HOME/.config" ]]; then
 fi
 export XDG_CONFIG_HOME
 
-load_theme_selector() {
-    # Keep selector implementation variables out of the installer's scope.
-    local DOTFILES_DIR="$1"
-    local THEME_FILE
-    source "$2"
-}
-
 # Set up cleanup trap
 setup_cleanup_trap
 
@@ -247,6 +240,10 @@ for component in "${SELECTED_COMPONENTS[@]}"; do
                 die "$package directory not found"
             fi
         done
+
+        # Generated theme files are symlinks into themes/out, which is not
+        # tracked; render them so the stowed configs do not dangle.
+        execute "$DOTFILES_DIR/themes/themectl" apply || log_warn "themectl apply failed; run it manually"
         
         progress_complete "done"
         break
@@ -257,94 +254,12 @@ done
 for component in "${SELECTED_COMPONENTS[@]}"; do
     name=$(get_component_name "$component")
     step=$(get_component_step "$component")
-    
+
     if [[ "$name" == "theme" ]]; then
-        progress_step "Setting up Alacritty theme"
-        theme_script="$DOTFILES_DIR/btop/.config/btop/themes/theme.sh"
-        
-        if validate_file "$theme_script" false; then
-            if [[ "$DRY_RUN" == "true" ]]; then
-                log_info "[dry-run] Would source theme and write Alacritty theme.toml"
-            else
-                load_theme_selector "$DOTFILES_DIR" "$theme_script" || die "Failed to source theme.sh"
-                validate_theme_variables || die "Invalid theme configuration"
-
-                mkdir -p "$XDG_CONFIG_HOME/alacritty"
-                theme_target=$(readlink -f -- "$XDG_CONFIG_HOME/alacritty/theme.toml")
-                backup_item "$theme_target" || die "Failed to back up Alacritty theme"
-                cat > "$XDG_CONFIG_HOME/alacritty/theme.toml" <<EOF
-[colors.primary]
-background = "$PRIMARY_BACKGROUND"
-foreground = "$PRIMARY_FOREGROUND"
-dim_foreground = "$PRIMARY_DIM_FOREGROUND"
-bright_foreground = "$PRIMARY_BRIGHT_FOREGROUND"
-
-[colors.cursor]
-text = "$CURSOR_TEXT"
-cursor = "$CURSOR_CURSOR"
-
-[colors.vi_mode_cursor]
-text = "$VI_MODE_CURSOR_TEXT"
-cursor = "$VI_MODE_CURSOR_CURSOR"
-
-[colors.search.matches]
-foreground = "$SEARCH_MATCHES_FOREGROUND"
-background = "$SEARCH_MATCHES_BACKGROUND"
-
-[colors.search.focused_match]
-foreground = "$SEARCH_FOCUSED_MATCH_FOREGROUND"
-background = "$SEARCH_FOCUSED_MATCH_BACKGROUND"
-
-[colors.footer_bar]
-foreground = "$FOOTER_BAR_FOREGROUND"
-background = "$FOOTER_BAR_BACKGROUND"
-
-[colors.hints.start]
-foreground = "$HINTS_START_FOREGROUND"
-background = "$HINTS_START_BACKGROUND"
-
-[colors.hints.end]
-foreground = "$HINTS_END_FOREGROUND"
-background = "$HINTS_END_BACKGROUND"
-
-[colors.selection]
-text = "$SELECTION_TEXT"
-background = "$SELECTION_BACKGROUND"
-
-[colors.normal]
-black = "$NORMAL_BLACK"
-red = "$NORMAL_RED"
-green = "$NORMAL_GREEN"
-yellow = "$NORMAL_YELLOW"
-blue = "$NORMAL_BLUE"
-magenta = "$NORMAL_MAGENTA"
-cyan = "$NORMAL_CYAN"
-white = "$NORMAL_WHITE"
-
-[colors.bright]
-black = "$BRIGHT_BLACK"
-red = "$BRIGHT_RED"
-green = "$BRIGHT_GREEN"
-yellow = "$BRIGHT_YELLOW"
-blue = "$BRIGHT_BLUE"
-magenta = "$BRIGHT_MAGENTA"
-cyan = "$BRIGHT_CYAN"
-white = "$BRIGHT_WHITE"
-
-[[colors.indexed_colors]]
-index = 16
-color = "$INDEXED_16"
-
-[[colors.indexed_colors]]
-index = 17
-color = "$INDEXED_17"
-EOF
-            fi
-            progress_complete "done"
-        else
-            progress_complete "skipped"
-            log_warn "Theme setup script not found"
-        fi
+        progress_step "Applying system theme"
+        # themectl renders every app's colors from one palette; see themes/README.md.
+        execute "$DOTFILES_DIR/themes/themectl" set "${DOTFILES_THEME:-mocha-peach}" || die "Failed to apply theme"
+        progress_complete "done"
         break
     fi
 done

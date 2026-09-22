@@ -8,21 +8,29 @@
 -- * override the configuration of LazyVim plugins
 return {
   -- THEMES --
-  {
-    "catppuccin/nvim",
-    name = "catppuccin",
-    priority = 1000,
-    config = function()
-      vim.g.catppuccin_flavour = os.getenv("THEME_FLAVOUR") or "mocha"
-      require("catppuccin").setup()
-      vim.cmd.colorscheme("catppuccin")
-    end,
-  },
-  -- Configure LazyVim to load catppuccin
+  -- The active theme comes from `themectl` (see ~/.dotfiles/themes), which
+  -- writes its colorscheme and flavour to a state file. LazyVim calls
+  -- `colorscheme` at startup; FocusGained re-reads the file so a running
+  -- Neovim follows a theme change.
+  { "catppuccin/nvim", name = "catppuccin", priority = 1000 },
   {
     "LazyVim/LazyVim",
     opts = {
-      colorscheme = "catppuccin",
+      colorscheme = function()
+        local function apply()
+          local state = (vim.env.XDG_STATE_HOME or (vim.env.HOME .. "/.local/state")) .. "/themes/nvim"
+          local ok, lines = pcall(vim.fn.readfile, state)
+          local scheme = ok and lines[1] or "catppuccin"
+          local flavour = ok and lines[2] or os.getenv("THEME_FLAVOUR") or "mocha"
+          if scheme:match("^catppuccin") then
+            vim.g.catppuccin_flavour = flavour
+            require("catppuccin").setup({ flavour = flavour })
+          end
+          pcall(vim.cmd.colorscheme, scheme)
+        end
+        apply()
+        vim.api.nvim_create_autocmd("FocusGained", { callback = apply })
+      end,
     },
   },
   -- END THEMES --
