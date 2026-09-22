@@ -5,23 +5,27 @@ being wired into it permanently.
 
     pluginctl list | enable <id> | disable <id> | refresh
 
-- `<id>/manifest.conf` - `NAME="Display Name"`, and `WAYBAR_MODULE="custom/<id>"`
-  if the plugin has a bar widget.
+- `<id>/manifest.conf` - `NAME="Display Name"`, and if the plugin has a bar
+  widget, `WAYBAR_MODULE="custom/<id>"` plus optionally
+  `WAYBAR_SECTION="left|center|right"` (default `right`).
 - `<id>/waybar.jsonc` - the module's config body, e.g. `{ "format": "...",
-  "exec": "..." }`. Spliced into waybar's `modules-right` and its module
-  definitions when enabled; may use theme `{{key}}` placeholders like any
-  other template (see `themes/README.md`).
+  "exec": "..." }`. Its id is added to the declared `WAYBAR_SECTION`'s
+  modules array and its config to the module definitions when enabled; may
+  use theme `{{key}}` placeholders like any other template (see
+  `themes/README.md`).
 - `<id>/hypr.lua` - Hyprland Lua config statements (`hl.bind`, `hl.on`, ...),
   concatenated into `~/.config/hypr/lua/plugins.lua` when enabled. Only wired
   into the Lua entry point (`hyprland.lua`, 0.55+); there is no legacy
   `hyprland.conf` equivalent.
-- `<id>/awesome.lua` - arbitrary Lua with `right_widgets`, `pl`, `c`, `s` in
-  scope, concatenated into `~/.config/awesome/plugins.lua` when enabled and
-  called once per connected screen from `theme.lua`, right after the
-  built-in widgets. Unlike `waybar.jsonc`, this isn't declarative data - the
-  fragment must `table.insert(right_widgets, ...)` its own widget, exactly
-  like the built-ins in `themes/powerarrow/theme.lua` do (`pl(...)` themes
-  the widget's background, `c` is the palette, `s` the screen).
+- `<id>/awesome.lua` - arbitrary Lua with `left_widgets`, `right_widgets`,
+  `pl`, `c`, `s` in scope, concatenated into `~/.config/awesome/plugins.lua`
+  when enabled and called once per connected screen from `theme.lua`, right
+  after the built-in widgets. Unlike `waybar.jsonc`, this isn't declarative
+  data - the fragment must `table.insert()` its own widget into whichever
+  table it wants, exactly like the built-ins in `themes/powerarrow/theme.lua`
+  do (`pl(...)` themes the widget's background, `c` is the palette, `s` the
+  screen). There's no section field for this side; the fragment just picks
+  the table.
 - `<id>/bin/*` - helper scripts, symlinked into `~/.local/bin/` when enabled.
 
 A pure-waybar plugin is a no-op under Awesome (it has its own wibox bar, not

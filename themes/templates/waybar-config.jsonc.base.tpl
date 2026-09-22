@@ -5,10 +5,10 @@
     "spacing": 0,
     "modules-left": [
         "hyprland/workspaces",
-        "hyprland/window"
+        "hyprland/window"%%PLUGIN_MODULES_LEFT%%
     ],
     "modules-center": [
-        "clock"
+        "clock"%%PLUGIN_MODULES_CENTER%%
     ],
     "modules-right": [
         "tray",
@@ -19,7 +19,7 @@
         "disk",
         "battery",
         "network",
-        "custom/power"%%PLUGIN_MODULES%%
+        "custom/power"%%PLUGIN_MODULES_RIGHT%%
     ],
     "hyprland/workspaces": {
         "disable-scroll": true,
