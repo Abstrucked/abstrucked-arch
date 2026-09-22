@@ -1,0 +1,9 @@
+#!/bin/sh
+# Sourced by lightdm's Xsession wrapper (/etc/lightdm/Xsession) before the
+# window manager is exec'd. Awesome/Hyprland are launched directly by the
+# display manager, never through an interactive login shell, so zsh's PATH
+# additions in zsh/.zshrc never apply here. Without this, awful.spawn and
+# awful.widget.watch silently fail to find anything under ~/.local/bin
+# (including plugin scripts symlinked there by plugins/pluginctl) and
+# widgets are left rendering empty text.
+export PATH="$HOME/.local/bin:$HOME/n/bin:$HOME/.asdf/shims:$HOME/.local/share/pnpm:$PATH"

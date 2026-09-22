@@ -208,7 +208,7 @@ for component in "${SELECTED_COMPONENTS[@]}"; do
             hyprland) stow_packages+=("hyprland") ;;
             *) die "Invalid window manager: $WINDOW_MANAGER" ;;
         esac
-        stow_packages+=("ssh" "alacritty" "btop" "nvim" "pcmanfm" "scripts" "ghossty" "gnupg")
+        stow_packages+=("ssh" "alacritty" "btop" "nvim" "pcmanfm" "scripts" "ghossty" "gnupg" "xsession")
         
         # Add selected shell if shell component was selected
         if [[ -n "$SELECTED_SHELL" ]]; then
