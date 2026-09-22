@@ -81,8 +81,16 @@ naughty.config.notify_callback = function(args)
 	return args
 end
 
-theme.taglist_fg_focus = c.accent
-theme.taglist_bg_focus = "#00000000"
+-- Mirrors hyprland's waybar #workspaces styling: empty tags recede, occupied
+-- ones get bright text plus an accent underline (drawn by the taglist
+-- widget_template), and the active/urgent tag is an inverted accent block.
+theme.taglist_fg_empty = c.muted
+theme.taglist_fg_occupied = c.fg
+theme.taglist_fg_focus = c.bg
+theme.taglist_bg_focus = c.accent
+theme.taglist_fg_urgent = c.bg
+theme.taglist_bg_urgent = c.accent
+theme.taglist_underline = c.accent
 
 theme.tasklist_bg_focus = "#00000000"
 theme.tasklist_fg_focus = c.accent
@@ -104,8 +112,6 @@ theme.menu_height = dpi(16)
 theme.menu_width = dpi(140)
 theme.menu_submenu_icon = theme.dir .. "/icons/submenu.png"
 theme.awesome_icon = theme.dir .. "/icons/awesome.png"
-theme.taglist_squares_sel = theme.dir .. "/icons/square_sel.png"
-theme.taglist_squares_unsel = theme.dir .. "/icons/square_unsel.png"
 theme.layout_tile = theme.dir .. "/icons/tile.png"
 theme.layout_tileleft = theme.dir .. "/icons/tileleft.png"
 theme.layout_tilebottom = theme.dir .. "/icons/tilebottom.png"
@@ -336,6 +342,13 @@ local function pl(widget, bgcolor, padding)
 	)
 end
 
+-- The active tag is already a solid accent block, so only occupied
+-- background tags get the underline, as in the waybar stylesheet.
+local function update_taglist_underline(self, t)
+	local occupied = #t:clients() > 0 and not t.selected
+	self:get_children_by_id("underline_role")[1].bg = occupied and theme.taglist_underline or "#00000000"
+end
+
 function theme.at_screen_connect(s)
 	-- Quake application
 	s.quake = lain.util.quake({ app = awful.util.terminal })
@@ -374,7 +387,35 @@ function theme.at_screen_connect(s)
 	))
 
 	-- Create a taglist widget
-	s.mytaglist = awful.widget.taglist(s, awful.widget.taglist.filter.all, awful.util.taglist_buttons)
+	s.mytaglist = awful.widget.taglist({
+		screen = s,
+		filter = awful.widget.taglist.filter.all,
+		buttons = awful.util.taglist_buttons,
+		widget_template = {
+			{
+				nil,
+				{
+					{ id = "text_role", widget = wibox.widget.textbox },
+					left = dpi(7),
+					right = dpi(7),
+					widget = wibox.container.margin,
+				},
+				-- background containers skip drawing without a child, so give it
+				-- an empty one; a separator would instead claim the full bar width.
+				{
+					wibox.widget.base.make_widget(),
+					id = "underline_role",
+					forced_height = dpi(2),
+					widget = wibox.container.background,
+				},
+				layout = wibox.layout.align.vertical,
+			},
+			id = "background_role",
+			widget = wibox.container.background,
+			create_callback = update_taglist_underline,
+			update_callback = update_taglist_underline,
+		},
+	})
 
 	-- Create a tasklist widget
 	s.mytasklist = awful.widget.tasklist(s, awful.widget.tasklist.filter.currenttags, awful.util.tasklist_buttons)
