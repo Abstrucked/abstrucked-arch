@@ -11,7 +11,7 @@
         "clock"%%PLUGIN_MODULES_CENTER%%
     ],
     "modules-right": [
-        "tray",
+        "tray"%%PLUGIN_MODULES_RIGHT%%,
         "custom/notification",
         "pulseaudio",
         "memory",
@@ -19,7 +19,7 @@
         "disk",
         "battery",
         "network",
-        "custom/power"%%PLUGIN_MODULES_RIGHT%%
+        "custom/power"
     ],
     "hyprland/workspaces": {
         "disable-scroll": true,
