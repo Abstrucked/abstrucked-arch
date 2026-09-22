@@ -1,0 +1,12 @@
+#!/bin/bash
+# Toggles tailscale up/down. Requires `sudo tailscale set --operator=$USER`
+# to have been run once, since this runs unattended from a bar click with no
+# TTY for a sudo password prompt.
+set -euo pipefail
+
+state="$(tailscale status --json 2>/dev/null | jq -r '.BackendState' 2>/dev/null || echo Stopped)"
+if [[ "$state" == "Running" ]]; then
+  tailscale down
+else
+  tailscale up
+fi

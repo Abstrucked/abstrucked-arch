@@ -1,0 +1,8 @@
+{
+    "exec": "tailscale-status",
+    "return-type": "json",
+    "interval": 15,
+    "on-click": "tailscale-menu",
+    "on-click-right": "tailscale-toggle",
+    "tooltip": true
+}

@@ -1,0 +1,62 @@
+#!/bin/bash
+# Rofi menu for tailscale: toggle, copy this device's IP, open the admin
+# console, and copy a peer's IP. A scoped-down native equivalent of
+# igor-alexandrov/omarchy-tailscale's panel (MIT) for a rofi+waybar stack
+# instead of a Quickshell one; no exit-node picker or Taildrop here.
+# Requires: tailscale, jq, rofi, wl-copy, xdg-open.
+set -euo pipefail
+
+status="$(tailscale status --json 2>/dev/null)" || {
+  notify-send "Tailscale" "tailscale is not running" 2>/dev/null || true
+  exit 1
+}
+
+backend_state="$(jq -r '.BackendState' <<<"$status")"
+self_ip="$(jq -r '.Self.TailscaleIPs[0] // "-"' <<<"$status")"
+
+if [[ "$backend_state" == "Running" ]]; then
+  toggle_label="Turn off Tailscale"
+else
+  toggle_label="Turn on Tailscale"
+fi
+copy_self_label="Copy this device's IP ($self_ip)"
+
+peers="$(jq -r '
+  (.Peer // {}) | to_entries
+  | map(.value)
+  | sort_by(.Online == false, .HostName)
+  | .[]
+  | "\(.HostName)\t\(.TailscaleIPs[0] // "-")\t\(if .Online then "online" else "offline" end)"
+' <<<"$status")"
+
+peer_lines=""
+if [[ -n "$peers" ]]; then
+  peer_lines="$(awk -F'\t' '{printf "%s  %s  [%s]\n", $1, $2, $3}' <<<"$peers")"
+fi
+
+menu="$toggle_label
+$copy_self_label
+Open admin console"
+[[ -n "$peer_lines" ]] && menu="$menu
+──────────
+$peer_lines"
+
+choice="$(rofi -dmenu -i -p "Tailscale" <<<"$menu")"
+[[ -n "$choice" ]] || exit 0
+
+case "$choice" in
+  "$toggle_label")
+    tailscale-toggle
+    ;;
+  "$copy_self_label")
+    printf '%s' "$self_ip" | wl-copy
+    ;;
+  "Open admin console")
+    xdg-open "https://login.tailscale.com/admin/machines"
+    ;;
+  "──────────") ;;
+  *)
+    ip="$(awk '{print $2}' <<<"$choice")"
+    [[ -n "$ip" && "$ip" != "-" ]] && printf '%s' "$ip" | wl-copy
+    ;;
+esac
