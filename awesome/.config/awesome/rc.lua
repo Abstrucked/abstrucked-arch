@@ -272,6 +272,8 @@ end)
 awful.screen.connect_for_each_screen(function(s)
 	beautiful.at_screen_connect(s)
 end)
+-- Restore after startup client management, which can otherwise change tags.
+awesome.connect_signal("startup", require("theme-session").restore)
 -- }}}
 
 -- {{{ Mouse bindings

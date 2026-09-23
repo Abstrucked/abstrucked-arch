@@ -12,7 +12,7 @@ subcommands=(
   'set:render, link and reload a theme'
   'next:switch to the next theme'
   'apply:re-render and reload the active theme'
-  'render:render a theme into out/ without linking or reloading'
+  'render:render a theme into an isolated temporary preview directory'
   'help:show usage'
 )
 

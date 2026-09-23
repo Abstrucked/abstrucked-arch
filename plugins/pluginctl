@@ -31,6 +31,7 @@ Usage: pluginctl <command> [args]
   enable <id>      Enable a plugin and reload
   disable <id>     Disable a plugin and reload
   refresh          Regenerate plugin wiring without reloading
+  template-waybar  Print the Waybar template without changing files
 USAGE
 }
 
@@ -88,7 +89,11 @@ sync_waybar() {
   tpl="${tpl//%%PLUGIN_MODULES_CENTER%%/$center}"
   tpl="${tpl//%%PLUGIN_MODULES_RIGHT%%/$right}"
   tpl="${tpl//%%PLUGIN_DEFS%%/$defs}"
-  printf '%s\n' "$tpl" >"$GEN_TPL.new"
+  if [[ "${1:-}" == stdout ]]; then
+    printf '%s\n' "$tpl"
+  else
+    printf '%s\n' "$tpl" >"$GEN_TPL.new"
+  fi
 }
 
 # hyprland.lua requires("./lua/plugins") unconditionally, so this must
@@ -281,6 +286,7 @@ case "$cmd" in
   enable) [[ -n "${2:-}" ]] || die "usage: pluginctl enable <id>"; enable "$2" ;;
   disable) [[ -n "${2:-}" ]] || die "usage: pluginctl disable <id>"; disable "$2" ;;
   refresh) refresh ;;
+  template-waybar) sync_waybar stdout ;;
   ""|-h|--help|help) usage ;;
   *) usage >&2; exit 2 ;;
 esac

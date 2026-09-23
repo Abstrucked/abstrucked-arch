@@ -1,2 +1,4 @@
-out/
+out
+.generations/
+.apply.lock
 templates/waybar-config.jsonc.tpl

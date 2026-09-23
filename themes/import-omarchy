@@ -1,82 +1,86 @@
-#!/bin/bash
-# import-omarchy - turn an Omarchy colors.toml into a themectl palette.
-#
-# Usage: import-omarchy <colors.toml> [name]
-#
-# Omarchy's palette carries 28 of the 66 keys the templates ask for; the rest
-# come from palettes/_defaults.lua. Only what is genuinely in colors.toml is
-# written here, so a later edit to the defaults reaches every imported palette.
-set -euo pipefail
+#!/usr/bin/env python3
+"""Import a flat Omarchy colors.toml, validating before publishing a palette."""
+import argparse
+import json
+import os
+from pathlib import Path
+import re
+import subprocess
+import sys
+import tempfile
+import tomllib
 
-SELF="$(readlink -f "${BASH_SOURCE[0]}")"
-THEME_DIR="$(dirname "$SELF")"
 
-src="${1:-}"
-[[ -n "$src" && -r "$src" ]] || { echo "usage: import-omarchy <colors.toml> [name]" >&2; exit 2; }
-name="${2:-$(basename "$(dirname "$(readlink -f "$src")")")}"
-[[ "$name" == _* ]] && { echo "import-omarchy: a palette name cannot start with _" >&2; exit 1; }
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("source", type=Path)
+    parser.add_argument("name", nargs="?")
+    parser.add_argument("--force", action="store_true", help="replace an existing palette")
+    args = parser.parse_args()
+    theme_dir = Path(__file__).resolve().parent
+    name = args.name or args.source.resolve().parent.name
+    if not re.fullmatch(r"[a-z0-9][a-z0-9-]*", name):
+        raise ValueError("name must contain lowercase letters, digits or hyphens and start with a letter or digit")
+    output = theme_dir / "palettes" / f"{name}.lua"
+    if os.path.lexists(output) and not args.force:
+        raise ValueError(f"{output} already exists; use --force to replace it")
+    with args.source.open("rb") as source:
+        colors = tomllib.load(source)
+    mode = colors.get("mode", "dark")
+    if mode not in ("dark", "light"):
+        raise ValueError("mode must be dark or light")
 
-# Flat "key = "#value"" lines; Omarchy's colors.toml has no sections.
-get() { sed -nE "s/^[[:space:]]*$1[[:space:]]*=[[:space:]]*\"?([^\"]*)\"?[[:space:]]*$/\1/p" "$src" | head -1; }
+    def color(key, fallback=None):
+        value = colors.get(key, colors.get(fallback))
+        if not isinstance(value, str) or not re.fullmatch(r"#[0-9a-fA-F]{6}", value):
+            raise ValueError(f"{key} must be a #rrggbb color")
+        return value
 
-require() {
-  local value
-  value="$(get "$1")"
-  [[ -n "$value" ]] || { echo "import-omarchy: $src has no '$1'" >&2; exit 1; }
-  printf '%s' "$value"
-}
+    palette = {"name": name, "variant": mode}
+    for role, key in {
+        "bg": "background", "bg_alt": "dark_background", "bg_dark": "darker_background",
+        "surface": "lighter_background", "fg": "foreground", "fg_dim": "dark_foreground",
+        "fg_subtle": "light_foreground", "muted": "muted", "accent": "accent",
+        "selection": "selection",
+    }.items():
+        palette[role] = color(key)
+    hues = ("red", "yellow", "green", "cyan", "blue", "magenta")
+    palette.update({hue: color(hue) for hue in hues})
+    palette["orange"] = color("orange", "red")
+    palette["ansi"] = {
+        "normal": {"black": color("selection"), **{h: color(h) for h in hues},
+                   "white": color("light_foreground")},
+        "bright": {"black": color("muted"), **{h: color("bright_" + h, h) for h in hues},
+                   "white": color("bright_foreground")},
+    }
 
-# Fall back to a second key when Omarchy omits the first.
-either() {
-  local value
-  value="$(get "$1")"
-  [[ -n "$value" ]] || value="$(get "$2")"
-  printf '%s' "$value"
-}
+    def lua(value):
+        if isinstance(value, dict):
+            return "{\n" + "\n".join(f"  {k} = {lua(v)}," for k, v in value.items()) + "\n}"
+        return json.dumps(value)  # Validated ASCII strings are valid Lua strings.
 
-mode="$(get mode)"
-[[ -n "$mode" ]] || mode=dark
+    # Stage beside the destination. Hard-link creation enforces no-clobber even
+    # when two imports race for the same name.
+    fd, temporary = tempfile.mkstemp(prefix=".import-", suffix=".lua", dir=output.parent)
+    try:
+        with os.fdopen(fd, "w") as stream:
+            stream.write("-- Imported from Omarchy; missing roles come from _defaults.lua.\nreturn " + lua(palette) + "\n")
+        for template in (theme_dir / "templates").glob("*.tpl"):
+            subprocess.run(["lua", str(theme_dir / "render.lua"), temporary, str(template)],
+                           check=True, stdout=subprocess.DEVNULL)
+        os.chmod(temporary, 0o644)
+        if args.force:
+            os.replace(temporary, output)
+        else:
+            os.link(temporary, output)
+        print(f"wrote {output}")
+    finally:
+        Path(temporary).unlink(missing_ok=True)
 
-out="$THEME_DIR/palettes/$name.lua"
-cat > "$out" <<LUA
--- Imported from an Omarchy colors.toml by import-omarchy.
--- Everything the templates need beyond these keys comes from _defaults.lua.
-return {
-  name = "$name",
-  variant = "$mode",
 
-  bg = "$(require background)",
-  bg_alt = "$(require dark_background)",
-  bg_dark = "$(require darker_background)",
-  surface = "$(require lighter_background)",
-
-  fg = "$(require foreground)",
-  fg_dim = "$(require dark_foreground)",
-  fg_subtle = "$(require light_foreground)",
-  muted = "$(require muted)",
-
-  accent = "$(require accent)",
-  selection = "$(require selection)",
-
-  red = "$(require red)",
-  orange = "$(either orange red)",
-  yellow = "$(require yellow)",
-  green = "$(require green)",
-  cyan = "$(require cyan)",
-  blue = "$(require blue)",
-  magenta = "$(require magenta)",
-
-  ansi = {
-    normal = {
-      black = "$(require selection)", red = "$(require red)", green = "$(require green)", yellow = "$(require yellow)",
-      blue = "$(require blue)", magenta = "$(require magenta)", cyan = "$(require cyan)", white = "$(require light_foreground)",
-    },
-    bright = {
-      black = "$(require muted)", red = "$(either bright_red red)", green = "$(either bright_green green)", yellow = "$(either bright_yellow yellow)",
-      blue = "$(either bright_blue blue)", magenta = "$(either bright_magenta magenta)", cyan = "$(either bright_cyan cyan)", white = "$(require bright_foreground)",
-    },
-  },
-}
-LUA
-
-echo "wrote $out"
+if __name__ == "__main__":
+    try:
+        main()
+    except (OSError, ValueError, subprocess.CalledProcessError) as error:
+        print(f"import-omarchy: {error}", file=sys.stderr)
+        sys.exit(1)

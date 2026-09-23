@@ -4,6 +4,10 @@ git
 base-devel
 # themes/themectl renders palettes through themes/render.lua
 lua
+# Palette import and safe TOML config updates (Python 3.11+)
+python
+# flock serializes theme switches
+util-linux
 
 # Terminal and shell
 zsh

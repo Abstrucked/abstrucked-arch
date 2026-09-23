@@ -8,6 +8,20 @@ STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/themes"
 BACKUP_DIR="${DOTFILES_BACKUP_ROOT:-$HOME/.dotfiles-backups}/themes"
 DEFAULT_THEME="mocha-peach"
 staged=""
+legacy_out=""
+cleanup() {
+  if [[ -n "$legacy_out" && ! -e "$THEME_DIR/out" && ! -L "$THEME_DIR/out" ]]; then
+    mv -T "$legacy_out" "$THEME_DIR/out"
+  fi
+  # Never delete a generation after its activation, even if interrupted just
+  # after mv and before staged is cleared.
+  if [[ -n "$staged" && "$(readlink -f "$THEME_DIR/out")" != "$staged" ]]; then
+    rm -rf -- "$staged"
+  fi
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 usage() {
   cat <<USAGE
@@ -18,7 +32,7 @@ Usage: themectl <command> [args]
   set <name>       Render, link and reload with <name>
   next             Switch to the next theme
   apply            Re-render and reload the active theme
-  render <name>    Render <name> into out/ only (no linking, no reload)
+  render <name>    Render into a new temporary preview directory
 USAGE
 }
 
@@ -35,7 +49,9 @@ themes() {
 }
 
 current() {
-  if [[ -r "$STATE_DIR/current" ]]; then
+  if [[ -r "$THEME_DIR/out/.theme-name" ]]; then
+    cat "$THEME_DIR/out/.theme-name"
+  elif [[ -r "$STATE_DIR/current" ]]; then
     cat "$STATE_DIR/current"
   else
     echo "$DEFAULT_THEME"
@@ -57,54 +73,67 @@ each_target() {
   done <"$THEME_DIR/targets.conf"
 }
 
-render_target() {
-  local template="$1" name="$2" out
-  out="$THEME_DIR/out/$template"
-  lua "$THEME_DIR/render.lua" "$THEME_DIR/palettes/$name.lua" "$THEME_DIR/templates/$template.tpl" >"$out.new"
-  mv "$out.new" "$out"
-}
-
 render_all() {
   local name="$1"
+  [[ "$name" =~ ^[a-z0-9][a-z0-9-]*$ ]] || die "invalid theme name '$name'"
   [[ -r "$THEME_DIR/palettes/$name.lua" ]] || die "unknown theme '$name' (try: themectl list)"
-  mkdir -p "$THEME_DIR/out"
-  # Render everything to a scratch dir first so one bad template cannot leave
-  # a half-updated theme behind.
-  staged="$(mktemp -d)"
-  trap 'rm -rf "$staged"' EXIT
+  # Generate from current plugin state without changing plugin wiring or apps.
+  "$THEME_DIR/../plugins/pluginctl" template-waybar >"$staged/.waybar.tpl"
   local fn
   fn() {
-    lua "$THEME_DIR/render.lua" "$THEME_DIR/palettes/$name.lua" "$THEME_DIR/templates/$1.tpl" >"$staged/$1" \
+    local template="$THEME_DIR/templates/$1.tpl"
+    [[ "$1" != waybar-config.jsonc ]] || template="$staged/.waybar.tpl"
+    lua "$THEME_DIR/render.lua" "$THEME_DIR/palettes/$name.lua" "$template" >"$staged/$1" \
       || die "rendering $1 failed; nothing was changed"
   }
   each_target fn
-  local f
-  for f in "$staged"/*; do
-    mv "$f" "$THEME_DIR/out/$(basename "$f")"
-  done
+  printf '%s\n' "$name" >"$staged/.theme-name"
 }
 
 link_target() {
-  local template="$1" dest="$2" out rel
+  local template="$1" dest="$2" out rel linkdir
   [[ "$dest" == "-" ]] && return 0
   out="$THEME_DIR/out/$template"
   mkdir -p "$(dirname "$dest")"
-  if [[ -L "$dest" && "$(readlink -f "$dest")" == "$out" ]]; then
+  # Preserve out/ in the link so it follows future generation swaps.
+  rel="$(realpath -ms --relative-to="$(readlink -f "$(dirname "$dest")")" "$out")"
+  if [[ -L "$dest" && "$(readlink "$dest")" == "$rel" ]]; then
     return
   fi
   if [[ -e "$dest" || -L "$dest" ]]; then
     mkdir -p "$BACKUP_DIR"
     cp -P --backup=numbered "$dest" "$BACKUP_DIR/$template.orig"
-    rm -f "$dest"
   fi
-  rel="$(realpath -m --relative-to="$(readlink -f "$(dirname "$dest")")" "$out")"
-  ln -s "$rel" "$dest"
+  linkdir="$(mktemp -d "$(dirname "$dest")/.themectl-link.XXXXXX")"
+  ln -s "$rel" "$linkdir/link"
+  if ! mv -Tf "$linkdir/link" "$dest"; then
+    rm -rf -- "$linkdir"
+    die "could not link $dest"
+  fi
+  rmdir "$linkdir"
 }
 
 reload_target() {
   local reload="$3"
   [[ -n "$reload" ]] || return 0
-  bash -c "$reload" >/dev/null 2>&1 || echo "themectl: reload failed: $reload" >&2
+  run_bounded "reload $1" bash -c "$reload"
+}
+
+# Bound the whole process group, including IPC helpers and their children.
+# A stalled app must not prevent later apps (especially the desktop) reloading.
+run_bounded() {
+  local label="$1" status
+  shift
+  if timeout --kill-after=1s 5s "$@" 9>&- >/dev/null 2>&1; then
+    return 0
+  else
+    status=$?
+  fi
+  if [[ "$status" == 124 || "$status" == 137 ]]; then
+    echo "themectl: $label timed out after 5s; continuing" >&2
+  else
+    echo "themectl: $label failed (exit $status); continuing" >&2
+  fi
 }
 
 # hooks/*.sh update apps whose config files themectl cannot own outright.
@@ -119,23 +148,48 @@ run_hooks() {
       source "$THEME_DIR/out/env.sh"
       set +a
       export THEME_DIR
-      "$hook"
-    ) || echo "themectl: hook failed: $(basename "$hook")" >&2
+      run_bounded "hook $(basename "$hook")" "$hook"
+    ) 9>&- || echo "themectl: hook failed: $(basename "$hook")" >&2
   done
 }
 
 apply() {
   local name="$1"
+  mkdir -p "$THEME_DIR/.generations"
+  staged="$(mktemp -d "$THEME_DIR/.generations/generation.XXXXXX")"
   render_all "$name"
   each_target link_target
+  # Keep legacy output intact for recovery. This one-time directory migration
+  # has a brief gap; every subsequent activation is an atomic rename.
+  if [[ -d "$THEME_DIR/out" && ! -L "$THEME_DIR/out" ]]; then
+    legacy_out="$(mktemp -d "$THEME_DIR/.generations/legacy.XXXXXX")"
+    mv -T "$THEME_DIR/out" "$legacy_out"
+    if ! ln -s ".generations/$(basename "$legacy_out")" "$THEME_DIR/out"; then
+      mv -T "$legacy_out" "$THEME_DIR/out"
+      die "could not migrate legacy output"
+    fi
+    legacy_out=""
+  fi
+  ln -s ".generations/$(basename "$staged")" "$staged/.activate"
+  mv -Tf "$staged/.activate" "$THEME_DIR/out"
+  staged=""
   mkdir -p "$STATE_DIR"
-  echo "$name" >"$STATE_DIR/current"
+  printf '%s\n' "$name" >"$STATE_DIR/current.new"
+  mv -Tf "$STATE_DIR/current.new" "$STATE_DIR/current"
   run_hooks
   each_target reload_target
   echo "theme: $name"
 }
 
 cmd="${1:-}"
+# Lock before reading current, including next/apply. Output is shared by
+# every user of this checkout, so the lock belongs beside it.
+case "$cmd" in
+  set|apply|next)
+    exec 9>"$THEME_DIR/.apply.lock"
+    flock -x 9
+    ;;
+esac
 case "$cmd" in
   list) themes ;;
   current) current ;;
@@ -149,7 +203,13 @@ case "$cmd" in
     done
     apply "$nxt"
     ;;
-  render) [[ -n "${2:-}" ]] || die "usage: themectl render <name>"; render_all "$2"; echo "rendered $2 -> $THEME_DIR/out" ;;
+  render)
+    [[ -n "${2:-}" ]] || die "usage: themectl render <name>"
+    staged="$(mktemp -d "${TMPDIR:-/tmp}/themectl-preview.XXXXXX")"
+    render_all "$2"
+    echo "rendered $2 -> $staged"
+    staged="" # Keep the preview for inspection.
+    ;;
   ""|-h|--help|help) usage ;;
   *) usage >&2; exit 2 ;;
 esac
