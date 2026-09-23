@@ -1,0 +1,300 @@
+#!/bin/bash
+# display-detect - the one place that knows about monitors. Classifies each
+# connected output by its shape, lays the outputs out, and picks each one's
+# wallpaper, for Hyprland (hyprctl) and for X11/Awesome (xrandr) alike, so
+# the desktop (ultrawide + 16:9) and the laptop (built-in panel) run the same
+# config.
+#
+# Classes: `internal` (eDP/LVDS/DSI, a laptop's own panel), `ultrawide`
+# (aspect ratio 2:1 or wider, e.g. 3440x1440), `wide` (anything else).
+#
+# Layout: external outputs in a row at the top, ultrawides first, each at its
+# preferred resolution and highest refresh rate there; a laptop panel sits
+# centred under the first of them, or alone at 0x0.
+#
+# Wallpaper: from ~/.backgrounds/sets/<set>/, first `<class>-<W>x<H>.<ext>`,
+# then `<class>.<ext>` (scaled to cover); an internal panel falls back to the
+# `wide` images. The set is $WALLPAPER_SET, else the one saved with `set`,
+# else the one named after the current theme if it exists, else `default`.
+set -euo pipefail
+
+BG_DIR="${THEME_BG_DIR:-$HOME/.backgrounds}"
+SETS_DIR="$BG_DIR/sets"
+STATE_HOME="${XDG_STATE_HOME:-$HOME/.local/state}"
+SET_FILE="$STATE_HOME/display/wallpaper-set"
+THEME_FILE="$STATE_HOME/themes/current"
+HYPRLOCK_CONF="${XDG_CONFIG_HOME:-$HOME/.config}/hypr/lock-backgrounds.conf"
+EXTENSIONS=(png jpg jpeg webp)
+
+usage() {
+  cat <<USAGE
+Usage: display-detect <command>
+
+  list          Print each output: name, size, rate, class, position, wallpaper
+  layout        Arrange the outputs (and, under Hyprland, refresh lock backgrounds)
+  wallpaper     Set each output's wallpaper (Hyprland; X11 only prints them)
+  apply         layout, then wallpaper
+  paths         Print "<output><TAB><wallpaper>" for each output
+  set [<name>]  Save the wallpaper set to use, or print the active one
+  sets          List the available wallpaper sets
+USAGE
+}
+
+die() { echo "display-detect: $*" >&2; exit 1; }
+
+backend() {
+  if [[ -n "${DISPLAY_DETECT_BACKEND:-}" ]]; then
+    echo "$DISPLAY_DETECT_BACKEND"
+  elif [[ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]]; then
+    echo hypr
+  elif [[ -n "${DISPLAY:-}" ]]; then
+    echo x11
+  else
+    die "neither Hyprland nor an X display is running"
+  fi
+}
+
+# "<name> <width> <height> <rate>" per connected output, at the mode it
+# should run: Hyprland's current resolution (the config starts every output
+# at "preferred") at the best rate it offers there; X11's preferred mode at
+# its best rate. $1=probe makes xrandr re-probe for newly plugged outputs,
+# which is slow, so only layout asks for it.
+outputs() {
+  case "$(backend)" in
+    hypr)
+      hyprctl monitors -j | jq -r '.[]
+        | . as $m
+        | ([$m.availableModes[]?
+            | select(startswith("\($m.width)x\($m.height)@"))
+            | sub("^[^@]*@"; "") | sub("Hz$"; "") | tonumber] | max) as $best
+        | "\(.name) \(.width) \(.height) \($best // .refreshRate)"'
+      ;;
+    x11)
+      local query=--current
+      [[ "${1:-}" == probe ]] && query=--query
+      xrandr "$query" | awk '
+        function flush(  size) {
+          if (name == "") return
+          if (mode == "") { mode = first; rate = first_rate }
+          if (mode != "") { split(mode, size, "x"); print name, size[1] + 0, size[2] + 0, rate }
+          name = ""
+        }
+        /^[^ \t]/ {
+          flush()
+          if ($2 == "connected") { name = $1; mode = ""; rate = ""; first = "" }
+          next
+        }
+        name != "" {
+          preferred = 0; best = 0
+          for (i = 2; i <= NF; i++) {
+            r = $i
+            if (r ~ /\+/) preferred = 1
+            gsub(/[*+]/, "", r)
+            if (r + 0 > best) best = r + 0
+          }
+          if (first == "") { first = $1; first_rate = best }
+          if (preferred && mode == "") { mode = $1; rate = best }
+        }
+        END { flush() }'
+      ;;
+    *) die "unknown backend '$(backend)'" ;;
+  esac
+}
+
+classify() {
+  local name="$1" width="$2" height="$3"
+  if [[ "$name" =~ ^(eDP|LVDS|DSI) ]]; then
+    echo internal
+  elif ((width >= 2 * height)); then
+    echo ultrawide
+  else
+    echo wide
+  fi
+}
+
+active_set() {
+  local name=""
+  if [[ -n "${WALLPAPER_SET:-}" ]]; then
+    name="$WALLPAPER_SET"
+  elif [[ -r "$SET_FILE" ]]; then
+    name="$(<"$SET_FILE")"
+  elif [[ -r "$THEME_FILE" && -d "$SETS_DIR/$(<"$THEME_FILE")" ]]; then
+    name="$(<"$THEME_FILE")"
+  fi
+  if [[ -n "$name" && -d "$SETS_DIR/$name" ]]; then
+    echo "$name"
+  else
+    echo default
+  fi
+}
+
+# The best image for a <class> <width> <height> output, or nothing.
+wallpaper_for() {
+  local class="$1" width="$2" height="$3" set dir c base ext
+  local classes=("$class")
+  [[ "$class" == internal ]] && classes+=(wide)
+  for set in "$(active_set)" default; do
+    dir="$SETS_DIR/$set"
+    [[ -d "$dir" ]] || continue
+    for c in "${classes[@]}"; do
+      for base in "$c-${width}x${height}" "$c"; do
+        for ext in "${EXTENSIONS[@]}"; do
+          [[ -e "$dir/$base.$ext" ]] && { readlink -f "$dir/$base.$ext"; return; }
+        done
+      done
+    done
+  done
+}
+
+# Tab-separated "<name> <w> <h> <rate> <class> <x> <y> <wallpaper>" per
+# output, in placement order.
+plan() {
+  local name width height rate class
+  local -a ultrawide=() wide=() internal=()
+  while read -r name width height rate; do
+    [[ -n "$name" ]] || continue
+    class="$(classify "$name" "$width" "$height")"
+    case "$class" in
+      ultrawide) ultrawide+=("$name $width $height $rate $class") ;;
+      wide) wide+=("$name $width $height $rate $class") ;;
+      internal) internal+=("$name $width $height $rate $class") ;;
+    esac
+  done < <(outputs "${1:-}" | sort)
+
+  local x=0 top_width=0 top_height=0 entry
+  for entry in "${ultrawide[@]}" "${wide[@]}"; do
+    read -r name width height rate class <<<"$entry"
+    ((top_width == 0)) && { top_width="$width"; top_height="$height"; }
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$name" "$width" "$height" "$rate" "$class" \
+      "$x" 0 "$(wallpaper_for "$class" "$width" "$height")"
+    x=$((x + width))
+  done
+  for entry in "${internal[@]}"; do
+    read -r name width height rate class <<<"$entry"
+    local ix=0 iy=0
+    if ((top_width > 0)); then
+      ix=$(((top_width - width) / 2)); ((ix < 0)) && ix=0
+      iy="$top_height"
+    fi
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$name" "$width" "$height" "$rate" "$class" \
+      "$ix" "$iy" "$(wallpaper_for "$class" "$width" "$height")"
+    # A second built-in panel is not a real case; stack any extras below.
+    top_height=$((iy + height)); top_width=$((top_width > 0 ? top_width : width))
+  done
+}
+
+# hyprlock.conf sources this after its own catch-all background, so each
+# output gets its own image on the lock screen too. hyprlock skips a missing
+# or broken source with a logged error rather than refusing to lock.
+write_hyprlock() {
+  local rows="$1" name wallpaper
+  mkdir -p "$(dirname "$HYPRLOCK_CONF")"
+  {
+    echo "# generated by display-detect; one lock background per output"
+    while IFS=$'\t' read -r name _ _ _ _ _ _ wallpaper; do
+      [[ -n "$name" && -n "$wallpaper" ]] || continue
+      cat <<CONF
+
+background {
+    monitor = $name
+    color = \$lock_bg
+    path = $wallpaper
+    blur_passes = 3
+    blur_size = 6
+    brightness = 0.6
+}
+CONF
+    done <<<"$rows"
+  } >"$HYPRLOCK_CONF.new"
+  mv "$HYPRLOCK_CONF.new" "$HYPRLOCK_CONF"
+}
+
+layout() {
+  local rows name width height rate _class x y _wallpaper
+  rows="$(plan probe)"
+  [[ -n "$rows" ]] || die "no connected outputs found"
+  case "$(backend)" in
+    hypr)
+      while IFS=$'\t' read -r name width height rate _class x y _wallpaper; do
+        hyprctl eval "hl.monitor({ output = \"$name\", mode = \"${width}x${height}@${rate}\", position = \"${x}x${y}\", scale = 1 })" >/dev/null
+      done <<<"$rows"
+      write_hyprlock "$rows"
+      ;;
+    x11)
+      local -a args=()
+      local primary=1
+      while IFS=$'\t' read -r name width height rate _class x y _wallpaper; do
+        args+=(--output "$name" --mode "${width}x${height}" --rate "$rate" --pos "${x}x${y}")
+        ((primary)) && args+=(--primary) && primary=0
+      done <<<"$rows"
+      # Release unplugged outputs so they stop claiming screen space.
+      while read -r name; do
+        args+=(--output "$name" --off)
+      done < <(xrandr --current | awk '$2 == "disconnected" { print $1 }')
+      xrandr "${args[@]}"
+      ;;
+  esac
+}
+
+wallpaper() {
+  local rows name wallpaper
+  rows="$(plan)"
+  case "$(backend)" in
+    hypr)
+      while IFS=$'\t' read -r name _ _ _ _ _ _ wallpaper; do
+        [[ -n "$wallpaper" ]] || { echo "display-detect: no wallpaper for $name" >&2; continue; }
+        hyprctl hyprpaper wallpaper "$name,$wallpaper" >/dev/null
+      done <<<"$rows"
+      write_hyprlock "$rows"
+      ;;
+    # Awesome sets its own wallpapers from `paths` whenever a screen changes.
+    x11) paths ;;
+  esac
+}
+
+paths() {
+  local name wallpaper
+  while IFS=$'\t' read -r name _ _ _ _ _ _ wallpaper; do
+    [[ -n "$name" && -n "$wallpaper" ]] && printf '%s\t%s\n' "$name" "$wallpaper"
+  done < <(plan)
+}
+
+set_wallpaper_set() {
+  local name="${1:-}"
+  if [[ -z "$name" ]]; then
+    active_set
+    return
+  fi
+  [[ -d "$SETS_DIR/$name" ]] || die "no wallpaper set '$name' in $SETS_DIR (try: display-detect sets)"
+  mkdir -p "$(dirname "$SET_FILE")"
+  printf '%s\n' "$name" >"$SET_FILE.new"
+  mv "$SET_FILE.new" "$SET_FILE"
+  if [[ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]]; then
+    wallpaper >/dev/null
+  elif [[ -n "${DISPLAY:-}" ]] && command -v awesome-client >/dev/null; then
+    # rc.lua re-picks a screen's wallpaper on property::geometry.
+    awesome-client 'for s in screen do s:emit_signal("property::geometry") end' >/dev/null 2>&1 || true
+  fi
+}
+
+list_sets() {
+  local dir active
+  active="$(active_set)"
+  for dir in "$SETS_DIR"/*/; do
+    [[ -d "$dir" ]] || continue
+    dir="$(basename "$dir")"
+    if [[ "$dir" == "$active" ]]; then echo "* $dir"; else echo "  $dir"; fi
+  done
+}
+
+case "${1:-}" in
+  list) plan | column -t -s $'\t' ;;
+  layout) layout ;;
+  wallpaper) wallpaper ;;
+  apply) layout; wallpaper ;;
+  paths) paths ;;
+  set) set_wallpaper_set "${2:-}" ;;
+  sets) list_sets ;;
+  ""|-h|--help|help) usage ;;
+  *) usage >&2; exit 2 ;;
+esac

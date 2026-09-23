@@ -464,6 +464,11 @@ Add executable scripts to `scripts/.local/bin/` and they'll be available system-
 - AwesomeWM themes: `awesome/.config/awesome/themes/`
 - Hyprland configuration: `hyprland/.config/hypr/`
 - Wallpapers: `backgrounds/` (linked to `~/.backgrounds`)
+- Monitors: `display-detect` lays out whatever is connected (ultrawide
+  first, 16:9 to its right, a laptop panel alone or below) and picks each
+  output's wallpaper from `backgrounds/sets/`, under both Awesome and
+  Hyprland, so the desktop and laptop share one config. See
+  `backgrounds/sets/README.md`.
 
 #### Switching Themes
 The dotfiles include support for Catppuccin themes (Mocha, Latte, Frappe, Macchiato). The Alacritty installer uses `btop/.config/btop/themes/theme.sh` and the selected `THEME` value to generate `~/.config/alacritty/theme.toml`.

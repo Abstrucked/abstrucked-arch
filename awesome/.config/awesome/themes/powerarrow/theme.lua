@@ -25,8 +25,31 @@ local default_theme_dir = gfs.get_themes_dir() .. "default/"
 theme.wallpaper = theme.bgDir .. "/cosmo.png"
 theme.wallpaperUltrawide = theme.bgDir .. "/arch_wide_bluish.png"
 
+-- display-detect (scripts package) decides which wallpaper suits which
+-- output, shared with Hyprland; the two images above are only the fallback
+-- for when it isn't on PATH or has nothing for this screen.
+local function detected_wallpaper(s)
+	local pipe = io.popen("display-detect paths 2>/dev/null")
+	if not pipe then
+		return nil
+	end
+	local found
+	for line in pipe:lines() do
+		local name, path = line:match("^([^\t]+)\t(.+)$")
+		if name and s.outputs[name] then
+			found = path
+		end
+	end
+	pipe:close()
+	return found
+end
+
 function theme.wallpaper_for(s)
-	if s.geometry.width == 3440 and s.geometry.height == 1440 then
+	local detected = detected_wallpaper(s)
+	if detected then
+		return detected
+	end
+	if s.geometry.width >= 2 * s.geometry.height then
 		return theme.wallpaperUltrawide
 	end
 	return theme.wallpaper
@@ -356,7 +379,7 @@ function theme.at_screen_connect(s)
 	s.cal = widgets.cal
 	s.fs = widgets.fs
 
-	gears.wallpaper.maximized(theme.wallpaper_for(s), s, true)
+	gears.wallpaper.maximized(theme.wallpaper_for(s), s, false)
 
 	-- Tags
 	awful.tag(awful.util.tagnames, s, awful.layout.layouts)

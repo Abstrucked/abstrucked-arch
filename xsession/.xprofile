@@ -7,3 +7,9 @@
 # (including plugin scripts symlinked there by plugins/pluginctl) and
 # widgets are left rendering empty text.
 export PATH="$HOME/.local/bin:$HOME/n/bin:$HOME/.asdf/shims:$HOME/.local/share/pnpm:$PATH"
+
+# Arrange the monitors (ultrawide first, 16:9 to its right, a laptop panel
+# alone or below) before the window manager starts, so Awesome builds its
+# screens and wallpapers against the final layout. Hyprland runs the same
+# script from its own session start.
+display-detect layout >/dev/null 2>&1 || true

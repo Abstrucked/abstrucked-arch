@@ -49,3 +49,6 @@ hyprland/.config/waybar/config.jsonc
 # so they must always exist; run `pluginctl refresh` after a fresh clone.
 hyprland/.config/hypr/lua/plugins.lua
 awesome/.config/awesome/plugins.lua
+
+# Written by display-detect from the connected outputs and wallpaper set.
+hyprland/.config/hypr/lock-backgrounds.conf

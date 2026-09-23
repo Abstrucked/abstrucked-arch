@@ -2,7 +2,9 @@
 
 set -eu
 
-hypr-monitor-layout || true
+# Lay out the outputs before anything draws on them; this also writes the
+# per-output lock backgrounds hyprlock.conf sources, ahead of hypridle.
+display-detect layout || true
 dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE || true
 systemctl --user import-environment WAYLAND_DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE || true
 
@@ -17,7 +19,7 @@ if command -v dex >/dev/null 2>&1; then
         --search-paths "${XDG_CONFIG_DIRS:-/etc/xdg}/autostart:${XDG_CONFIG_HOME:-$HOME/.config}/autostart" || true
 fi
 
-# Give hyprpaper a moment to expose its IPC socket, then select the same
-# ultrawide wallpaper Awesome uses for the 3440x1440 output.
+# Give hyprpaper a moment to expose its IPC socket, then give each output
+# the same wallpaper Awesome would.
 sleep 1
-hypr-wallpaper || true
+display-detect wallpaper || true
