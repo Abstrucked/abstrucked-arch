@@ -4,6 +4,29 @@ A comprehensive dotfiles setup for Arch Linux featuring AwesomeWM, Hyprland, Laz
 
 ## 🚀 Quick Start
 
+On a fresh Arch installation, log in as a regular user with sudo access and an
+internet connection. Install curl if needed (`sudo pacman -Syu --needed curl`),
+then run:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Abstrucked/abstrucked-arch/main/install/bootstrap.sh | bash
+```
+
+This command becomes available after `install/bootstrap.sh` is merged into `main`.
+The bootstrap updates the system and installs `base-devel`, `git`, and `curl`,
+clones `main` into `~/.dotfiles`, and starts the interactive installer. It reconnects
+standard input to your terminal so the installer menus work when launched through
+a pipe. An existing `~/.dotfiles` path is left untouched and stops the bootstrap;
+use the existing checkout's `./install.sh` to rerun installation.
+
+To use `curl -fsSL https://abstrucked.com/dotfiles/install | bash`, configure that
+HTTPS route on your website to redirect to the raw GitHub URL above, or serve
+`install/bootstrap.sh` directly as `text/plain`. This repository does not configure
+the domain or deploy that route. Cloning provides a Git checkout for future updates;
+no archive extraction is needed.
+
+Alternatively, clone and run the installer yourself:
+
 ```bash
 # Clone this repository
 git clone <your-repo-url> ~/dotfiles
