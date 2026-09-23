@@ -28,7 +28,12 @@ subcommands, and `enable` and `disable` complete the plugins each can act on.
   table it wants, exactly like the built-ins in `themes/powerarrow/theme.lua`
   do (`pl(...)` themes the widget's background, `c` is the palette, `s` the
   screen). There's no section field for this side; the fragment just picks
-  the table.
+  the table. Since the fragment runs once per screen, build widgets inside
+  `once(function() ... return widget end)`, which runs on the first screen
+  and returns that same widget to every later one, so a watch command isn't
+  polled once per monitor. Each fragment runs under its own `pcall`: one that
+  errors has whatever it inserted rolled back and raises a notification,
+  without taking the other plugins or the bar down with it.
 - `<id>/bin/*` - helper scripts, symlinked into `~/.local/bin/` when enabled.
 
 A pure-waybar plugin is a no-op under Awesome (it has its own wibox bar, not
@@ -38,7 +43,10 @@ widget meant to show up in both sessions needs both a `waybar.jsonc` and an
 
 Enabled state lives in `~/.local/state/plugins/enabled`, one id per line.
 Enabling/disabling regenerates the generated files above and runs `themectl
-apply`, which re-renders, re-links and reloads everything (waybar, hyprland,
+apply`. The files are built and syntax-checked (`awesome --check`, `luac -p`)
+before any of them, or the state file, is replaced, so a plugin that fails
+to wire up is left disabled and the live setup is unchanged. `themectl apply`
+re-renders, re-links and reloads everything (waybar, hyprland,
 awesome, ...) the same way a theme change does.
 
 `themes/templates/waybar-config.jsonc.tpl`, `hyprland/.config/hypr/lua/plugins.lua`
