@@ -49,6 +49,8 @@ hl.bind(mainMod .. " + SHIFT + J", hl.dsp.window.swap({ next = true }))
 hl.bind(mainMod .. " + SHIFT + K", hl.dsp.window.swap({ prev = true }))
 hl.bind(mainMod .. " + CTRL + J", hl.dsp.focus({ monitor = "+1" }))
 hl.bind(mainMod .. " + CTRL + K", hl.dsp.focus({ monitor = "-1" }))
+-- Hotplug re-applies on its own (monitors.lua); this is the manual fallback.
+exec(mainMod .. " + P", "display-detect apply")
 hl.bind(mainMod .. " + U", hl.dsp.focus({ urgent_or_last = true }))
 hl.bind(mainMod .. " + TAB", hl.dsp.focus({ last = true }))
 hl.bind(mainMod .. " + SHIFT + TAB", hl.dsp.window.cycle_next({ next = true }))

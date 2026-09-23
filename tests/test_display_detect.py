@@ -148,6 +148,37 @@ class DisplayDetectTests(unittest.TestCase):
         self.env["WALLPAPER_SET"] = "nord"
         self.assertEqual(self.paths()["DP-1"], str(themed / "ultrawide.png"))
 
+    def test_x11_watch_relays_out_only_on_a_real_hotplug(self):
+        laptop = "eDP connected primary 1920x1080+0+0 (normal) 309mm x 174mm\n   1920x1080     60.01*+\n"
+        self.xrandr.write_text(laptop)
+        docked = self.root / "docked.txt"
+        docked.write_text(laptop + XRANDR_DESKTOP.split("\n", 1)[1])
+        # Plug in the monitors, report it, then raise a second event with
+        # nothing changed (as our own mode set could) that must be ignored.
+        udevadm = self.root / "bin/udevadm"
+        udevadm.write_text(
+            "#!/bin/sh\necho 'monitor will print the received events for:'\nsleep 0.3\n"
+            f"cp '{docked}' \"$FAKE_XRANDR\"\n"
+            "echo 'UDEV  [1.0] change   /devices/pci0000:00/drm/card1 (drm)'\n"
+            "sleep 3\necho 'UDEV  [2.0] change   /devices/pci0000:00/drm/card1 (drm)'\nexec sleep 30\n")
+        udevadm.chmod(0o755)
+        self.env.update(DISPLAY=":0", XDG_RUNTIME_DIR=str(self.root))
+        watcher = subprocess.Popen([str(SCRIPT), "watch"], env=self.env,
+                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        self.addCleanup(watcher.kill)
+        # A second watcher on the same display leaves the first one to it.
+        second = subprocess.run([str(SCRIPT), "watch"], env=self.env, timeout=5)
+        self.assertEqual(second.returncode, 0)
+        try:
+            watcher.wait(timeout=8)
+        except subprocess.TimeoutExpired:
+            watcher.terminate()
+            watcher.wait(timeout=5)
+        applied = [c for c in self.calls("xrandr") if "--output" in c]
+        self.assertEqual(len(applied), 1, applied)
+        self.assertIn("--output DisplayPort-0 --mode 3440x1440 --rate 143.97 --pos 0x0 --primary", applied[0])
+        self.assertIn("--output eDP --mode 1920x1080 --rate 60.01 --pos 760x1440", applied[0])
+
     def test_unknown_set_is_refused(self):
         result = subprocess.run([str(SCRIPT), "set", "nope"], env=self.env, text=True, capture_output=True)
         self.assertNotEqual(result.returncode, 0)

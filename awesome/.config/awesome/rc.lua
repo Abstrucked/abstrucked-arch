@@ -394,6 +394,23 @@ local globalkeys = my_table.join(
 	awful.key({ modkey, "Control" }, "k", function()
 		awful.screen.focus_relative(-1)
 	end, { description = "focus the previous screen", group = "screen" }),
+	-- Fallback for when the hotplug watcher (started below) misses a change.
+	awful.key({ modkey }, "p", function()
+		awful.spawn.easy_async({ "display-detect", "layout" }, function(_, stderr, _, code)
+			if code ~= 0 then
+				naughty.notify({
+					preset = naughty.config.presets.critical,
+					title = "display-detect failed",
+					text = stderr,
+				})
+			end
+			-- A layout that moved nothing raises no geometry change, so re-pick
+			-- wallpapers explicitly too.
+			for s in screen do
+				s:emit_signal("property::geometry")
+			end
+		end)
+	end, { description = "re-detect monitors and wallpapers", group = "screen" }),
 	awful.key({ modkey }, "u", awful.client.urgent.jumpto, { description = "jump to urgent client", group = "client" }),
 	awful.key({ modkey }, "Tab", function()
 		if cycle_prev then
@@ -841,3 +858,7 @@ local autorun_apps = {
 if autorun then
 	run_once(autorun_apps)
 end
+
+-- Re-lays out the monitors on hotplug (X leaves a new output off until told).
+-- It holds a per-display lock, so a restart's second copy just exits.
+awful.spawn({ "display-detect", "watch" }, false)

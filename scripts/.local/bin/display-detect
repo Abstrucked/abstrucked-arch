@@ -37,6 +37,7 @@ Usage: display-detect <command>
   paths         Print "<output><TAB><wallpaper>" for each output
   set [<name>]  Save the wallpaper set to use, or print the active one
   sets          List the available wallpaper sets
+  watch         Re-apply the layout on monitor hotplug (X11; Awesome starts it)
 USAGE
 }
 
@@ -259,6 +260,46 @@ paths() {
   done < <(plan)
 }
 
+# Connected outputs and their modes, to tell a real plug/unplug apart from
+# the drm events a mode change of our own can raise.
+output_signature() { outputs probe | sort | tr '\n' ' '; }
+
+# X11 has nothing that re-lays out the outputs on hotplug (Hyprland does, via
+# monitor.added/removed), so follow the kernel's drm "change" events, which
+# udevadm relays to unprivileged users, and re-apply the layout whenever the
+# set of connected outputs actually changed. One watcher per display, and it
+# leaves with the X session.
+watch() {
+  [[ "$(backend)" == x11 ]] || die "watch is for X11; Hyprland re-applies on monitor.added/removed itself"
+  command -v udevadm >/dev/null || die "udevadm not found"
+  local lock="${XDG_RUNTIME_DIR:-/tmp}/display-detect-watch${DISPLAY//[^A-Za-z0-9]/-}.lock"
+  exec 9>"$lock"
+  flock -n 9 || exit 0
+
+  local line last
+  last="$(output_signature)"
+  coproc UDEV { exec udevadm monitor --udev --subsystem-match=drm; }
+  local udev_pid="$UDEV_PID" udev_fd="${UDEV[0]}"
+  trap 'kill "$udev_pid" 2>/dev/null' EXIT
+  trap 'exit 0' TERM INT HUP
+  while true; do
+    if read -r -t 30 line <&"$udev_fd"; then
+      [[ "$line" == *" change "* ]] || continue
+      # One plug arrives as a burst of events, and the new output's EDID may
+      # not be readable straight away; let it settle, then act once.
+      while read -r -t 2 line <&"$udev_fd"; do :; done
+      local now
+      now="$(output_signature)"
+      [[ "$now" != "$last" ]] || continue
+      last="$now"
+      layout >/dev/null 2>&1 || echo "display-detect: layout failed after hotplug" >&2
+    else
+      xrandr --current >/dev/null 2>&1 || exit 0
+      kill -0 "$udev_pid" 2>/dev/null || die "udevadm monitor exited"
+    fi
+  done
+}
+
 set_wallpaper_set() {
   local name="${1:-}"
   if [[ -z "$name" ]]; then
@@ -295,6 +336,7 @@ case "${1:-}" in
   paths) paths ;;
   set) set_wallpaper_set "${2:-}" ;;
   sets) list_sets ;;
+  watch) watch ;;
   ""|-h|--help|help) usage ;;
   *) usage >&2; exit 2 ;;
 esac

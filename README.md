@@ -467,8 +467,10 @@ Add executable scripts to `scripts/.local/bin/` and they'll be available system-
 - Monitors: `display-detect` lays out whatever is connected (ultrawide
   first, 16:9 to its right, a laptop panel alone or below) and picks each
   output's wallpaper from `backgrounds/sets/`, under both Awesome and
-  Hyprland, so the desktop and laptop share one config. See
-  `backgrounds/sets/README.md`.
+  Hyprland, so the desktop and laptop share one config. Plugging or
+  unplugging a monitor re-applies it (Hyprland's monitor events; under
+  Awesome, `display-detect watch` following udev), and `Super+P` does it by
+  hand. See `backgrounds/sets/README.md`.
 
 #### Switching Themes
 The dotfiles include support for Catppuccin themes (Mocha, Latte, Frappe, Macchiato). The Alacritty installer uses `btop/.config/btop/themes/theme.sh` and the selected `THEME` value to generate `~/.config/alacritty/theme.toml`.
