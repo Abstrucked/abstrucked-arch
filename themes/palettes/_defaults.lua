@@ -19,6 +19,9 @@ return function(p, mix)
     search_focus = p.green,
     hint = p.yellow,
 
+    -- The Adwaita stylesheet the login screen's GTK theme builds on.
+    adwaita_css = dark and "gtk-contained-dark.css" or "gtk-contained.css",
+
     -- Catppuccin's extra hues. btop's gradient is the only real consumer.
     mauve = p.magenta,
     maroon = p.red,

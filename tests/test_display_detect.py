@@ -179,6 +179,18 @@ class DisplayDetectTests(unittest.TestCase):
         self.assertIn("--output DisplayPort-0 --mode 3440x1440 --rate 143.97 --pos 0x0 --primary", applied[0])
         self.assertIn("--output eDP --mode 1920x1080 --rate 60.01 --pos 760x1440", applied[0])
 
+    def test_pick_serves_the_greeter_without_a_monitor(self):
+        # Size-free images win; otherwise any size made for the class does.
+        self.assertEqual(self.run_tool("pick", "ultrawide").strip(),
+                         str(self.bg / "sets/default/ultrawide-3440x1440.png"))
+        themed = self.make_set("nord", "wide.jpg")
+        (self.home / ".local/state/themes").mkdir(parents=True)
+        (self.home / ".local/state/themes/current").write_text("nord\n")
+        self.assertEqual(self.run_tool("pick", "wide").strip(), str(themed / "wide.jpg"))
+        self.assertEqual(self.run_tool("pick", "internal").strip(), str(themed / "wide.jpg"))
+        result = subprocess.run([str(SCRIPT), "pick", "square"], env=self.env, text=True, capture_output=True)
+        self.assertNotEqual(result.returncode, 0)
+
     def test_unknown_set_is_refused(self):
         result = subprocess.run([str(SCRIPT), "set", "nope"], env=self.env, text=True, capture_output=True)
         self.assertNotEqual(result.returncode, 0)

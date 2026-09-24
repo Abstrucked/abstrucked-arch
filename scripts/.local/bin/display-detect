@@ -35,6 +35,8 @@ Usage: display-detect <command>
   wallpaper     Set each output's wallpaper (Hyprland; X11 only prints them)
   apply         layout, then wallpaper
   paths         Print "<output><TAB><wallpaper>" for each output
+  pick <class>  Print the wallpaper for an ultrawide, wide or internal output
+                of any size (the login screen uses this)
   set [<name>]  Save the wallpaper set to use, or print the active one
   sets          List the available wallpaper sets
   watch         Re-apply the layout on monitor hotplug (X11; Awesome starts it)
@@ -142,6 +144,24 @@ wallpaper_for() {
         for ext in "${EXTENSIONS[@]}"; do
           [[ -e "$dir/$base.$ext" ]] && { readlink -f "$dir/$base.$ext"; return; }
         done
+      done
+    done
+  done
+}
+
+# The image for a <class> output of unknown size: a size-free one if the set
+# has it, else the first made for some size. The greeter picks at theme-switch
+# time, before it knows which monitors will be connected.
+pick() {
+  local class="$1" found set c f
+  local classes=("$class")
+  [[ "$class" == internal ]] && classes+=(wide)
+  found="$(wallpaper_for "$class" 0 0 || true)"
+  [[ -z "$found" ]] || { echo "$found"; return; }
+  for set in "$(active_set)" default; do
+    for c in "${classes[@]}"; do
+      for f in "$SETS_DIR/$set/$c"-[0-9]*x[0-9]*.*; do
+        [[ -e "$f" && " ${EXTENSIONS[*]} " == *" ${f##*.} "* ]] && { readlink -f "$f"; return; }
       done
     done
   done
@@ -334,6 +354,10 @@ case "${1:-}" in
   wallpaper) wallpaper ;;
   apply) layout; wallpaper ;;
   paths) paths ;;
+  pick)
+    [[ "${2:-}" =~ ^(ultrawide|wide|internal)$ ]] || die "usage: display-detect pick ultrawide|wide|internal"
+    pick "$2"
+    ;;
   set) set_wallpaper_set "${2:-}" ;;
   sets) list_sets ;;
   watch) watch ;;

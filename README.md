@@ -391,7 +391,8 @@ dotfiles/
 
 AwesomeWM remains the X11 session and Hyprland is the Wayland session. LightDM
 discovers both session desktop files after the corresponding packages are
-installed. The Hyprland setup keeps the existing Awesome keybindings where
+installed. `install/lightdm-greeter.sh` themes the login screen from the active
+themectl palette (see `themes/README.md`). The Hyprland setup keeps the existing Awesome keybindings where
 possible; dynamic Awesome tags are represented with fixed workspaces and named
 special workspaces.
 

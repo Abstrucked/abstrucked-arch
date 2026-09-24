@@ -19,7 +19,8 @@ subcommands, and the theme names for `set` and `render`.
   (formats: nohash, rgb, rgba[:aa], css[:alpha]).
 - `targets.conf` - template, destination (symlinked to `out/`), reload command.
   A destination of `-` renders only.
-- `hooks/*.sh` - for apps whose config themectl cannot own (herdr, rnmui, nvim).
+- `hooks/*.sh` - for apps whose config themectl cannot own (herdr, rnmui, nvim,
+  and the LightDM login screen).
 - `out` - generated, gitignored symlink to an immutable `.generations/` directory.
   Run `themectl apply` after a fresh clone. The Waybar template is generated
   from current plugin state automatically, without changing plugin wiring.
@@ -41,6 +42,27 @@ instance and its session signature; SwayNC reloads only when it is running.
 The herdr hook validates the replacement TOML and verifies unrelated settings
 are preserved before an atomic replacement. Backups are stored under
 `${DOTFILES_BACKUP_ROOT:-$HOME/.dotfiles-backups}/themes/`.
+
+## Login screen
+
+`install/lightdm-greeter.sh` (once, with sudo) switches LightDM to
+lightdm-gtk-greeter and makes it follow the theme; `--revert` undoes it.
+The greeter runs as the `lightdm` user and cannot read your home, so:
+
+- themectl renders `lightdm-gtk-greeter.css` into
+  `~/.local/state/themes/greeter/gtk.css`, and `hooks/lightdm.sh` stages the
+  background color and a wallpaper per monitor class next to it
+  (`display-detect pick`, the same sets the desktop uses).
+- LightDM runs `themectl-greeter-sync` as root before each login screen. It
+  reads the stage as you, refuses CSS that loads files, copies only real
+  PNG/JPEG wallpapers, writes the greeter config itself, and always exits 0 so
+  a bad theme can never stop the login screen.
+
+A switch shows at the next logout or reboot. After `display-detect set`, run
+`themectl apply` to restage the wallpapers. Non-color greeter settings (font,
+indicators, clock) live in `install/lightdm/40-dotfiles.conf`; rerun the
+installer after changing them. The sync logs to the journal:
+`journalctl -t themectl-greeter-sync`.
 
 Dependencies: Bash, Lua, GNU coreutils, util-linux (`flock`), and Python 3.11+
 (`tomllib`, for imports and herdr updates). Run regression checks with
