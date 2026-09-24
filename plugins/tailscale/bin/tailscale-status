@@ -1,7 +1,8 @@
 #!/bin/bash
 # Prints tailscale's connection state, either as waybar custom-module JSON
 # (default) or as a plain one-line string with --plain, for reuse by the
-# awesome.lua widget. Requires: tailscale, jq.
+# awesome.lua widget. The JSON leaves the icon to waybar.jsonc's format-icons,
+# keyed by "alt", so the config can colour it. Requires: tailscale, jq.
 set -euo pipefail
 
 icon_up=$'\U000F0928'
@@ -30,6 +31,6 @@ fi
 if [[ "${1:-}" == "--plain" ]]; then
   echo "$text"
 else
-  jq -nc --arg text "$text" --arg tooltip "$tooltip" --arg class "$class" \
-    '{text: $text, tooltip: $tooltip, class: $class}'
+  jq -nc --arg text "${text#* }" --arg tooltip "$tooltip" --arg class "$class" \
+    '{text: $text, tooltip: $tooltip, class: $class, alt: $class}'
 fi
