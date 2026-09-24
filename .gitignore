@@ -53,3 +53,8 @@ awesome/.config/awesome/plugins.lua
 
 # Written by display-detect from the connected outputs and wallpaper set.
 hyprland/.config/hypr/lock-backgrounds.conf
+
+# Stow links ~/.config/autostart to this folder when it did not exist, so apps
+# that add their own autostart entries write them here; keep only ours.
+picom/.config/autostart/*
+!picom/.config/autostart/picom.desktop

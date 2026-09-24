@@ -1,0 +1,43 @@
+#!/bin/bash
+# detect-gpu - is there a GPU that can accelerate a compositor? Prints 1 and
+# exits 0 if so, else prints 0 and exits 1, so `detect-gpu >/dev/null && picom`
+# works. Awesome uses it to skip picom in VMs, where it falls back to software
+# rendering and misbehaves.
+#
+# Decided by each DRM card's kernel driver:
+#   amdgpu radeon i915 xe nouveau nvidia  a real GPU
+#   virtio_gpu vmwgfx                     a virtual GPU; only if glxinfo reports
+#                                         "Accelerated: yes" (virgl, VMware 3D)
+#   anything else                         no (bochs-drm, qxl, cirrus, simpledrm...)
+set -euo pipefail
+
+# DETECT_GPU_SYSFS relocates /sys, for the tests only.
+declare -r SYSFS="${DETECT_GPU_SYSFS:-/sys}"
+
+# Hardware acceleration as the X server reports it; no display or no glxinfo
+# means we cannot tell, so no.
+glx_accelerated() {
+  [[ -n "${DISPLAY:-}" ]] && command -v glxinfo >/dev/null || return 1
+  timeout 5 glxinfo -B 2>/dev/null | grep -qE '^[[:space:]]*Accelerated:[[:space:]]*yes'
+}
+
+has_gpu() {
+  local card driver
+  for card in "$SYSFS"/class/drm/card*; do
+    # Skip connectors such as card0-DP-1.
+    [[ "${card##*/}" =~ ^card[0-9]+$ ]] || continue
+    driver="$(readlink -- "$card/device/driver" 2>/dev/null)" || continue
+    case "${driver##*/}" in
+      amdgpu | radeon | i915 | xe | nouveau | nvidia) return 0 ;;
+      virtio_gpu | vmwgfx) glx_accelerated && return 0 ;;
+    esac
+  done
+  return 1
+}
+
+if has_gpu; then
+  echo 1
+else
+  echo 0
+  exit 1
+fi

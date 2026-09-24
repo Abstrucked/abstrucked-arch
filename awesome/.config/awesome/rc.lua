@@ -76,7 +76,12 @@ local function run_once(commands)
 		end
 		local check = user and string.format("pgrep -u %s -fx -- %s", shell_quote(user), shell_quote(command))
 			or "false"
-		awful.spawn.with_shell(string.format("%s >/dev/null 2>&1 || %s", check, table.concat(quoted, " ")))
+		local line = string.format("%s >/dev/null 2>&1 || %s", check, table.concat(quoted, " "))
+		-- An optional `when` command gates the app: it only starts if that succeeds.
+		if argv.when then
+			line = string.format("%s >/dev/null 2>&1 && { %s; }", shell_quote(argv.when), line)
+		end
+		awful.spawn.with_shell(line)
 	end
 end
 
@@ -850,7 +855,10 @@ end)
 local autorun = true
 local autorun_apps = {
 	-- { "picom", "-b", "--unredir-if-possible", "--backend", "xr_glx_hybrid", "--vsync", "--use-damage", "--glx-no-stencil" },
-	{ "picom", "-b" },
+	-- Only with a real GPU: picom misbehaves on a VM's software rendering. The
+	-- picom package's own XDG autostart entry is hidden (picom/.config/autostart)
+	-- so dex does not start a second copy.
+	{ "picom", "-b", when = "detect-gpu" },
 	-- { "/usr/bin/pcmanfm", "-d" },
 	-- { "smbnetfs", "net/" },
 	-- { "/bin/lightdmxrand.sh" },

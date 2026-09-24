@@ -1,0 +1,7 @@
+# Hides the picom package's /etc/xdg/autostart/picom.desktop from dex. Awesome
+# starts picom itself, and only when detect-gpu finds a GPU (awesome rc.lua).
+[Desktop Entry]
+Type=Application
+Name=Picom
+Exec=picom
+Hidden=true
