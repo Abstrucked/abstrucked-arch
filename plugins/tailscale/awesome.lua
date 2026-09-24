@@ -8,4 +8,4 @@ local tailscale_widget = once(function()
     ))
     return widget
 end)
-table.insert(right_widgets, pl(tailscale_widget, c.widget_b .. "22"))
+table.insert(right_widgets, pl(tailscale_widget, c.seg and c.seg.tailscale or c.widget_b .. "22"))

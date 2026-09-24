@@ -14,6 +14,9 @@ local naughty = require("naughty")
 local wibox = require("wibox")
 local dpi = require("beautiful.xresources").apply_dpi
 local logout = require("awesome-wm-widgets.logout-widget.logout")
+local logout_icon = gears.color.recolor_image(
+	gfs.get_configuration_dir() .. "awesome-wm-widgets/logout-widget/power.svg", c.fg
+)
 local power_mode = require("awesome-wm-widgets.power-mode-widget.power-mode")
 local string, os, screen = string, os, screen
 local my_table = awful.util.table or gears.table -- 4.{0,1} compatibility
@@ -56,6 +59,8 @@ function theme.wallpaper_for(s)
 end
 
 theme.font = "JetBrains Mono Nerd Font 10"
+-- Text inside the powerarrow segments; pl() applies it to every textbox.
+theme.widget_font = "JetBrains Mono Nerd Font 8"
 
 theme.fg_normal = c.fg -- Font Color
 theme.bg_normal = c.bg
@@ -147,6 +152,13 @@ theme.layout_max = default_theme_dir .. "layouts/max.png"
 theme.layout_fullscreen = default_theme_dir .. "layouts/fullscreen.png"
 theme.layout_magnifier = theme.dir .. "/icons/magnifier.png"
 theme.layout_floating = theme.dir .. "/icons/floating.png"
+-- The layoutbox sits on its own segment, so its icons take that segment's color.
+for key, path in pairs(theme) do
+	if key:match("^layout_") and type(path) == "string" and gfs.file_readable(path) then
+		theme[key] = gears.color.recolor_image(path, c.seg.layout.icon)
+	end
+end
+
 theme.widget_ac = theme.dir .. "/icons/ac.png"
 theme.widget_battery = theme.dir .. "/icons/battery.png"
 theme.widget_battery_low = theme.dir .. "/icons/battery_low.png"
@@ -216,11 +228,32 @@ local function compact_rate(value)
 	return string.format(value < 10 and unit ~= "K" and "%.1f%s" or "%.0f%s", value, unit)
 end
 
+-- Icons are white PNGs; each segment shows them in its own hue. Cached, since
+-- the battery swaps its icon on every refresh.
+local recolored = {}
+local function icon(path, color)
+	local key = path .. color
+	if not recolored[key] then
+		recolored[key] = gears.color.recolor_image(path, color)
+	end
+	return recolored[key]
+end
+
+-- The battery segment's colors follow the charge (bat, bat_mid, bat_low).
+local function battery_seg(perc, ac)
+	perc = tonumber(perc)
+	if ac or not perc or perc > 50 then
+		return c.seg.bat
+	elseif perc > 15 then
+		return c.seg.bat_mid
+	end
+	return c.seg.bat_low
+end
+
 local function build_screen_widgets(s)
 	local widgets = {}
 
 	widgets.clock = wibox.widget.textclock("<span font='Misc Tamsyn 5'> </span>%H:%M ")
-	widgets.clock.font = theme.font
 
 	widgets.cal = lain.widget.cal({
 		attach_to = { widgets.clock },
@@ -233,21 +266,21 @@ local function build_screen_widgets(s)
 		},
 	})
 
-	local memicon = wibox.widget.imagebox(theme.widget_mem)
+	local memicon = wibox.widget.imagebox(icon(theme.widget_mem, c.seg.mem.icon))
 	widgets.mem = lain.widget.mem({
 		settings = function()
-			widget:set_markup(markup.font(theme.font, " " .. compact_value(mem_now.used, "M", "G") .. " "))
+			widget:set_text(" " .. compact_value(mem_now.used, "M", "G") .. " ")
 		end,
 	})
 
-	local cpuicon = wibox.widget.imagebox(theme.widget_cpu)
+	local cpuicon = wibox.widget.imagebox(icon(theme.widget_cpu, c.seg.cpu.icon))
 	widgets.cpu = lain.widget.cpu({
 		settings = function()
-			widget:set_markup(markup.font(theme.font, " " .. cpu_now.usage .. "% "))
+			widget:set_text(" " .. cpu_now.usage .. "% ")
 		end,
 	})
 
-	local fsicon = wibox.widget.imagebox(theme.widget_hdd)
+	local fsicon = wibox.widget.imagebox(icon(theme.widget_hdd, c.seg.fs.icon))
 	widgets.fs = lain.widget.fs({
 		followtag = true,
 		notification_preset = {
@@ -261,54 +294,54 @@ local function build_screen_widgets(s)
 			local root = fs_now["/"]
 			if root then
 				local fsp = string.format("%.1f%s", root.free, root.units)
-				widget:set_markup(markup.font(theme.font, fsp))
+				widget:set_text(fsp)
 			end
 		end,
 	})
 
-	local baticon = wibox.widget.imagebox(theme.widget_battery)
+	local baticon = wibox.widget.imagebox(icon(theme.widget_battery, c.seg.bat.icon))
 	widgets.bat = lain.widget.bat({
 		-- Refresh promptly on power changes instead of Lain's 30-second default.
 		timeout = 2,
 		notification_preset = { fg = theme.fg_normal, bg = theme.popup_bg, font = "Monospace 10" },
 		settings = function()
+			local ac = not bat_now.status or bat_now.status == "N/A" or bat_now.ac_status == 1
+			local seg = battery_seg(bat_now.perc, ac)
+			-- The segment is built after the widget, and Lain runs this once
+			-- at creation, so it may not exist yet.
+			if widgets.bat_segment then
+				widgets.bat_segment.bg = seg.bg
+			end
 			if bat_now.status and bat_now.status ~= "N/A" then
 				if bat_now.ac_status == 1 then
-					widget:set_markup(markup.font(theme.font, " AC "))
-					baticon:set_image(theme.widget_ac)
+					widget:set_text(" AC ")
+					baticon:set_image(icon(theme.widget_ac, seg.icon))
 					return
 				elseif bat_now.perc and tonumber(bat_now.perc) <= 5 then
-					baticon:set_image(theme.widget_battery_empty)
+					baticon:set_image(icon(theme.widget_battery_empty, seg.icon))
 				elseif bat_now.perc and tonumber(bat_now.perc) <= 15 then
-					baticon:set_image(theme.widget_battery_low)
+					baticon:set_image(icon(theme.widget_battery_low, seg.icon))
 				else
-					baticon:set_image(theme.widget_battery)
+					baticon:set_image(icon(theme.widget_battery, seg.icon))
 				end
-				widget:set_markup(markup.font(theme.font, " " .. bat_now.perc .. "% "))
+				widget:set_text(" " .. bat_now.perc .. "% ")
 			else
 				widget:set_markup()
-				baticon:set_image(theme.widget_ac)
+				baticon:set_image(icon(theme.widget_ac, seg.icon))
 			end
 		end,
 	})
 
-	local neticon = wibox.widget.imagebox(theme.widget_net)
+	local neticon = wibox.widget.imagebox(icon(theme.widget_net, c.seg.net.icon))
 	widgets.net = lain.widget.net({
 		screen = s,
 		notification_preset = { fg = theme.fg_normal, bg = theme.popup_bg, font = "Monospace 10" },
 		settings = function()
-			widget:set_markup(
-				markup.fontfg(
-					theme.font,
-					theme.titlebar_fg_focus,
-					"↓" .. compact_rate(net_now.received)
-						.. " ↑" .. compact_rate(net_now.sent)
-					)
-			)
+			widget:set_text("↓" .. compact_rate(net_now.received) .. " ↑" .. compact_rate(net_now.sent))
 		end,
 	})
 	-- Keep throughput updates from resizing the bar, without a wide empty slot.
-	widgets.net.widget.forced_width = dpi(120)
+	widgets.net.widget.forced_width = dpi(80)
 	widgets.net.widget.align = "center"
 	widgets.net.widget:connect_signal("mouse::enter", function()
 		widgets.net_notification = naughty.notify({
@@ -326,7 +359,7 @@ local function build_screen_widgets(s)
 	end)
 
 	widgets.volume = volumebar_widget({
-		main_color = theme.bg_urgent,
+		main_color = c.seg.volume.icon,
 		mute_color = "#777E7655",
 		width = 80,
 		shape = "rounded_bar",
@@ -358,11 +391,23 @@ function theme.powerline_rl(cr, width, height)
 
 	cr:close_path()
 end
-local function pl(widget, bgcolor, padding)
+-- seg is a { bg, fg, icon } entry of c.seg. A plain color string is still
+-- accepted as the background, for plugin snippets written before c.seg.
+local function pl(widget, seg, padding)
 	local horizontal_padding = dpi(padding or 10)
-	return wibox.container.background(
-		wibox.container.margin(widget, horizontal_padding, horizontal_padding), bgcolor, theme.powerline_rl
+	if type(seg) ~= "table" then
+		seg = { bg = seg }
+	end
+	local container = wibox.container.background(
+		wibox.container.margin(widget, horizontal_padding, horizontal_padding), seg.bg, theme.powerline_rl
 	)
+	container.fg = seg.fg
+	for _, child in ipairs(container:get_all_children()) do
+		if child.set_font then
+			child.font = theme.widget_font
+		end
+	end
+	return container
 end
 
 -- The active tag is already a solid accent block, so only occupied
@@ -459,22 +504,32 @@ function theme.at_screen_connect(s)
 		layout = wibox.layout.fixed.horizontal,
 	}
 	if s == screen.primary then
-		table.insert(right_widgets, wibox.widget.systray())
+		-- A little space before the first segment, like the gaps between segments.
+		table.insert(right_widgets, wibox.container.margin(wibox.widget.systray(), 0, dpi(6)))
 	end
 
 	-- generated by plugins/pluginctl; always exists, may be a no-op
 	require("plugins")(left_widgets, right_widgets, pl, c, s)
 
-	table.insert(right_widgets, pl(widgets.volume, c.widget_a .. "22"))
-	table.insert(right_widgets, pl(wibox.widget({ widgets.memicon, widgets.mem.widget, layout = wibox.layout.align.horizontal }), c.widget_a .. "22"))
-	table.insert(right_widgets, pl(wibox.widget({ widgets.cpuicon, widgets.cpu.widget, layout = wibox.layout.align.horizontal }), c.widget_b .. "22"))
-	table.insert(right_widgets, pl(wibox.widget({ widgets.fsicon, widgets.fs.widget, layout = wibox.layout.align.horizontal }), c.widget_a .. "22"))
-	table.insert(right_widgets, pl(wibox.widget({ widgets.baticon, widgets.bat.widget, layout = wibox.layout.align.horizontal }), c.widget_c .. "22"))
-	table.insert(right_widgets, pl(wibox.widget({ widgets.neticon, widgets.net.widget, layout = wibox.layout.align.horizontal }), c.widget_b .. "22"))
-	table.insert(right_widgets, power_mode.widget({}))
-	table.insert(right_widgets, pl(widgets.clock, c.widget_a .. "22"))
-	table.insert(right_widgets, logout.widget({}))
-	table.insert(right_widgets, pl(s.mylayoutbox, ""))
+	local function group(...)
+		return wibox.widget({ layout = wibox.layout.align.horizontal, ... })
+	end
+	-- The power mode sits inside the battery segment, after the charge.
+	widgets.bat_segment = pl(
+		wibox.widget({ widgets.baticon, widgets.bat.widget, power_mode.widget({ icon_font = theme.widget_font }), layout = wibox.layout.fixed.horizontal }),
+		battery_seg(nil, true)
+	)
+	widgets.bat.update()
+
+	table.insert(right_widgets, pl(widgets.volume, c.seg.volume))
+	table.insert(right_widgets, pl(group(widgets.memicon, widgets.mem.widget), c.seg.mem))
+	table.insert(right_widgets, pl(group(widgets.cpuicon, widgets.cpu.widget), c.seg.cpu))
+	table.insert(right_widgets, pl(group(widgets.fsicon, widgets.fs.widget), c.seg.fs))
+	table.insert(right_widgets, widgets.bat_segment)
+	table.insert(right_widgets, pl(group(widgets.neticon, widgets.net.widget), c.seg.net))
+	table.insert(right_widgets, pl(widgets.clock, c.seg.clock))
+	table.insert(right_widgets, logout.widget({ icon = logout_icon }))
+	table.insert(right_widgets, pl(s.mylayoutbox, c.seg.layout))
 
 	-- Add widgets to the wibox
 	s.mywibox:setup({

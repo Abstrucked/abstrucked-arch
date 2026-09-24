@@ -1,0 +1,19 @@
+"image#ai": {
+    "exec": "ai-usage-text --icon '{{orange}}'",
+    "size": 14,
+    "interval": 300,
+    "signal": 13,
+    "on-click": "ai-usage-tui",
+    "on-scroll-up": "ai-usagebar --cycle-next",
+    "on-scroll-down": "ai-usagebar --cycle-prev"
+},
+"custom/ai-usagebar": {
+    "exec": "ai-usage-text --waybar",
+    "return-type": "json",
+    "interval": 300,
+    "signal": 13,
+    "tooltip": true,
+    "on-click": "ai-usage-tui",
+    "on-scroll-up": "ai-usagebar --cycle-next",
+    "on-scroll-down": "ai-usagebar --cycle-prev"
+}

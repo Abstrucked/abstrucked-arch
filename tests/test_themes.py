@@ -2,6 +2,7 @@
 import fcntl
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import tempfile
@@ -122,6 +123,25 @@ class ThemeTests(unittest.TestCase):
         for name in self.run_tool("themectl", "list").stdout.splitlines():
             with self.subTest(name=name):
                 self.run_tool("themectl", "render", name)
+
+    def test_powerarrow_segment_text_is_readable(self):
+        def luminance(hex_color):
+            def channel(c):
+                c /= 255
+                return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+            r, g, b = (channel(int(hex_color[i:i + 2], 16)) for i in (1, 3, 5))
+            return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+        template = self.themes / "templates/awesome-colors.lua.tpl"
+        for palette in sorted((self.themes / "palettes").glob("[!_]*.lua")):
+            rendered = subprocess.run(["lua", str(self.themes / "render.lua"), str(palette), str(template)],
+                                      capture_output=True, text=True, check=True).stdout
+            segments = re.findall(r'(\w+) = \{ bg = "(#\w{6})", fg = "(#\w{6})", icon = "#\w{6}" \}', rendered)
+            self.assertTrue(segments, palette.name)
+            for name, bg, fg in segments:
+                with self.subTest(palette=palette.stem, segment=name):
+                    hi, lo = sorted((luminance(bg), luminance(fg)), reverse=True)
+                    self.assertGreaterEqual((hi + 0.05) / (lo + 0.05), 4.5)
 
     def test_preview_includes_enabled_waybar_plugins(self):
         plugin = self.root / "plugins/test-widget"

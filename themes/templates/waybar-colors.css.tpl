@@ -12,3 +12,7 @@
 @define-color red {{red}};
 @define-color yellow {{yellow}};
 @define-color green {{green}};
+@define-color orange {{orange}};
+@define-color cyan {{cyan}};
+@define-color blue {{blue}};
+@define-color magenta {{magenta}};

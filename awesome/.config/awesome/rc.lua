@@ -506,6 +506,26 @@ local globalkeys = my_table.join(
 		end
 	end, { description = "restore minimized", group = "client" }),
 
+	-- Global rather than a client key: a minimized window can't hold focus,
+	-- so a client key would maximize whichever window took focus instead.
+	awful.key({ modkey }, "m", function()
+		local latest
+		for _, c in ipairs(awful.screen.focused().hidden_clients) do
+			if c.minimized and (not latest or (c.minimized_seq or 0) > (latest.minimized_seq or 0)) then
+				latest = c
+			end
+		end
+		if latest then
+			latest.minimized = false
+			latest.maximized = true
+			client.focus = latest
+			latest:raise()
+		elseif client.focus then
+			client.focus.maximized = not client.focus.maximized
+			client.focus:raise()
+		end
+	end, { description = "restore last minimized maximized, else toggle maximize", group = "client" }),
+
 	-- Dropdown application
 	awful.key({ modkey }, "z", function()
 		awful.screen.focused().quake:toggle()
@@ -652,11 +672,7 @@ local clientkeys = my_table.join(
 		-- The client currently has the input focus, so it cannot be
 		-- minimized, since minimized clients can't have the focus.
 		c.minimized = true
-	end, { description = "minimize", group = "client" }),
-	awful.key({ modkey }, "m", function(c)
-		c.maximized = not c.maximized
-		c:raise()
-	end, { description = "maximize", group = "client" })
+	end, { description = "minimize", group = "client" })
 )
 
 -- Bind all key numbers to tags.
@@ -845,6 +861,15 @@ client.connect_signal("focus", function(c)
 end)
 client.connect_signal("unfocus", function(c)
 	c.border_color = beautiful.border_normal
+end)
+
+-- Order minimizes so mod+m brings back the most recent one.
+local minimize_count = 0
+client.connect_signal("property::minimized", function(c)
+	if c.minimized then
+		minimize_count = minimize_count + 1
+		c.minimized_seq = minimize_count
+	end
 end)
 
 -- possible workaround for tag preservation when switching back to default screen:

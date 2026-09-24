@@ -62,7 +62,7 @@
     },
     "custom/notification": {
         "tooltip": false,
-        "format": "{icon} {text}",
+        "format": "{icon}",
         "format-icons": {
             "none": "",
             "notification": "",
@@ -78,22 +78,22 @@
         "restart-interval": 2
     },
     "pulseaudio": {
-        "format": "󰕾 {volume}%",
+        "format": "<span color='{{blue}}'>󰕾</span> {volume}%",
         "format-muted": "󰖁",
-        "format-bluetooth": "󰂯 {volume}%",
+        "format-bluetooth": "<span color='{{blue}}'>󰂯</span> {volume}%",
         "scroll-step": 2,
         "on-click": "wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle",
         "on-click-right": "pavucontrol"
     },
     "memory": {
-        "format": "󰍛 {used:0.1f}G",
+        "format": "<span color='{{yellow}}'>󰍛</span> {used:0.1f}G",
         "states": {
             "warning": 70,
             "critical": 90
         }
     },
     "cpu": {
-        "format": "󰻠 {usage}%",
+        "format": "<span color='{{red}}'>󰻠</span> {usage}%",
         "states": {
             "warning": 70,
             "critical": 90
@@ -101,7 +101,7 @@
     },
     "disk": {
         "path": "/",
-        "format": "󰋊 {percentage_used}%",
+        "format": "<span color='{{cyan}}'>󰋊</span> {percentage_used}%",
         "states": {
             "warning": 80,
             "critical": 90
@@ -113,14 +113,16 @@
             "warning": 30,
             "critical": 15
         },
-        "format": "󰁹 {capacity}%",
-        "format-charging": "󰂄 {capacity}%",
-        "format-plugged": "󰂄 {capacity}%",
+        "format": "<span color='{{green}}'>󰁹</span> {capacity}%",
+        "format-warning": "<span color='{{yellow}}'>󰁼</span> {capacity}%",
+        "format-critical": "<span color='{{red}}'>󰂃</span> {capacity}%",
+        "format-charging": "<span color='{{green}}'>󰂄</span> {capacity}%",
+        "format-plugged": "<span color='{{green}}'>󰂄</span> {capacity}%",
         "tooltip-format": "{time} remaining"
     },
     "network": {
-        "format-wifi": "󰤨 {essid}",
-        "format-ethernet": "󰈀 {ifname}",
+        "format-wifi": "<span color='{{blue}}'>󰤨</span> {essid}",
+        "format-ethernet": "<span color='{{blue}}'>󰈀</span> {ifname}",
         "format-disconnected": "󰤭",
         "tooltip-format": "{ifname}: {ipaddr}/{cidr}"
     },

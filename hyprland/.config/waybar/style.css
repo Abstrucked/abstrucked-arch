@@ -54,22 +54,34 @@ window#waybar {
     background: @accent;
 }
 
+/* One spacing rule for every module. Icons carry the palette hues (set in
+   the config's format strings); text stays @fg unless a state recolors it. */
 #window,
 #clock,
 #tray,
+#custom-tailscale,
 #custom-notification,
 #pulseaudio,
 #memory,
 #cpu,
 #disk,
 #battery,
-#network,
-#custom-power {
-    padding: 0 8px;
+#network {
+    padding: 0 9px;
+}
+
+/* The ai-usagebar plugin is a logo image followed by its percentage. */
+#image.ai {
+    padding: 0 5px 0 9px;
+}
+
+#custom-ai-usagebar {
+    padding: 0 9px 0 0;
 }
 
 #window {
     color: @muted;
+    padding: 0 10px;
 }
 
 #clock {
@@ -78,7 +90,12 @@ window#waybar {
 }
 
 #custom-power {
-    color: @accent;
+    color: @muted;
+    padding: 0 12px 0 8px;
+}
+
+#custom-power:hover {
+    color: @red;
 }
 
 /* Usage and battery states: yellow warns, red is critical (orange stays the
@@ -86,14 +103,16 @@ window#waybar {
 #battery.warning,
 #cpu.warning,
 #memory.warning,
-#disk.warning {
+#disk.warning,
+#custom-ai-usagebar.high {
     color: @yellow;
 }
 
 #battery.critical,
 #cpu.critical,
 #memory.critical,
-#disk.critical {
+#disk.critical,
+#custom-ai-usagebar.critical {
     color: @red;
 }
 
@@ -121,13 +140,12 @@ window#waybar {
 #clock:hover,
 #pulseaudio:hover,
 #custom-notification:hover,
-#custom-power:hover {
+#custom-power:hover,
+#custom-ai-usagebar:hover,
+#custom-tailscale:hover {
     background: @surface;
 }
 
-#battery.charging {
-    color: @green;
-}
 
 tooltip {
     background: @bg;

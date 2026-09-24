@@ -65,8 +65,10 @@ list() {
 # Rebuild the generated waybar template by splicing enabled plugins' module
 # ids into %%PLUGIN_MODULES_LEFT/CENTER/RIGHT%% (per WAYBAR_SECTION, default
 # right) and their defs into %%PLUGIN_DEFS%%, all markers in the base
-# template. themectl's normal render pipeline treats the result like any
-# other template, so it stays unaware plugins exist at all.
+# template. An optional waybar-defs.jsonc adds further "name": {...} defs,
+# for modules WAYBAR_MODULE refers to, such as the members of a group. themectl's
+# normal render pipeline treats the result like any other template, so it
+# stays unaware plugins exist at all.
 sync_waybar() {
   [[ -r "$BASE_TPL" ]] || die "missing $BASE_TPL"
   local tpl defs="" left="" center="" right="" id module section frag
@@ -78,6 +80,9 @@ sync_waybar() {
     section="$(manifest_get "$id" WAYBAR_SECTION)"
     frag="$(cat "$PLUGIN_DIR/$id/waybar.jsonc")"
     defs+=$',\n    "'"$module"'": '"$frag"
+    if [[ -f "$PLUGIN_DIR/$id/waybar-defs.jsonc" ]]; then
+      defs+=$',\n    '"$(cat "$PLUGIN_DIR/$id/waybar-defs.jsonc")"
+    fi
     case "${section:-right}" in
       left) left+=$',\n        "'"$module"'"' ;;
       center) center+=$',\n        "'"$module"'"' ;;

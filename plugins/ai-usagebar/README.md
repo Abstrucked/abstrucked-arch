@@ -30,15 +30,25 @@ installed at `/usr/share/ai-usagebar/config.example.toml`.
 - The 300s interval is upstream's guidance, not a preference: the Anthropic
   and OpenAI endpoints rate-limit aggressively below it. The scroll bindings
   refresh through `signal: 13` rather than waiting for the next poll.
-- The usage colours are the palette's, not upstream's: `waybar.jsonc` passes
-  `{{green}}`, `{{yellow}}`, `{{accent}}` and `{{red}}` to ai-usagebar's
-  `--color-low/mid/high/critical`, so the bar follows a theme change like
-  everything else. The Awesome widget takes the plain text instead and is
-  coloured by the bar.
-- `ai-usage-text` prints waybar JSON with `--waybar` and a plain line
-  otherwise, which is what the Awesome widget reads. Either way a missing
-  binary or an unreachable vendor prints a placeholder instead of emptying
-  the bar.
+- The usage colours are the palette's, not upstream's: `ai-usage-text`
+  drops ai-usagebar's own Pango colour and keeps its usage class (`low`,
+  `mid`, `high`, `critical`), which the waybar stylesheet colours like the
+  CPU and memory states. The Awesome widget is coloured by the bar.
+- In waybar the plugin is `group/ai-usagebar`: an `image#ai` module showing
+  the provider's logo (`ai-usage-text --icon '{{orange}}'`, recoloured into
+  `~/.cache/ai-usagebar`) and the `custom/ai-usagebar` percentage. Their
+  definitions live in `waybar-defs.jsonc`, which `pluginctl` splices in
+  next to the group. The logo reads the active vendor from
+  `ai-usagebar settings show`, which is local, so it adds no API request.
+- `ai-usage-text` prints waybar JSON with `--waybar`, JSON for the Awesome
+  widget with `--awesome`, a logo path with `--icon COLOR`, and a plain line
+  otherwise. Both bars show the provider's logo and the session percentage;
+  the reset time is in the hover tooltip. A missing binary or an
+  unreachable vendor prints a placeholder instead of emptying the bar.
+- `icons/` holds the Claude, OpenAI and Copilot logos, taken from Zed's
+  `assets/icons` (github.com/zed-industries/zed). `--awesome` maps
+  ai-usagebar's short vendor names (`cld`, `gpt`/`cdx`, `ghc`) to them; any
+  other vendor keeps its short name as text.
 - Waybar clicks have no terminal, so the TUI goes through `ai-usage-tui`.
   Upstream's example calls `ai-usagebar-tui` directly, which only works from
   a bar that already provides one.
