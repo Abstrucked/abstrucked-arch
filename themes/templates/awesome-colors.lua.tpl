@@ -14,4 +14,19 @@ return {
     widget_a = "{{awesome.widget_a}}",
     widget_b = "{{awesome.widget_b}}",
     widget_c = "{{awesome.widget_c}}",
+    -- Powerarrow segments: solid background, text, and icon recolor.
+    seg = {
+        ai = { bg = "{{awesome.seg.ai.bg}}", fg = "{{awesome.seg.ai.fg}}", icon = "{{awesome.seg.ai.icon}}" },
+        tailscale = { bg = "{{awesome.seg.tailscale.bg}}", fg = "{{awesome.seg.tailscale.fg}}", icon = "{{awesome.seg.tailscale.icon}}" },
+        volume = { bg = "{{awesome.seg.volume.bg}}", fg = "{{awesome.seg.volume.fg}}", icon = "{{awesome.seg.volume.icon}}" },
+        mem = { bg = "{{awesome.seg.mem.bg}}", fg = "{{awesome.seg.mem.fg}}", icon = "{{awesome.seg.mem.icon}}" },
+        cpu = { bg = "{{awesome.seg.cpu.bg}}", fg = "{{awesome.seg.cpu.fg}}", icon = "{{awesome.seg.cpu.icon}}" },
+        fs = { bg = "{{awesome.seg.fs.bg}}", fg = "{{awesome.seg.fs.fg}}", icon = "{{awesome.seg.fs.icon}}" },
+        bat = { bg = "{{awesome.seg.bat.bg}}", fg = "{{awesome.seg.bat.fg}}", icon = "{{awesome.seg.bat.icon}}" },
+        bat_mid = { bg = "{{awesome.seg.bat_mid.bg}}", fg = "{{awesome.seg.bat_mid.fg}}", icon = "{{awesome.seg.bat_mid.icon}}" },
+        bat_low = { bg = "{{awesome.seg.bat_low.bg}}", fg = "{{awesome.seg.bat_low.fg}}", icon = "{{awesome.seg.bat_low.icon}}" },
+        net = { bg = "{{awesome.seg.net.bg}}", fg = "{{awesome.seg.net.fg}}", icon = "{{awesome.seg.net.icon}}" },
+        clock = { bg = "{{awesome.seg.clock.bg}}", fg = "{{awesome.seg.clock.fg}}", icon = "{{awesome.seg.clock.icon}}" },
+        layout = { bg = "{{awesome.seg.layout.bg}}", fg = "{{awesome.seg.layout.fg}}", icon = "{{awesome.seg.layout.icon}}" },
+    },
 }

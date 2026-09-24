@@ -28,7 +28,7 @@ local modes = {
     {
         id = "balanced",
         name = "Balanced",
-        icon = "󰗑",
+        icon = "󱎕",
         key = "2",
         alt_key = "a",
         script = "balanced-mode.sh",
@@ -38,7 +38,7 @@ local modes = {
     {
         id = "performance",
         name = "Performance",
-        icon = "󰓅",
+        icon = "󰉁",
         key = "3",
         alt_key = "p",
         script = "perf-mode.sh",
@@ -105,7 +105,7 @@ end
 -- Title widget
 local title_widget = wibox.widget {
     align = 'center',
-    font = beautiful.font or "Hack Nerd Font 12",
+    font = beautiful.font or "JetBrainsMono Nerd Font 12",
     widget = wibox.widget.textbox
 }
 
@@ -119,17 +119,17 @@ local function create_button(mode, index)
         {
             {
                 {
-                    markup = '<span font="Hack Nerd Font 16" color="' .. fg_color .. '">' .. mode.icon .. '</span>',
+                    markup = '<span font="JetBrainsMono Nerd Font 16" color="' .. fg_color .. '">' .. mode.icon .. '</span>',
                     align = 'center',
                     widget = wibox.widget.textbox,
                 },
                 {
-                    markup = '<span font="Hack Nerd Font 10" color="' .. fg_color .. '">' .. mode.name .. '</span>',
+                    markup = '<span font="JetBrainsMono Nerd Font 10" color="' .. fg_color .. '">' .. mode.name .. '</span>',
                     align = 'center',
                     widget = wibox.widget.textbox,
                 },
                 {
-                    markup = '<span font="Hack Nerd Font 8" color="' .. fg_color .. '">' .. mode.desc .. '</span>',
+                    markup = '<span font="JetBrainsMono Nerd Font 8" color="' .. fg_color .. '">' .. mode.desc .. '</span>',
                     align = 'center',
                     widget = wibox.widget.textbox,
                 },
@@ -291,7 +291,7 @@ end
 function power_mode.widget(args)
     args = args or {}
 
-    local icon_font = args.icon_font or "Hack Nerd Font 14"
+    local icon_font = args.icon_font or "JetBrainsMono Nerd Font 14"
     local current_icon = modes[current_mode].icon
     local current_color = modes[current_mode].color
 
