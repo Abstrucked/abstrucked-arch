@@ -230,7 +230,9 @@ for component in "${SELECTED_COMPONENTS[@]}"; do
                         execute rm -f -- "$target" || die "Could not remove $target"
                     fi
                 fi
-                if ! execute stow -d "$DOTFILES_DIR" -t "$HOME" "$package"; then
+                # --no-folding links files, never whole directories: a folded
+                # ~/.local once sent every app's data into scripts/.local.
+                if ! execute stow --no-folding -d "$DOTFILES_DIR" -t "$HOME" "$package"; then
                     if [[ -n "$shell_backup" ]]; then
                         restore_backup "$shell_backup" "$target" || log_error "Restore failed; original config is at $shell_backup"
                     fi

@@ -18,6 +18,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 COMMON_STOW_PACKAGES = (
     "ssh", "alacritty", "btop", "nvim", "pcmanfm", "scripts", "ghossty", "gnupg",
+    "xsession",
 )
 STOW_PACKAGES = ("awesome", "picom", *COMMON_STOW_PACKAGES)
 STOW_PACKAGES_BY_WM = {
@@ -147,7 +148,7 @@ class InstallerTests(unittest.TestCase):
         for pkg in (self.repo / "packages.list").read_text().splitlines():
             if pkg and not pkg.startswith("#"):
                 self.assertIn(f"[DRY RUN] yay -S --needed --noconfirm -- {pkg}", result.stdout)
-        self.assertIn(f"[DRY RUN] stow -d {self.repo} -t {self.home} zsh", result.stdout)
+        self.assertIn(f"[DRY RUN] stow --no-folding -d {self.repo} -t {self.home} zsh", result.stdout)
         self.assertIn("Would link tmux config and theme", result.stdout)
         self.assertEqual(snapshot(self.home), before)
         self.assertEqual(self.calls(), [])
@@ -176,7 +177,7 @@ class InstallerTests(unittest.TestCase):
         self.run_script(args=args, code=0)
         self.assertEqual(self.calls(), [
             ["git", "-C", str(self.repo), "submodule", "update", "--init", "--recursive"],
-            *[["stow", "-d", str(self.repo), "-t", str(self.home), pkg]
+            *[["stow", "--no-folding", "-d", str(self.repo), "-t", str(self.home), pkg]
               for pkg in STOW_PACKAGES],
         ])
         self.assertEqual(snapshot(self.home), before)
@@ -192,7 +193,7 @@ class InstallerTests(unittest.TestCase):
                 self.assertIn(f"Selected window manager", result.stdout)
                 self.assertEqual(self.calls(), [
                     ["git", "-C", str(self.repo), "submodule", "update", "--init", "--recursive"],
-                    *[["stow", "-d", str(self.repo), "-t", str(self.home), pkg]
+                    *[["stow", "--no-folding", "-d", str(self.repo), "-t", str(self.home), pkg]
                       for pkg in expected_packages],
                 ])
 
