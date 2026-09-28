@@ -329,6 +329,13 @@ for component in "${SELECTED_COMPONENTS[@]}"; do
             fc-cache -f "$HOME/.local/share/fonts" || die "Failed to refresh font cache"
         fi
 
+        # Claude Code, Codex and OpenCode report their state to tmux-agent
+        # through hooks; without them the status bar falls back to guessing.
+        agent_bin="$DOTFILES_DIR/scripts/.local/bin/tmux-agent"
+        if [[ -x "$agent_bin" ]] && command_exists jq; then
+            execute "$agent_bin" install-hooks || log_warn "Failed to install tmux-agent hooks"
+        fi
+
         safe_symlink "$XDG_CONFIG_HOME/tmux/tmux.conf" "$HOME/.tmux.conf" || die "Failed to symlink tmux config"
         if [[ -x "$tpm_dir/bin/install_plugins" ]]; then
             "$tpm_dir/bin/install_plugins" || die "Failed to install tmux plugins"

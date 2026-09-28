@@ -4,8 +4,11 @@ Classification fixtures, detection checks and CLI smoke tests for
 scripts/.local/lib/tmux-agent/engine.sh and scripts/.local/bin/tmux-agent.
 """
 
+import json
 import os
+import re
 from pathlib import Path
+import shutil
 import signal
 import subprocess
 import tempfile
@@ -126,23 +129,19 @@ class RollupTests(unittest.TestCase):
 
 class GlyphTests(unittest.TestCase):
     def test_default_glyphs_differ(self):
+        # OpenCode shares the generic agent glyph until Nerd Fonts has its own.
         r = bash('ta_agent_glyph claude; ta_agent_glyph codex; ta_agent_glyph opencode; ta_agent_glyph other')
         glyphs = r.stdout.split()
-        self.assertEqual(len(set(glyphs)), 4)
+        self.assertEqual(len(set(glyphs)), 3)
+        self.assertEqual(glyphs[2], glyphs[3])
 
     def test_glyph_env_override(self):
         r = bash('ta_agent_glyph claude', env={"TMUX_AGENT_ICON_CLAUDE": "X"})
         self.assertEqual(r.stdout.strip(), "X")
 
-    def test_brand_icons_with_font_and_fallback_without_it(self):
-        with tempfile.TemporaryDirectory(prefix="ta-font-") as directory:
-            font = Path(directory) / "icons.ttf"
-            font.touch()
-            script = 'ta_agent_glyph claude; ta_agent_glyph codex; ta_agent_glyph opencode'
-            with_font = bash(script, env={"TMUX_AGENT_FONT": str(font)})
-            without_font = bash(script, env={"TMUX_AGENT_FONT": str(font) + ".missing"})
-            self.assertEqual(with_font.stdout.split(), ["󰀀", "󰀁", "󰀂"])
-            self.assertEqual(without_font.stdout.split(), ["", "", ""])
+    def test_default_codicons(self):
+        r = bash('ta_agent_glyph claude; ta_agent_glyph codex; ta_agent_glyph opencode')
+        self.assertEqual(r.stdout.split(), ["\uec82", "\uec81", "\uec67"])
 
     def test_agent_name_from_comm(self):
         r = bash('ta_agent_name_of claude-code ""')
@@ -226,8 +225,6 @@ class CliSmokeTests(unittest.TestCase):
     def test_strip_shows_every_pane_with_distinct_state_colors(self):
         with tempfile.TemporaryDirectory(prefix="ta-strip-") as directory:
             state_dir = Path(directory)
-            font = state_dir / "font.ttf"
-            font.touch()
             (state_dir / "stamp").write_text(str(int(time.time())) + "\n")
             for pane, state, agent in (
                 (1, "idle", "claude"),
@@ -240,15 +237,213 @@ class CliSmokeTests(unittest.TestCase):
                 )
             r = subprocess.run(
                 [str(CLI), "strip"], capture_output=True, text=True,
-                env={**os.environ, "TMUX_AGENT_STATE_DIR": directory,
-                     "TMUX_AGENT_FONT": str(font)},
+                env={**os.environ, "TMUX_AGENT_STATE_DIR": directory},
             )
             self.assertEqual(r.returncode, 0, r.stderr)
             self.assertEqual(
                 r.stdout,
-                " #[fg=red]󰀀#[default] #[fg=yellow]󰀂#[default]"
-                " #[fg=blue]󰀁#[default] #[fg=green]󰀀#[default]",
+                " #[fg=red]\uec82#[default] #[fg=yellow]\uec67#[default]"
+                " #[fg=blue]\uec81#[default] #[fg=green]\uec82#[default]",
             )
+
+
+
+    def test_pick_rows_align_columns_and_hide_the_pane_id(self):
+        with tempfile.TemporaryDirectory(prefix="ta-pick-") as directory:
+            state_dir = Path(directory)
+            now = int(time.time())
+            (state_dir / "stamp").write_text(f"{now}\n")
+            for pane, agent, path in (
+                (1, "claude", "/src/app"),
+                (2, "opencode", "/src/a-longer-project"),
+                (3, "codex", "/x"),
+            ):
+                (state_dir / f"state-%{pane}").write_text(
+                    f"idle|{agent}|0|{now}|{now}|work:{pane}.1|@1|{path}|12345\n"
+                )
+            fake = state_dir / "bin"
+            fake.mkdir()
+            (fake / "fzf").write_text(f'#!/bin/sh\ncat >"{state_dir}/rows"\nexit 130\n')
+            (fake / "fzf").chmod(0o755)
+            r = subprocess.run(
+                [str(CLI), "pick"], capture_output=True, text=True,
+                env={**os.environ, "TMUX_AGENT_STATE_DIR": directory,
+                     "PATH": f"{fake}:{os.environ['PATH']}"},
+            )
+            self.assertEqual(r.returncode, 0, r.stderr)
+            rows = [re.sub(r"\x1b\[[0-9;]*m", "", line).split("\t")
+                    for line in (state_dir / "rows").read_text().splitlines()]
+            self.assertEqual([pane for _, pane in rows], ["%1", "%2", "%3"])
+            shown = [text for text, _ in rows]
+            for column in ("work:", "0m"):
+                self.assertEqual(len({line.index(column) for line in shown}), 1, shown)
+            self.assertNotIn("12345", "".join(shown))
+
+class HookTests(unittest.TestCase):
+    def state_of(self, event):
+        r = bash('ta_hook_state "$1"', event)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        return r.stdout.strip()
+
+    def test_claude_and_codex_events_map_to_states(self):
+        for event, state in (
+            ("SessionStart", "idle"),
+            ("UserPromptSubmit", "working"),
+            ("PreToolUse", "working"),
+            ("PostToolUse", "working"),
+            ("PermissionRequest", "blocked"),
+            ("Notification", "blocked"),
+            ("Stop", "ready"),
+            ("SessionEnd", "end"),
+            ("SubagentStop", ""),
+        ):
+            with self.subTest(event=event):
+                self.assertEqual(self.state_of(event), state)
+
+    def test_opencode_events_map_to_states(self):
+        for event, state in (
+            ("session.execution.started", "working"),
+            ("permission.asked", "blocked"),
+            ("permission.replied", "working"),
+            ("form.created", "blocked"),
+            ("form.replied", "working"),
+            ("session.execution.succeeded", "ready"),
+            ("session.execution.failed", "ready"),
+            ("session.execution.interrupted", "ready"),
+            ("session.text.delta", ""),
+        ):
+            with self.subTest(event=event):
+                self.assertEqual(self.state_of(event), state)
+
+    def run_hook(self, state_dir, event, pane="%999"):
+        # A pane id no tmux server knows: the background rescan drops it,
+        # so only the synchronous report write is observed here.
+        return subprocess.run(
+            [str(CLI), "hook", "claude", event], input='{"session_id": "x"}',
+            capture_output=True, text=True,
+            env={**os.environ, "TMUX_AGENT_QUIET": "1",
+                 "TMUX_AGENT_STATE_DIR": state_dir, "TMUX_PANE": pane},
+        )
+
+    def test_hook_reports_state_silently(self):
+        with tempfile.TemporaryDirectory(prefix="ta-hook-") as directory:
+            r = self.run_hook(directory, "Stop")
+            self.assertEqual((r.returncode, r.stdout), (0, ""), r.stderr)
+            report = (Path(directory) / "report-%999").read_text()
+            self.assertEqual(report.split("|")[0], "ready")
+
+    def test_hook_session_end_clears_report(self):
+        with tempfile.TemporaryDirectory(prefix="ta-hook-") as directory:
+            (Path(directory) / "report-%999").write_text("working|1\n")
+            r = self.run_hook(directory, "SessionEnd")
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertFalse((Path(directory) / "report-%999").exists())
+
+    def test_hook_outside_tmux_is_a_noop(self):
+        with tempfile.TemporaryDirectory(prefix="ta-hook-") as directory:
+            r = self.run_hook(directory, "Stop", pane="")
+            self.assertEqual((r.returncode, r.stdout), (0, ""), r.stderr)
+            self.assertEqual(list(Path(directory).iterdir()), [])
+
+
+class InstallHooksTests(unittest.TestCase):
+    def test_merge_is_idempotent_and_keeps_foreign_hooks(self):
+        with tempfile.TemporaryDirectory(prefix="ta-home-") as home:
+            settings = Path(home) / ".claude" / "settings.json"
+            settings.parent.mkdir()
+            settings.write_text(
+                '{"model": "x", "hooks": {"Stop": [{"hooks": '
+                '[{"type": "command", "command": "other"}]}]}}'
+            )
+            env = {**os.environ, "HOME": home}
+            for _ in range(2):
+                r = subprocess.run([str(CLI), "install-hooks", "claude"],
+                                   capture_output=True, text=True, env=env)
+                self.assertEqual(r.returncode, 0, r.stderr)
+            data = json.loads(settings.read_text())
+            self.assertEqual(data["model"], "x")
+            stop = [h["command"] for e in data["hooks"]["Stop"] for h in e["hooks"]]
+            self.assertEqual(len(stop), 2)
+            self.assertEqual(stop[0], "other")
+            self.assertTrue(stop[1].endswith("tmux-agent hook claude Stop"))
+            notification = data["hooks"]["Notification"]
+            self.assertEqual(notification[0]["matcher"],
+                             "permission_prompt|elicitation_dialog")
+
+    def test_opencode_plugin_directory_is_linked(self):
+        with tempfile.TemporaryDirectory(prefix="ta-home-") as home:
+            r = subprocess.run([str(CLI), "install-hooks", "opencode"],
+                               capture_output=True, text=True,
+                               env={**os.environ, "HOME": home})
+            self.assertEqual(r.returncode, 0, r.stderr)
+            plugin = Path(home) / ".config/opencode/plugins/tmux-agent"
+            self.assertEqual(plugin.resolve(), ENGINE.parent / "opencode")
+            self.assertTrue((plugin / "index.js").is_file())
+            self.assertTrue((plugin / "tui.js").is_file())
+
+
+@unittest.skipUnless(shutil.which("node"), "node not installed")
+class OpencodePluginTests(unittest.TestCase):
+    """Drive the TUI plugin with a mocked OpenCode API and event stream."""
+
+    SCRIPT = r"""
+const { default: def } = await import(process.env.PLUGIN_URL);
+const roots = { root: "root", child: "root" };
+const events = [
+  ["server.connected", {}],
+  ["session.execution.started", { sessionID: "root" }],
+  ["session.execution.started", { sessionID: "child" }],
+  ["permission.asked", { sessionID: "child" }],
+  ["permission.replied", { sessionID: "child" }],
+  ["session.execution.succeeded", { sessionID: "child" }],
+  ["session.execution.started", { sessionID: "elsewhere" }],
+  ["form.created", { form: { sessionID: "root" } }],
+  ["session.text.delta", { sessionID: "root" }],
+  ["session.execution.interrupted", { sessionID: "root", reason: "shutdown" }],
+  ["session.execution.succeeded", { sessionID: "root" }],
+].map(([type, data]) => ({ type, data }));
+const dispose = def.setup({
+  data: { session: { root: (id) => roots[id] ?? id } },
+  ui: { router: { current: () => ({ type: "session", sessionID: "root" }) },
+        tabs: { list: () => [] } },
+  client: { event: { subscribe: async function* ({ signal }) {
+    yield* events;
+    await new Promise((resolve) => signal.addEventListener("abort", resolve));
+  } } },
+});
+await new Promise((resolve) => setTimeout(resolve, 500));
+dispose();
+"""
+
+    def test_forwards_this_panes_root_session_and_prompts(self):
+        plugin = ENGINE.parent / "opencode" / "tui.js"
+        with tempfile.TemporaryDirectory(prefix="ta-oc-") as directory:
+            log = Path(directory) / "calls"
+            bin_ = Path(directory) / "tmux-agent"
+            bin_.write_text(f'#!/bin/sh\necho "$*" >>"{log}"\n')
+            bin_.chmod(0o755)
+            r = subprocess.run(
+                ["node", "--input-type=module", "-e", self.SCRIPT],
+                capture_output=True, text=True, timeout=30,
+                env={**os.environ, "PLUGIN_URL": plugin.as_uri(),
+                     "TMUX_PANE": "%1", "TMUX_AGENT_BIN": str(bin_)},
+            )
+            self.assertEqual(r.returncode, 0, r.stderr)
+            deadline = time.time() + 5
+            want = [
+                "hook opencode session.execution.started",
+                "hook opencode permission.asked",
+                "hook opencode permission.replied",
+                "hook opencode form.created",
+                "hook opencode session.execution.succeeded",
+            ]
+            calls = []
+            while time.time() < deadline:
+                calls = log.read_text().splitlines() if log.exists() else []
+                if len(calls) >= len(want):
+                    break
+                time.sleep(0.05)
+            self.assertEqual(calls, want)
 
 
 if __name__ == "__main__":

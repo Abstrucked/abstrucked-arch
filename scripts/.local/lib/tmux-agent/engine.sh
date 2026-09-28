@@ -72,31 +72,31 @@ ta_state_ansi() {
 }
 
 ta_agent_glyph() {
-    # Brand shapes from theSVG, built into a tiny local font at SPUA-A.
-    # Without the font, keep the existing Nerd Font fallbacks. Overrides
-    # still accept any terminal-renderable glyph.
-    local font=${TMUX_AGENT_FONT:-$HOME/.local/share/fonts/tmux-agent-icons.ttf}
-    if [[ -f $font ]]; then
-        case "$1" in
-        claude)
-            echo "${TMUX_AGENT_ICON_CLAUDE:-󰀀}"
-            return
-            ;;
-        codex)
-            echo "${TMUX_AGENT_ICON_CODEX:-󰀁}"
-            return
-            ;;
-        opencode)
-            echo "${TMUX_AGENT_ICON_OPENCODE:-󰀂}"
-            return
-            ;;
-        esac
-    fi
+    # Nerd Font codicons: nf-cod-claude (U+EC82), nf-cod-openai (U+EC81)
+    # for Codex, nf-cod-agent (U+EC67) for the rest. Overrides still accept
+    # any terminal-renderable glyph.
     case "$1" in
-    claude) echo "${TMUX_AGENT_ICON_CLAUDE:-}" ;;
-    codex) echo "${TMUX_AGENT_ICON_CODEX:-}" ;;
-    opencode) echo "${TMUX_AGENT_ICON_OPENCODE:-}" ;;
-    *) echo "${TMUX_AGENT_ICON_DEFAULT:-}" ;;
+    claude) echo "${TMUX_AGENT_ICON_CLAUDE:-}" ;;
+    codex) echo "${TMUX_AGENT_ICON_CODEX:-}" ;;
+    opencode) echo "${TMUX_AGENT_ICON_OPENCODE:-}" ;;
+    *) echo "${TMUX_AGENT_ICON_DEFAULT:-}" ;;
+    esac
+}
+
+ta_hook_state() {
+    # $1 agent lifecycle event. Prints the state it reports, "end" when the
+    # agent session closed, or nothing for events that say nothing about
+    # state. Claude Code and Codex share hook event names; the OpenCode
+    # plugin forwards its (v2) server bus event types.
+    case "$1" in
+    SessionStart) echo idle ;;
+    UserPromptSubmit | PreToolUse | PostToolUse | PreCompact) echo working ;;
+    session.execution.started | permission.replied | form.replied | form.cancelled) echo working ;;
+    PermissionRequest | Notification) echo blocked ;;
+    permission.asked | form.created) echo blocked ;;
+    Stop) echo ready ;;
+    session.execution.succeeded | session.execution.failed | session.execution.interrupted) echo ready ;;
+    SessionEnd) echo end ;;
     esac
 }
 

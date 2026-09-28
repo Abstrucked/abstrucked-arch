@@ -7,7 +7,7 @@
 #   idle (green)     -- finished and seen
 #
 # Subcommands:
-#   strip                glyph strip for status-right
+#   strip                glyph strip for the status bar
 #   window-dot <win_id>  rollup state dot for a window status entry
 #   pane-label <pane_id> agent + state label for pane-border-format
 #   seen <pane_id>       mark the pane's state as seen (pane-focus-in hook)
@@ -16,6 +16,9 @@
 #   read --pane <id> [--lines N] [--ansi]   pane snapshot for fzf previews
 #   wait --pane <id> --state <state> [--timeout SEC]
 #   report --pane <id> --state <state>      hook-reported state override
+#   hook <agent> <event> agent lifecycle hook (Claude Code, Codex, OpenCode)
+#   install-hooks [claude|codex|opencode ...]  wire the agents' hooks up
+#   place-strip          centre the strip in the status bar (tmux.conf)
 #   attach --next        jump to the most urgent agent pane
 #   refresh              update cached state now
 #
@@ -50,15 +53,48 @@ tail_lines() {
     grep -v '^[[:space:]]*$' | tail -n "${1:-12}" || true
 }
 
+pane_in_view() {
+    # True when a focused client shows $1: its window is the session's
+    # current one and it is that window's active pane.
+    local name
+    while read -r name; do
+        [[ -n $name ]] || continue
+        [[ $(tmux display-message -p -c "$name" '#{pane_id}' 2>/dev/null) == "$1" ]] && return 0
+    done < <(tmux list-clients -F '#{?#{m:*focused*,#{client_flags}},#{client_name},}' 2>/dev/null)
+    return 1
+}
+
+notify() {
+    # $1 agent, $2 state, $3 tmux target, $4 working directory.
+    command -v notify-send >/dev/null 2>&1 || return 0
+    local what=finished urgency=normal
+    if [[ $2 == blocked ]]; then
+        what='needs input'
+        urgency=critical
+    fi
+    notify-send -a tmux-agent -u "$urgency" "$1 $what" "${4##*/} · $3" 2>/dev/null || true
+}
+
 mark_seen() {
     mkdir -p "$TA_STATE_DIR"
     now >"$TA_STATE_DIR/seen-$1"
 }
 
 refresh() {
+    # Hooks refresh in the background while the status bar polls. Serialize
+    # scans so a transition is seen, and notified, exactly once.
+    local lock_fd rc=0
+    mkdir -p "$TA_STATE_DIR"
+    exec {lock_fd}>"$TA_STATE_DIR/lock"
+    flock "$lock_fd"
+    scan "$@" || rc=$?
+    exec {lock_fd}>&-
+    return "$rc"
+}
+
+scan() {
     # Scan every pane once per TA_STATE_DIR/stamp interval (3s) unless forced.
     local force=${1:-0} now_s stamp
-    mkdir -p "$TA_STATE_DIR"
     now_s=$(now)
     stamp="$TA_STATE_DIR/stamp"
     if [[ $force != 1 && -f $stamp ]]; then
@@ -102,13 +138,22 @@ refresh() {
         fi
 
         state=$(ta_classify "$tail" "$((cpu - prev_cpu))" "$prev" "$seen" "$output_changed")
-        # A hook-reported state wins until it goes stale.
+        # A hook-reported state wins over the heuristics. Agent hooks report
+        # every transition, so their settled states hold while the agent
+        # lives. "working" and reports without a detected agent expire:
+        # an interrupted turn fires no Stop hook.
         rstate='' repoch=0
         if [[ -f $TA_STATE_DIR/report-$pane ]]; then
             IFS='|' read -r rstate repoch <"$TA_STATE_DIR/report-$pane" || true
             [[ $repoch =~ ^[0-9]+$ ]] || repoch=0
-            if [[ -n $rstate ]] && ((now_s - repoch < TA_REPORT_TTL)); then
+            if [[ -n $rstate ]] && { ((now_s - repoch < TA_REPORT_TTL)) ||
+                { [[ -n $detect && $rstate != working ]]; }; }; then
                 state=$rstate
+                # Seen after the agent reported it finished: acknowledged.
+                if [[ $state == ready && -f $TA_STATE_DIR/seen-$pane ]] &&
+                    (($(cat "$TA_STATE_DIR/seen-$pane") >= repoch)); then
+                    state=idle
+                fi
             else
                 rm -f "$TA_STATE_DIR/report-$pane"
             fi
@@ -119,13 +164,11 @@ refresh() {
             "$state" "$agent" "$cpu" "$changed" "$now_s" "$target" "$wid" "$path" "$tail_hash" \
             >"$TA_STATE_DIR/state-$pane"
 
-        # Notify only on real transitions of background panes.
+        # Notify on real transitions of panes nobody is looking at.
         if [[ -z ${TMUX_AGENT_QUIET:-} && -n $prev && $state != "$prev" ]] &&
-            { [[ $state == blocked ]] || [[ $state == ready ]]; }; then
-            if [[ $pane != "$(tmux display-message -p '#{pane_id}' 2>/dev/null || true)" ]] &&
-                command -v notify-send >/dev/null 2>&1; then
-                notify-send -a tmux-agent "$agent on $target" "is $state" 2>/dev/null || true
-            fi
+            { [[ $state == blocked ]] || [[ $state == ready ]]; } &&
+            ! pane_in_view "$pane"; then
+            notify "$agent" "$state" "$target" "$path"
         fi
     done < <(tmux list-panes -a -F "$TA_PANE_FMT" 2>/dev/null || true)
 
@@ -185,7 +228,7 @@ cmd_status() {
         for f in "$TA_STATE_DIR"/state-*; do
             [[ -e $f ]] || continue
             pane=${f##*-}
-            IFS='|' read -r st ag cpu ch up tgt wid path <"$f" || continue
+            IFS='|' read -r st ag cpu ch up tgt wid path _hash <"$f" || continue
             [[ $st == "$s" ]] || continue
             age=$((up - ch))
             if ((json)); then
@@ -279,6 +322,50 @@ cmd_report() {
     printf '%s|%s\n' "$want" "$(now)" >"$TA_STATE_DIR/report-$pane"
 }
 
+cmd_hook() {
+    # Agent lifecycle hook: tmux-agent hook <agent> <event>. Runs inside the
+    # agent, so it never fails, never writes to stdout (Claude Code feeds
+    # hook stdout back to the model) and never waits on the pane scan.
+    local event=${2:-} pane=${TMUX_PANE:-} state prev='' report
+    # Claude Code and Codex pipe a JSON payload; drain it unread.
+    [[ -t 0 ]] || cat >/dev/null 2>&1 || true
+    [[ -n $pane ]] || return 0
+    state=$(ta_hook_state "$event")
+    [[ -n $state ]] || return 0
+    mkdir -p "$TA_STATE_DIR"
+    report="$TA_STATE_DIR/report-$pane"
+    if [[ $state == end ]]; then
+        rm -f "$report"
+    else
+        [[ -f $report ]] && IFS='|' read -r prev _ <"$report"
+        printf '%s|%s\n' "$state" "$(now)" >"$report"
+        # Tool hooks fire constantly; only a new state needs a rescan.
+        [[ $state != "$prev" ]] || return 0
+    fi
+    (
+        refresh 1
+        tmux list-clients -F '#{client_name}' | while read -r c; do
+            tmux refresh-client -S -t "$c"
+        done
+    ) </dev/null >/dev/null 2>&1 &
+    return 0
+}
+
+cmd_place_strip() {
+    # Centre the agent strip in the status bar: insert it into
+    # status-format[0] just before the status-right section. Formats
+    # without that section get the strip appended to status-right.
+    local strip='#(~/.local/bin/tmux-agent strip)' fmt marker='#[nolist align=right'
+    fmt=$(tmux show -gv 'status-format[0]' 2>/dev/null) || return 0
+    [[ $fmt == *"tmux-agent strip"* ]] && return 0
+    if [[ $fmt == *"$marker"* ]]; then
+        tmux set -g 'status-format[0]' \
+            "${fmt/"$marker"/"#[nolist align=absolute-centre]$strip$marker"}"
+    elif [[ $(tmux show -gv status-right) != *"tmux-agent strip"* ]]; then
+        tmux set -ag status-right " $strip"
+    fi
+}
+
 goto_pane() {
     local pane=$1 wid
     wid=$(tmux display-message -p -t "$pane" '#{window_id}')
@@ -304,33 +391,53 @@ cmd_attach() {
     return 1
 }
 
+pad() {
+    # $1 text, $2 width: left-aligned, padded with spaces. Counts characters,
+    # not bytes, so it lines up where printf's %-Ns would not.
+    printf '%s%*s' "$1" "$(($2 > ${#1} ? $2 - ${#1} : 0))" ''
+}
+
 cmd_pick() {
     refresh
-    local rows=() f st ag cpu ch up tgt wid path pane age s
+    local f st ag cpu ch up tgt wid path pane s i
+    local -a sts=() ags=() dirs=() tgts=() ages=() panes=()
     for s in blocked working ready idle; do
         for f in "$TA_STATE_DIR"/state-*; do
             [[ -e $f ]] || continue
             pane=${f##*-}
-            IFS='|' read -r st ag cpu ch up tgt wid path <"$f" || continue
+            IFS='|' read -r st ag cpu ch up tgt wid path _hash <"$f" || continue
             [[ $st == "$s" ]] || continue
-            age=$(($(now) - ch))
-            rows+=("$(ta_state_ansi "$st")$(ta_agent_glyph "$ag")"$'\t'"$ag"$'\t'"${path##*/}"$'\t'"$tgt"$'\t'"$(age_str "$age")"$'\t'"$pane")
+            sts+=("$st") ags+=("$ag") dirs+=("${path##*/}") tgts+=("$tgt") panes+=("$pane")
+            ages+=("$(age_str "$(($(now) - ch))")")
         done
     done
-    if ((${#rows[@]} == 0)); then
+    if ((${#panes[@]} == 0)); then
         echo "no agent panes" >&2
         return 1
     fi
+    # Pad columns to their widest entry. Tabs would jump to the next 8-column
+    # stop whenever a name is 8 characters long ("opencode").
+    local wa=0 wd=0 wt=0
+    for i in "${!panes[@]}"; do
+        ((${#ags[i]} > wa)) && wa=${#ags[i]}
+        ((${#dirs[i]} > wd)) && wd=${#dirs[i]}
+        ((${#tgts[i]} > wt)) && wt=${#tgts[i]}
+    done
+    local rows=()
+    for i in "${!panes[@]}"; do
+        # The pane id rides along after a tab, hidden from the list.
+        rows+=("$(ta_state_ansi "${sts[i]}")$(ta_agent_glyph "${ags[i]}")  $(pad "${ags[i]}" "$wa")  $(pad "${dirs[i]}" "$wd")  $(pad "${tgts[i]}" "$wt")  ${ages[i]}"$'\t'"${panes[i]}")
+    done
     local sel
     sel=$(printf '%s\n' "${rows[@]}" | fzf --ansi --reverse \
-        --delimiter=$'\t' --with-nth=1,2,3,4,5 \
-        --preview "$SELF read --pane {6} --lines 20 --ansi" \
+        --delimiter=$'\t' --with-nth=1 \
+        --preview "$SELF read --pane {2} --lines 20 --ansi" \
         --preview-window 'right,60%,border-left') || return 0
     goto_pane "${sel##*$'\t'}"
 }
 
 usage() {
-    sed -n '2,25p' "$SELF" | sed 's/^# \{0,1\}//'
+    sed -n '2,27p' "$SELF" | sed 's/^# \{0,1\}//'
 }
 
 main() {
@@ -347,6 +454,9 @@ main() {
     read) cmd_read "$@" ;;
     wait) cmd_wait "$@" ;;
     report) cmd_report "$@" ;;
+    hook) cmd_hook "$@" || true ;;
+    place-strip) cmd_place_strip ;;
+    install-hooks) "$(dirname "$SELF")/../lib/tmux-agent/install-hooks" "$@" ;;
     attach) cmd_attach "$@" ;;
     *)
         usage
