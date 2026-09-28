@@ -155,7 +155,7 @@ scan_configs() {
   fi
 
   # Check ~/.local/bin for specific scripts
-  local specific_scripts=("tmux-sessionizer" "screenshot" "screenshot_1" "screenshot_2" "nvim-launcher" "cursor-launcher" "zed-launcher" "opencode-launcher" "claude-code-launcher" "code-launcher" "ide-chooser" "setup-api-keys" "add-api-key" "setup-ide-aliases")
+  local specific_scripts=("tmux-sessionizer" "tmux-agent" "screenshot" "screenshot_1" "screenshot_2" "nvim-launcher" "cursor-launcher" "zed-launcher" "opencode-launcher" "claude-code-launcher" "code-launcher" "ide-chooser" "setup-api-keys" "add-api-key" "setup-ide-aliases")
   for script in "${specific_scripts[@]}"; do
     if [[ -f "$HOME/.local/bin/$script" ]]; then
       echo -e "${CYAN}📄 Found: $script (~/.local/bin/$script)${NC}" >&2
