@@ -2,5 +2,22 @@
 # Opens the ai-usagebar TUI in a terminal. A bar click has no terminal of its
 # own, so both the Waybar module and the Awesome widget go through this.
 # Requires: ai-usagebar (ships ai-usagebar-tui), alacritty.
+set -eu
 
-exec alacritty --command ai-usagebar-tui "$@"
+self="$(readlink -f "$0")"
+if [ "${1:-}" != --in-terminal ]; then
+    # Create the terminal before asking pass to unlock pinentry-curses.
+    exec alacritty --command "$self" --in-terminal "$@"
+fi
+shift
+
+PLUGIN_DIR="$(dirname "$(dirname "$self")")"
+# shellcheck source=../lib/openrouter-key.sh
+. "$PLUGIN_DIR/lib/openrouter-key.sh"
+if ai_usage_load_openrouter_key interactive; then
+    # Refresh Waybar immediately after unlocking; Awesome uses its next poll.
+    pkill -RTMIN+13 -x waybar 2>/dev/null || :
+else
+    echo 'OpenRouter key unavailable; opening the dashboard for the other providers.' >&2
+fi
+exec ai-usagebar-tui "$@"
