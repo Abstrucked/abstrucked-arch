@@ -322,6 +322,13 @@ for component in "${SELECTED_COMPONENTS[@]}"; do
         # generated file. safe_symlink backs up a previous theme or symlink.
         safe_symlink "$DOTFILES_DIR/config/tmux/theme.conf" "$XDG_CONFIG_HOME/tmux/theme.conf" || die "Failed to link tmux theme"
 
+        # tmux's bar is text-only; the tiny icon font maps the three agent
+        # logos to private-use characters that can be colored by state.
+        safe_symlink "$DOTFILES_DIR/config/tmux/agent-icons/tmux-agent-icons.ttf" "$HOME/.local/share/fonts/tmux-agent-icons.ttf" || die "Failed to link tmux agent icons"
+        if command -v fc-cache >/dev/null 2>&1; then
+            fc-cache -f "$HOME/.local/share/fonts" || die "Failed to refresh font cache"
+        fi
+
         safe_symlink "$XDG_CONFIG_HOME/tmux/tmux.conf" "$HOME/.tmux.conf" || die "Failed to symlink tmux config"
         if [[ -x "$tpm_dir/bin/install_plugins" ]]; then
             "$tpm_dir/bin/install_plugins" || die "Failed to install tmux plugins"

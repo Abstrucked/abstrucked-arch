@@ -120,6 +120,16 @@ class GlyphTests(unittest.TestCase):
         r = bash('ta_agent_glyph claude', env={"TMUX_AGENT_ICON_CLAUDE": "X"})
         self.assertEqual(r.stdout.strip(), "X")
 
+    def test_brand_icons_with_font_and_fallback_without_it(self):
+        with tempfile.TemporaryDirectory(prefix="ta-font-") as directory:
+            font = Path(directory) / "icons.ttf"
+            font.touch()
+            script = 'ta_agent_glyph claude; ta_agent_glyph codex; ta_agent_glyph opencode'
+            with_font = bash(script, env={"TMUX_AGENT_FONT": str(font)})
+            without_font = bash(script, env={"TMUX_AGENT_FONT": str(font) + ".missing"})
+            self.assertEqual(with_font.stdout.split(), ["󰀀", "󰀁", "󰀂"])
+            self.assertEqual(without_font.stdout.split(), ["", "", ""])
+
     def test_agent_name_from_comm(self):
         r = bash('ta_agent_name_of claude-code ""')
         self.assertEqual(r.stdout.strip(), "claude")
@@ -202,6 +212,8 @@ class CliSmokeTests(unittest.TestCase):
     def test_strip_shows_every_pane_with_distinct_state_colors(self):
         with tempfile.TemporaryDirectory(prefix="ta-strip-") as directory:
             state_dir = Path(directory)
+            font = state_dir / "font.ttf"
+            font.touch()
             (state_dir / "stamp").write_text(str(int(time.time())) + "\n")
             for pane, state, agent in (
                 (1, "idle", "claude"),
@@ -214,13 +226,14 @@ class CliSmokeTests(unittest.TestCase):
                 )
             r = subprocess.run(
                 [str(CLI), "strip"], capture_output=True, text=True,
-                env={**os.environ, "TMUX_AGENT_STATE_DIR": directory},
+                env={**os.environ, "TMUX_AGENT_STATE_DIR": directory,
+                     "TMUX_AGENT_FONT": str(font)},
             )
             self.assertEqual(r.returncode, 0, r.stderr)
             self.assertEqual(
                 r.stdout,
-                " #[fg=red]#[default] #[fg=yellow]#[default]"
-                " #[fg=blue]#[default] #[fg=green]#[default]",
+                " #[fg=red]󰀀#[default] #[fg=yellow]󰀂#[default]"
+                " #[fg=blue]󰀁#[default] #[fg=green]󰀀#[default]",
             )
 
 

@@ -71,7 +71,17 @@ ta_state_ansi() {
 }
 
 ta_agent_glyph() {
-    # Nerd Font glyph per agent; override with TMUX_AGENT_ICON_<NAME>.
+    # Brand shapes from theSVG, built into a tiny local font at SPUA-A.
+    # Without the font, keep the existing Nerd Font fallbacks. Overrides
+    # still accept any terminal-renderable glyph.
+    local font=${TMUX_AGENT_FONT:-$HOME/.local/share/fonts/tmux-agent-icons.ttf}
+    if [[ -f $font ]]; then
+        case "$1" in
+            claude) echo "${TMUX_AGENT_ICON_CLAUDE:-󰀀}" ; return ;;
+            codex) echo "${TMUX_AGENT_ICON_CODEX:-󰀁}" ; return ;;
+            opencode) echo "${TMUX_AGENT_ICON_OPENCODE:-󰀂}" ; return ;;
+        esac
+    fi
     case "$1" in
     claude) echo "${TMUX_AGENT_ICON_CLAUDE:-}" ;;
     codex) echo "${TMUX_AGENT_ICON_CODEX:-}" ;;
