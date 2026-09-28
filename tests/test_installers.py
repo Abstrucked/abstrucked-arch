@@ -71,6 +71,7 @@ class InstallerTests(unittest.TestCase):
             (self.repo / name).mkdir()
         # Data fixtures avoid copying personal configs or links out of the repository.
         self.write(self.repo / "config/tmux/tmux.conf", 'set -g default-shell "/bin/zsh"\n')
+        self.write(self.repo / "config/tmux/theme.conf", "# tracked icon theme\n")
         self.write(self.repo / "themes/theme.sh", "# Not sourced during dry runs.\n")
         self.write(self.repo / "nvim/.config/nvim/init.lua", "-- managed fixture\n")
         (self.repo / "nvim/.config/nvim/lua").mkdir()
@@ -335,7 +336,7 @@ set_login_shell "${1:-bash}"
         self.assert_failed(result)
         self.assertEqual((self.home / ".zshrc").read_text(), "keep original shell\n")
 
-    def test_tmux_theme_symlink_target_has_content_backup(self):
+    def test_tmux_theme_links_tracked_theme_without_overwriting_existing_target(self):
         original = self.home / "theme-source"
         self.write(original, "original theme\n")
         theme = self.home / ".config/tmux/theme.conf"
@@ -347,11 +348,25 @@ set_login_shell "${1:-bash}"
         (self.home / ".tmux/plugins/tpm/bin/install_plugins").chmod(0o755)
         self.run_script(args=("-y", "--only", "tmux"), code=0)
         self.assertTrue(theme.is_symlink())
-        backups = list((self.home / ".dotfiles-backups").rglob("theme-source"))
+        self.assertEqual(theme.resolve(), self.repo / "config/tmux/theme.conf")
+        self.assertEqual(theme.read_text(), "# tracked icon theme\n")
+        backups = list((self.home / ".dotfiles-backups").rglob("theme.conf"))
+        self.assertEqual(len(backups), 1)
+        self.assertTrue(backups[0].is_symlink())
+        self.assertEqual(backups[0].resolve(), original)
+        self.assertEqual(original.read_text(), "original theme\n")
+
+    def test_tmux_existing_regular_theme_is_backed_up(self):
+        theme = self.home / ".config/tmux/theme.conf"
+        self.write(theme, "my own theme\n")
+        self.write(self.home / ".tmux/plugins/tpm/tpm", "#!/bin/sh\nexit 0\n")
+        (self.home / ".tmux/plugins/tpm/tpm").chmod(0o755)
+        self.run_script(args=("-y", "--only", "tmux"), code=0)
+        self.assertEqual(theme.resolve(), self.repo / "config/tmux/theme.conf")
+        backups = list((self.home / ".dotfiles-backups").rglob("theme.conf"))
         self.assertEqual(len(backups), 1)
         self.assertFalse(backups[0].is_symlink())
-        self.assertEqual(backups[0].read_text(), "original theme\n")
-        self.assertIn("status-style", original.read_text())
+        self.assertEqual(backups[0].read_text(), "my own theme\n")
 
     def test_bootstrap_scans_standalone_secrets_and_does_not_whitelist_file(self):
         self.write(self.home / ".zshrc", 'export SAFE_API_KEY=$(pass service)\nexport PASSWORD="literal-secret"\n')

@@ -318,19 +318,9 @@ for component in "${SELECTED_COMPONENTS[@]}"; do
             die "Tmux configuration not found"
         fi
 
-        theme_target=$(readlink -f -- "$XDG_CONFIG_HOME/tmux/theme.conf")
-        backup_item "$theme_target" || die "Failed to back up tmux theme"
-        cat > "$XDG_CONFIG_HOME/tmux/theme.conf" <<'EOF'
-# Tmux theme colors
-set -g status-style bg=black,fg=white
-set -g status-left-style bg=black,fg=brightblue
-set -g status-right-style bg=black,fg=brightblue
-set -g pane-border-style fg=black
-set -g pane-active-border-style fg=blue
-set -g window-status-current-style bg=blue,fg=black
-set -g window-status-style bg=black,fg=white
-set -g message-style bg=brightyellow,fg=black
-EOF
+        # Link the tracked icon theme rather than replacing it with a minimal
+        # generated file. safe_symlink backs up a previous theme or symlink.
+        safe_symlink "$DOTFILES_DIR/config/tmux/theme.conf" "$XDG_CONFIG_HOME/tmux/theme.conf" || die "Failed to link tmux theme"
 
         safe_symlink "$XDG_CONFIG_HOME/tmux/tmux.conf" "$HOME/.tmux.conf" || die "Failed to symlink tmux config"
         if [[ -x "$tpm_dir/bin/install_plugins" ]]; then
