@@ -1,4 +1,5 @@
 #!/bin/bash
 
-source "$HOME/.local/bin/load-api-keys.sh"
-nvim
+# shellcheck disable=SC1091 # Resolved by the installed ~/.local/bin symlink.
+source "$HOME/.local/bin/load-api-keys.sh" || exit $?
+exec nvim "$@"

@@ -1,4 +1,7 @@
 #!/bin/bash
 
-source "$HOME/.local/bin/load-api-keys.sh"
-opencode
+# shellcheck disable=SC1091 # Resolved by the installed ~/.local/bin symlink.
+source "$HOME/.local/bin/load-api-keys.sh" || exit $?
+# OpenCode 2's shared service may have started without these keys. A private
+# server inherits the environment loaded above on every launch.
+exec opencode "$@" --standalone

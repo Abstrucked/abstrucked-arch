@@ -253,7 +253,9 @@ create-app-launcher
 ### Using Launchers
 - After creation, reload your shell: `source ~/.zshrc`
 - Use the alias: `code-ai` (loads API keys and launches the app).
-- Existing launchers: `nvim-launcher` (for Neovim with API keys).
+- Existing launchers: `nvim-launcher` and `opencode-launcher` (aliases `nvim-ai` and `opencode-ai`).
+- Launchers forward arguments (for example, `nvim-ai README.md`) and stop if the API-key loader fails.
+- OpenCode uses `--standalone` so its server inherits the loaded keys. Neovim's Sidekick OpenCode tool uses the same launcher.
 
 ### Managing Launchers
 - Edit `zsh/aliases.zsh` to modify or remove aliases.
