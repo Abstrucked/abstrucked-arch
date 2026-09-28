@@ -66,8 +66,8 @@ refresh() {
     fi
     printf '%s\n' "$now_s" >"$stamp"
 
-    local pane pid wid target path detect agent apid cpu tail
-    local state prev prev_cpu changed seen rstate repoch f base
+    local pane pid wid target path detect agent apid cpu tail tail_hash
+    local state prev prev_cpu prev_tail_hash changed seen output_changed rstate repoch f base
     local -A live=()
     while IFS='|' read -r pane pid wid target path; do
         [[ -n $pane ]] || continue
@@ -83,20 +83,25 @@ refresh() {
             cpu=$(ta_proc_cpu "$apid" || echo 0)
         fi
         tail=$(tmux capture-pane -p -J -S -30 -t "$pane" 2>/dev/null | tail_lines 12 || true)
+        read -r tail_hash _ <<<"$(cksum <<<"$tail")"
 
-        prev='' prev_cpu=0 changed=$now_s
+        prev='' prev_cpu=0 prev_tail_hash='' changed=$now_s
         if [[ -f $TA_STATE_DIR/state-$pane ]]; then
-            IFS='|' read -r prev _ag prev_cpu changed _up _tgt _wid _path \
+            IFS='|' read -r prev _ag prev_cpu changed _up _tgt _wid _path prev_tail_hash \
                 <"$TA_STATE_DIR/state-$pane" || true
             [[ $prev_cpu =~ ^[0-9]+$ ]] || prev_cpu=0
             [[ $changed =~ ^[0-9]+$ ]] || changed=$now_s
+        fi
+        output_changed=0
+        if [[ -n $prev_tail_hash && $tail_hash != "$prev_tail_hash" ]]; then
+            output_changed=1
         fi
         seen=0
         if [[ -f $TA_STATE_DIR/seen-$pane ]]; then
             (($(cat "$TA_STATE_DIR/seen-$pane") >= changed)) && seen=1
         fi
 
-        state=$(ta_classify "$tail" "$((cpu - prev_cpu))" "$prev" "$seen")
+        state=$(ta_classify "$tail" "$((cpu - prev_cpu))" "$prev" "$seen" "$output_changed")
         # A hook-reported state wins until it goes stale.
         rstate='' repoch=0
         if [[ -f $TA_STATE_DIR/report-$pane ]]; then
@@ -110,8 +115,8 @@ refresh() {
         fi
 
         [[ $state == "$prev" ]] || changed=$now_s
-        printf '%s|%s|%s|%s|%s|%s|%s|%s\n' \
-            "$state" "$agent" "$cpu" "$changed" "$now_s" "$target" "$wid" "$path" \
+        printf '%s|%s|%s|%s|%s|%s|%s|%s|%s\n' \
+            "$state" "$agent" "$cpu" "$changed" "$now_s" "$target" "$wid" "$path" "$tail_hash" \
             >"$TA_STATE_DIR/state-$pane"
 
         # Notify only on real transitions of background panes.

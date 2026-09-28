@@ -16,9 +16,10 @@
 [[ -n "${_TA_ENGINE_LOADED:-}" ]] && return 0
 _TA_ENGINE_LOADED=1
 
-# CPU ticks (100ths of a second) gained across one poll interval to count as
-# working. Idle TUIs still blink and redraw, staying far below this.
-declare -r TA_CPU_TICKS_WORKING=4
+# CPU ticks (100ths of a second) gained across a poll interval to count as
+# working when the captured pane output also changed. Idle TUIs periodically
+# wake for housekeeping, so CPU activity alone is not evidence of work.
+declare -r TA_CPU_TICKS_WORKING=25
 
 # Known agent CLI names. Detection matches these against the process name
 # (prefix, so "claude-code" counts) and against argv as a path/word boundary.
@@ -77,9 +78,18 @@ ta_agent_glyph() {
     local font=${TMUX_AGENT_FONT:-$HOME/.local/share/fonts/tmux-agent-icons.ttf}
     if [[ -f $font ]]; then
         case "$1" in
-            claude) echo "${TMUX_AGENT_ICON_CLAUDE:-󰀀}" ; return ;;
-            codex) echo "${TMUX_AGENT_ICON_CODEX:-󰀁}" ; return ;;
-            opencode) echo "${TMUX_AGENT_ICON_OPENCODE:-󰀂}" ; return ;;
+        claude)
+            echo "${TMUX_AGENT_ICON_CLAUDE:-󰀀}"
+            return
+            ;;
+        codex)
+            echo "${TMUX_AGENT_ICON_CODEX:-󰀁}"
+            return
+            ;;
+        opencode)
+            echo "${TMUX_AGENT_ICON_OPENCODE:-󰀂}"
+            return
+            ;;
         esac
     fi
     case "$1" in
@@ -101,7 +111,7 @@ ta_match_working() {
     # locale grep would match their bytes individually and light up on
     # unrelated box-drawing characters.
     grep -qiE \
-        'esc to interrupt|esc to stop|working\.\.\.|thinking\.\.\.|running\.\.\.|⠋|⠙|⠹|⠸|⠼|⠴|⠦|⠧|⠇|⠏|◐|◓|◑|◒|⣾|⣽|⣻|⢿|⡿|⣟|⣯|⣷|◜|◠|◝|◞|◡|◟' \
+        'esc to interrupt|esc to stop|working\.\.\.|thinking\.\.\.|running\.\.\.|(thinking|doodling|working|running|searching|planning|reading|writing|generating)…|⠋|⠙|⠹|⠸|⠼|⠴|⠦|⠧|⠇|⠏|◐|◓|◑|◒|⣾|⣽|⣻|⢿|⡿|⣟|⣯|⣷|◜|◠|◝|◞|◡|◟' \
         <<<"$1"
 }
 
@@ -113,13 +123,15 @@ ta_match_ready() {
 
 ta_classify() {
     # $1 pane tail text, $2 CPU ticks gained since last poll,
-    # $3 previous state, $4 seen-since-last-change (1/0). Prints the state.
-    local tail=${1:-} cpu_delta=${2:-0} prev=${3:-} seen=${4:-0} state=''
-    if ((cpu_delta >= TA_CPU_TICKS_WORKING)); then
-        state=working
-    elif ta_match_blocked "$tail"; then
+    # $3 previous state, $4 seen-since-last-change (1/0),
+    # $5 captured output changed since last poll (1/0). Prints the state.
+    local tail=${1:-} cpu_delta=${2:-0} prev=${3:-} seen=${4:-0}
+    local output_changed=${5:-0} state=''
+    if ta_match_blocked "$tail"; then
         state=blocked
     elif ta_match_working "$tail"; then
+        state=working
+    elif ((cpu_delta >= TA_CPU_TICKS_WORKING)) && [[ $output_changed == 1 ]]; then
         state=working
     elif ta_match_ready "$tail"; then
         state=ready

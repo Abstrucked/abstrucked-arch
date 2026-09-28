@@ -28,9 +28,9 @@ def bash(script, *args, env=None):
 
 
 class ClassifyTests(unittest.TestCase):
-    def classify(self, tail, cpu=0, prev="", seen=0):
-        r = bash('ta_classify "$1" "$2" "$3" "$4"',
-                 tail, str(cpu), prev, str(seen), )
+    def classify(self, tail, cpu=0, prev="", seen=0, output_changed=0):
+        r = bash('ta_classify "$1" "$2" "$3" "$4" "$5"',
+                 tail, str(cpu), prev, str(seen), str(output_changed))
         self.assertEqual(r.returncode, 0, r.stderr)
         return r.stdout.strip()
 
@@ -43,8 +43,23 @@ class ClassifyTests(unittest.TestCase):
     def test_blocked_numbered_choice(self):
         self.assertEqual(self.classify(" 1. Yes"), "blocked")
 
-    def test_working_when_cpu_moves(self):
-        self.assertEqual(self.classify("just some output", cpu=200), "working")
+    def test_idle_cpu_wakeup_does_not_mark_agent_working(self):
+        self.assertEqual(self.classify("just some output", cpu=200, prev="idle"), "idle")
+
+    def test_cpu_and_visible_output_change_mark_working(self):
+        self.assertEqual(
+            self.classify("new output", cpu=200, prev="idle", output_changed=1),
+            "working",
+        )
+
+    def test_small_cpu_delta_does_not_mark_working_even_if_output_changes(self):
+        self.assertEqual(
+            self.classify("new output", cpu=5, prev="idle", output_changed=1),
+            "idle",
+        )
+
+    def test_claude_thinking_ellipsis_is_working(self):
+        self.assertEqual(self.classify("✶ Doodling…"), "working")
 
     def test_working_marker_esc_to_interrupt(self):
         self.assertEqual(self.classify("Refactoring... esc to interrupt"), "working")
@@ -74,9 +89,8 @@ class ClassifyTests(unittest.TestCase):
         self.assertEqual(self.classify("Approve this change? ", seen=1), "blocked")
 
     def test_cpu_wins_over_prompt_text(self):
-        # Busy CPU takes precedence: churning output can leave prompt text
-        # behind in the tail.
-        self.assertEqual(self.classify("Do you want to proceed?", cpu=50), "working")
+        # An approval prompt takes precedence over CPU churn from a TUI.
+        self.assertEqual(self.classify("Do you want to proceed?", cpu=50), "blocked")
 
     def test_negative_delta_is_not_working(self):
         self.assertEqual(self.classify("$ ", cpu=-40, prev="working"), "ready")
