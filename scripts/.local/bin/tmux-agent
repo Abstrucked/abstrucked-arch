@@ -139,7 +139,7 @@ strip() {
             [[ -e $f ]] || continue
             IFS='|' read -r st ag _rest <"$f" || continue
             [[ $st == "$s" ]] || continue
-            out="$out#[fg=$(ta_state_color "$st")]$(ta_agent_glyph "$ag")"
+            out="$out #[fg=$(ta_state_color "$st")]$(ta_agent_glyph "$ag")#[default]"
         done
     done
     printf '%s' "$out"

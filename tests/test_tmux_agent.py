@@ -199,6 +199,30 @@ class CliSmokeTests(unittest.TestCase):
         r = self.run_cli("report")
         self.assertEqual(r.returncode, 1)
 
+    def test_strip_shows_every_pane_with_distinct_state_colors(self):
+        with tempfile.TemporaryDirectory(prefix="ta-strip-") as directory:
+            state_dir = Path(directory)
+            (state_dir / "stamp").write_text(str(int(time.time())) + "\n")
+            for pane, state, agent in (
+                (1, "idle", "claude"),
+                (2, "ready", "codex"),
+                (3, "working", "opencode"),
+                (4, "blocked", "claude"),
+            ):
+                (state_dir / f"state-%{pane}").write_text(
+                    f"{state}|{agent}|0|0|0|example:1.1|@1|/project\n"
+                )
+            r = subprocess.run(
+                [str(CLI), "strip"], capture_output=True, text=True,
+                env={**os.environ, "TMUX_AGENT_STATE_DIR": directory},
+            )
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertEqual(
+                r.stdout,
+                " #[fg=red]#[default] #[fg=yellow]#[default]"
+                " #[fg=blue]#[default] #[fg=green]#[default]",
+            )
+
 
 if __name__ == "__main__":
     unittest.main()
