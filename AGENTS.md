@@ -2,8 +2,9 @@
 
 ## Commands
 - **Test single file**: Run syntax checks with `shellcheck <file>` for shell scripts or `yamllint <file>` for YAML configs
-- **Lint all**: `find . -name "*.sh" -exec shellcheck {} \;` for shell scripts
-- **Format**: Use `shfmt -w <file>` for shell script formatting
+- **Lint all**: `git ls-files -z -- '*.sh' themes/themectl plugins/pluginctl 'plugins/*/bin/*' install/lightdm/themectl-greeter-sync | xargs -0 shellcheck` (tracked files only: ignored dirs such as `themes/.generations/` hold stray scripts; `.shellcheckrc` makes `source` lines resolve)
+- **Run tests**: `pytest tests`
+- **Format**: Use `shfmt -w -i 4 <file>` (`-i 2` for files already indented with two spaces). Plain `shfmt` indents with tabs, so never run it repo-wide
 - **Validate configs**: `stow --adopt` to test symlink structure
 
 ## Code Style Guidelines

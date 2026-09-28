@@ -49,27 +49,27 @@ log() {
 
 # Log error message
 log_error() {
-    log $LOG_ERROR "$RED" "ERROR: $*"
+    log "$LOG_ERROR" "$RED" "ERROR: $*"
 }
 
 # Log warning message
 log_warn() {
-    log $LOG_WARN "$YELLOW" "WARNING: $*"
+    log "$LOG_WARN" "$YELLOW" "WARNING: $*"
 }
 
 # Log info message
 log_info() {
-    log $LOG_INFO "$BLUE" "$*"
+    log "$LOG_INFO" "$BLUE" "$*"
 }
 
 # Log success message
 log_success() {
-    log $LOG_INFO "$GREEN" "✓ $*"
+    log "$LOG_INFO" "$GREEN" "✓ $*"
 }
 
 # Log debug message
 log_debug() {
-    log $LOG_DEBUG "$PURPLE" "DEBUG: $*"
+    log "$LOG_DEBUG" "$PURPLE" "DEBUG: $*"
 }
 
 # Print section header
@@ -127,10 +127,6 @@ progress_step() {
     PROGRESS_CURRENT=$((PROGRESS_CURRENT + 1))
     PROGRESS_STEP_START=$(date +%s)
     
-    # Calculate elapsed time
-    local elapsed=$((PROGRESS_START_TIME - $(date +%s) + $(date +%s) - PROGRESS_START_TIME))
-    elapsed=$(( $(date +%s) - PROGRESS_START_TIME ))
-    
     echo ""
     echo -e "${WHITE}┌─────────────────────────────────────────────────────────┐${NC}"
     echo -e "${WHITE}│${NC} ${CYAN}Step $PROGRESS_CURRENT/$PROGRESS_TOTAL${NC} ${WHITE}│${NC} ${GREEN}$description${NC}"
@@ -140,7 +136,8 @@ progress_step() {
 # Complete current step with timing
 progress_complete() {
     local status=${1:-"done"}
-    local step_end_time=$(date +%s)
+    local step_end_time
+    step_end_time=$(date +%s)
     local step_duration=$((step_end_time - PROGRESS_STEP_START))
     
     local minutes=$((step_duration / 60))
@@ -207,8 +204,8 @@ spinner_start() {
 # Stop spinner
 spinner_stop() {
     if [[ $SPINNER_PID -ne 0 ]]; then
-        kill $SPINNER_PID 2>/dev/null || true
-        wait $SPINNER_PID 2>/dev/null || true
+        kill "$SPINNER_PID" 2>/dev/null || true
+        wait "$SPINNER_PID" 2>/dev/null || true
         SPINNER_PID=0
     fi
     

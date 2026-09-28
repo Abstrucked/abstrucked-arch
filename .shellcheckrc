@@ -1,0 +1,4 @@
+# Follow `source` lines so lib/*.sh is checked with the helpers it loads,
+# resolving paths relative to the script rather than the working directory.
+external-sources=true
+source-path=SCRIPTDIR

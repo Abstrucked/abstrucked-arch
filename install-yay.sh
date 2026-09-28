@@ -37,6 +37,7 @@ pacman -Q base-devel >/dev/null 2>&1 || die "Missing base-devel. Run: sudo pacma
 
 setup_cleanup_trap
 create_temp_dir yay-build temp_dir || die "Failed to create yay build directory"
+# shellcheck disable=SC2154 # temp_dir is assigned by create_temp_dir
 git clone -- https://aur.archlinux.org/yay.git "$temp_dir/yay" || die "Failed to clone yay repository"
 makepkg_args=(-si)
 if [[ "$NON_INTERACTIVE" == true ]]; then
@@ -56,6 +57,7 @@ if [[ "$NON_INTERACTIVE" == true ]]; then
     {
         printf 'source %s\n' "$makepkg_conf_q"
         if [[ "$makepkg_conf" == /etc/makepkg.conf ]]; then
+            # shellcheck disable=SC2016 # written literally; expands when makepkg sources it
             printf '%s\n' \
                 'if [[ -r "${XDG_CONFIG_HOME:-$HOME/.config}/pacman/makepkg.conf" ]]; then' \
                 '    source "${XDG_CONFIG_HOME:-$HOME/.config}/pacman/makepkg.conf"' \

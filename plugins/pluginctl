@@ -47,6 +47,7 @@ plugin_ids() {
 
 manifest_get() {
   local id="$1" key="$2"
+  # shellcheck source=/dev/null # per-plugin manifest, chosen at runtime
   ( . "$PLUGIN_DIR/$id/manifest.conf"; echo "${!key:-}" )
 }
 

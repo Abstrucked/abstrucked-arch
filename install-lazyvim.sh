@@ -200,6 +200,7 @@ trap 'exit 143' TERM
 
 if [[ "$managed" != true ]]; then
     create_temp_dir lazyvim-install temp_dir || die "Failed to create LazyVim staging directory"
+    # shellcheck disable=SC2154 # temp_dir is assigned by create_temp_dir
     git clone --depth 1 -- https://github.com/LazyVim/starter "$temp_dir/starter" || die "Failed to clone LazyVim starter; existing configuration untouched"
     [[ -f "$temp_dir/starter/init.lua" ]] || die "Staged LazyVim starter has no init.lua"
     rm -rf -- "$temp_dir/starter/.git" || die "Failed to clean staged repository"
