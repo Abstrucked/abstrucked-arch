@@ -102,3 +102,8 @@ source "${XDG_CONFIG_HOME}/zsh/aliases.zsh"
 # ═══════════════════════════════════════════════════════════════
 [[ -f "$HOME/.config/.dart-cli-completion/zsh-config.zsh" ]] && \
   source "$HOME/.config/.dart-cli-completion/zsh-config.zsh"
+
+# Railway CLI (if installed). The markers let its installer find this block.
+# >>> railway initialize >>>
+if [[ -f "$HOME/.railway/env" ]]; then source "$HOME/.railway/env"; fi
+# <<< railway initialize <<<

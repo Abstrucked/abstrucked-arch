@@ -410,11 +410,15 @@ local function pl(widget, seg, padding)
 	return container
 end
 
--- The active tag is already a solid accent block, so only occupied
--- background tags get the underline, as in the waybar stylesheet.
+-- Occupied tags get the accent underline. On the active tag, use its text
+-- color for the underline so it cuts into the accent block like Waybar's
+-- negative marker; focused empty tags stay unmarked.
 local function update_taglist_underline(self, t)
-	local occupied = #t:clients() > 0 and not t.selected
-	self:get_children_by_id("underline_role")[1].bg = occupied and theme.taglist_underline or "#00000000"
+	local underline = "#00000000"
+	if #t:clients() > 0 then
+		underline = t.selected and theme.taglist_fg_focus or theme.taglist_underline
+	end
+	self:get_children_by_id("underline_role")[1].bg = underline
 end
 
 function theme.at_screen_connect(s)
