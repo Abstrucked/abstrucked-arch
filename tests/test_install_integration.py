@@ -41,7 +41,7 @@ class InstallIntegrationTests(unittest.TestCase):
 
             for name in ("bash", "basename", "cat", "cp", "date", "dirname", "echo", "flock", "grep", "id",
                          "ln", "lua", "luac", "mkdir", "mktemp", "mv", "readlink", "realpath",
-                         "rm", "rmdir", "sed", "sleep", "sort", "stow", "timeout", "touch", "xargs"):
+                         "python3", "rm", "rmdir", "sed", "sleep", "sort", "stow", "timeout", "touch", "xargs"):
                 executable = shutil.which(name)
                 self.assertIsNotNone(executable, name)
                 (commands / name).symlink_to(executable)
@@ -79,3 +79,6 @@ class InstallIntegrationTests(unittest.TestCase):
                 self.assertTrue((home / ".local/bin/themectl").exists())
                 for path in ("themes/colors.lua", "themes/mono/theme.lua", "theme-layout.lua"):
                     self.assertTrue((home / ".config/awesome" / path).is_file(), path)
+                opencode_theme = home / ".config/opencode/themes/dotfiles.json"
+                self.assertTrue(opencode_theme.is_file())
+                self.assertFalse(opencode_theme.is_symlink())

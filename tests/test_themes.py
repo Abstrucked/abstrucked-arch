@@ -1,5 +1,6 @@
 """Theme operations run only in disposable checkouts and homes."""
 import fcntl
+import json
 import os
 from pathlib import Path
 import re
@@ -150,6 +151,281 @@ class ThemeTests(unittest.TestCase):
         for name in self.run_tool("themectl", "list").stdout.splitlines():
             with self.subTest(name=name):
                 self.run_tool("themectl", "render", name)
+
+    def test_opencode_theme_matches_v2_shape_and_palette(self):
+        def luminance(hex_color):
+            channels = [int(hex_color[index:index + 2], 16) / 255 for index in (1, 3, 5)]
+            channels = [value / 12.92 if value <= 0.04045 else ((value + 0.055) / 1.055) ** 2.4
+                        for value in channels]
+            return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2]
+
+        def contrast(a, b):
+            high, low = sorted((luminance(a), luminance(b)), reverse=True)
+            return (high + 0.05) / (low + 0.05)
+
+        def assert_shape(actual, expected, path="base"):
+            for key, child in expected.items():
+                current_path = f"{path}.{key}"
+                self.assertIn(key, actual, current_path)
+                if isinstance(child, dict):
+                    self.assertIsInstance(actual[key], dict, current_path)
+                    assert_shape(actual[key], child, current_path)
+                else:
+                    self.assertIsInstance(actual[key], str, current_path)
+                    self.assertRegex(actual[key], r"^#[0-9a-fA-F]{6}$", current_path)
+
+        state = {"base": None, "$hovered": None, "$focused": None, "$pressed": None,
+                 "$selected": None, "$disabled": None}
+        feedback_text = {kind: {"base": None, "muted": None}
+                         for kind in ("error", "warning", "success", "info")}
+        feedback_bg = {kind: {"base": None} for kind in ("error", "warning", "success", "info")}
+        expected_base = {
+            "text": {
+                "base": None, "muted": None,
+                "action": {kind: state for kind in ("primary", "secondary", "destructive")},
+                "formfield": state,
+                "feedback": feedback_text,
+            },
+            "background": {
+                "base": None,
+                "raised": {"base": None, "high": None, "max": None},
+                "action": {kind: state for kind in ("primary", "secondary", "destructive")},
+                "formfield": state,
+                "feedback": feedback_bg,
+            },
+            "border": {"base": None},
+            "scrollbar": {"base": None},
+            "diff": {
+                "text": {"added": None, "removed": None, "context": None, "hunkHeader": None},
+                "background": {"added": None, "removed": None, "context": None},
+                "highlight": {"added": None, "removed": None},
+                "lineNumber": {
+                    "text": None,
+                    "background": {"added": None, "removed": None},
+                },
+            },
+            "syntax": {key: None for key in (
+                "comment", "keyword", "function", "variable", "string", "number", "type", "operator", "punctuation",
+            )},
+            "markdown": {key: None for key in (
+                "text", "heading", "link", "linkText", "code", "blockQuote", "emphasis", "strong",
+                "horizontalRule", "listItem", "listEnumeration", "image", "imageText", "codeBlock",
+            )},
+        }
+
+        template = self.themes / "templates/opencode-theme.json.tpl"
+        palette_dir = self.themes / "palettes"
+        hues = {"gray", "red", "orange", "yellow", "green", "cyan", "blue", "purple"}
+        steps = {str(value) for value in range(100, 1000, 100)}
+        for palette in sorted(palette_dir.glob("[!_]*.lua")):
+            with self.subTest(palette=palette.stem):
+                rendered = subprocess.run(
+                    ["lua", str(self.themes / "render.lua"), str(palette), str(template)],
+                    env=self.env, capture_output=True, text=True, check=True,
+                ).stdout
+                theme = json.loads(rendered)
+                self.assertEqual(theme["$schema"], "https://opencode.ai/theme.json")
+                self.assertIn("base", theme)
+                modes = {key for key in ("light", "dark") if key in theme}
+                self.assertEqual(len(modes), 1)
+                self.assertEqual(modes, {"light" if palette.stem == "rose-pine" else "dark"})
+                mode = theme[next(iter(modes))]
+                self.assertEqual(set(mode["hue"]), hues | {"accent", "interactive", "neutral"})
+                self.assertEqual(mode["categorical"], theme["base"]["categorical"])
+                for hue in hues:
+                    ramp = mode["hue"][hue]
+                    self.assertEqual(set(ramp), steps, hue)
+                    colors = [ramp[str(value)] for value in range(100, 1000, 100)]
+                    self.assertTrue(all(re.fullmatch(r"#[0-9a-fA-F]{6}", color) for color in colors), hue)
+                    brightness = [luminance(color) for color in colors]
+                    if "dark" in modes:
+                        self.assertTrue(all(a >= b - 0.002 for a, b in zip(brightness, brightness[1:])), hue)
+                    else:
+                        self.assertTrue(all(a <= b + 0.002 for a, b in zip(brightness, brightness[1:])), hue)
+                for alias in ("accent", "interactive", "neutral"):
+                    self.assertRegex(mode["hue"][alias], r"^\$hue\.(gray|red|orange|yellow|green|cyan|blue|purple)$")
+
+                base = theme["base"]
+                self.assertEqual(base["categorical"], ["accent", "red", "green", "blue", "purple"])
+                assert_shape(base, expected_base)
+                self.assertGreaterEqual(contrast(base["text"]["base"], base["background"]["base"]), 4.5)
+                for action in ("primary", "destructive"):
+                    for state in ("base", "$hovered", "$focused", "$pressed", "$selected"):
+                        self.assertGreaterEqual(
+                            contrast(base["text"]["action"][action][state],
+                                     base["background"]["action"][action][state]), 4.5,
+                        )
+                self.assertGreaterEqual(contrast(base["text"]["muted"], base["background"]["base"]), 4.5)
+                self.assertGreaterEqual(contrast(base["text"]["muted"], base["background"]["raised"]["base"]), 4.5)
+                self.assertEqual(base["markdown"]["codeBlock"], base["text"]["base"])
+                for kind in ("error", "warning", "success", "info"):
+                    self.assertGreaterEqual(
+                        contrast(base["text"]["feedback"][kind]["base"],
+                                 base["background"]["feedback"][kind]["base"]), 4.5,
+                    )
+                for kind in ("added", "removed"):
+                    self.assertGreaterEqual(
+                        contrast(base["diff"]["text"][kind], base["diff"]["background"][kind]), 4.5,
+                    )
+
+    def test_opencode_theme_renders_imported_palette_defaults(self):
+        source = self.source_palette()
+        self.run_tool("import-omarchy", source, "opencode-import")
+        palette = self.themes / "palettes/opencode-import.lua"
+        template = self.themes / "templates/opencode-theme.json.tpl"
+        rendered = subprocess.run(
+            ["lua", str(self.themes / "render.lua"), str(palette), str(template)],
+            env=self.env, capture_output=True, text=True, check=True,
+        ).stdout
+        theme = json.loads(rendered)
+        self.assertEqual(theme["base"]["background"]["base"], "#123456")
+        self.assertEqual(theme["base"]["text"]["base"], "#123456")
+        self.assertEqual(set(theme["dark"]["hue"]["orange"]), {str(value) for value in range(100, 1000, 100)})
+
+    def test_opencode_theme_hook_publishes_and_preserves_user_config(self):
+        cli_config = self.home / ".config/opencode/cli.json"
+        cli_config.parent.mkdir(parents=True)
+        cli_bytes = b'{\n  "theme": {"name": "tokyonight", "mode": "system"},\n  "mouse": true\n}\n'
+        cli_config.write_bytes(cli_bytes)
+        destination = self.home / ".config/opencode/themes/dotfiles.json"
+
+        self.run_tool("themectl", "set", "mono")
+        self.assertTrue(destination.is_file())
+        first = json.loads(destination.read_text())
+        self.assertEqual(first["base"]["background"]["base"], "#171a18")
+        self.assertEqual(cli_config.read_bytes(), cli_bytes)
+        self.assertFalse(destination.is_symlink(), "publisher replaces a destination symlink, never its target")
+
+        self.run_tool("themectl", "set", "nord")
+        second = json.loads(destination.read_text())
+        self.assertNotEqual(first["base"]["background"]["base"], second["base"]["background"]["base"])
+        self.assertEqual(cli_config.read_bytes(), cli_bytes)
+        backups = list((self.root / "backups/themes").glob("opencode-dotfiles.json.orig*"))
+        self.assertEqual(backups, [], "subsequent managed palette changes do not back up our own output")
+
+    def test_opencode_theme_hook_respects_xdg_and_backups_existing_content(self):
+        alternate = self.root / "xdg-config"
+        destination = alternate / "opencode/themes/dotfiles.json"
+        destination.parent.mkdir(parents=True)
+        destination.write_text('{"user": "theme"}\n')
+        self.env["XDG_CONFIG_HOME"] = str(alternate)
+        self.run_tool("themectl", "set", "mono")
+        self.assertEqual(json.loads(destination.read_text())["base"]["background"]["base"], "#171a18")
+        backups = list((self.root / "backups/themes").glob("opencode-dotfiles.json.orig*"))
+        self.assertEqual(len(backups), 1)
+        self.assertEqual(backups[0].read_text(), '{"user": "theme"}\n')
+
+        destination.write_text('{"manual": "edit"}\n')
+        self.run_tool("themectl", "set", "nord")
+        backups = sorted((self.root / "backups/themes").glob("opencode-dotfiles.json.orig*"))
+        self.assertEqual(len(backups), 2)
+        self.assertEqual(backups[1].read_text(), '{"manual": "edit"}\n')
+
+    def test_opencode_theme_hook_replaces_symlink_without_touching_target(self):
+        destination = self.home / ".config/opencode/themes/dotfiles.json"
+        destination.parent.mkdir(parents=True)
+        target = self.root / "user-theme.json"
+        target.write_text('{"keep": "this"}\n')
+        destination.symlink_to(target)
+
+        self.run_tool("themectl", "set", "mono")
+        self.assertFalse(destination.is_symlink())
+        self.assertEqual(target.read_text(), '{"keep": "this"}\n')
+        backup = next((self.root / "backups/themes").glob("opencode-dotfiles.json.orig*"))
+        self.assertTrue(backup.is_symlink())
+        self.assertEqual(os.readlink(backup), str(target))
+
+    def test_opencode_theme_hook_invalid_json_preserves_published_theme(self):
+        self.run_tool("themectl", "set", "mono")
+        destination = self.home / ".config/opencode/themes/dotfiles.json"
+        previous = destination.read_bytes()
+        (self.themes / "out/opencode-theme.json").write_text("{broken\n")
+        self.run_tool("hooks/opencode.sh", success=False)
+        self.assertEqual(destination.read_bytes(), previous)
+
+    def test_opencode_theme_hook_rejects_incomplete_v2_tokens(self):
+        self.run_tool("themectl", "set", "mono")
+        destination = self.home / ".config/opencode/themes/dotfiles.json"
+        previous = destination.read_bytes()
+        rendered = self.themes / "out/opencode-theme.json"
+        original = json.loads(rendered.read_text())
+        for key in ("syntax", "text", "diff"):
+            with self.subTest(key=key):
+                incomplete = json.loads(json.dumps(original))
+                del incomplete["base"][key]
+                rendered.write_text(json.dumps(incomplete))
+                self.run_tool("hooks/opencode.sh", success=False)
+                self.assertEqual(destination.read_bytes(), previous)
+
+        incomplete = json.loads(json.dumps(original))
+        del incomplete["dark"]["hue"]["blue"]["900"]
+        rendered.write_text(json.dumps(incomplete))
+        self.run_tool("hooks/opencode.sh", success=False)
+        self.assertEqual(destination.read_bytes(), previous)
+
+        invalid = json.loads(json.dumps(original))
+        invalid["base"]["text"]["action"]["primary"]["$hovered"] = "invalid"
+        rendered.write_text(json.dumps(invalid))
+        self.run_tool("hooks/opencode.sh", success=False)
+        self.assertEqual(destination.read_bytes(), previous)
+
+    def test_opencode_preview_does_not_publish_or_create_cli_settings(self):
+        result = self.run_tool("themectl", "render", "mono")
+        preview = Path(result.stdout.strip().split(" -> ")[1])
+        self.assertEqual(json.loads((preview / "opencode-theme.json").read_text())["base"]["background"]["base"], "#171a18")
+        self.assertFalse((self.home / ".config/opencode").exists())
+        self.run_tool("themectl", "set", "mono")
+        destination = self.home / ".config/opencode/themes/dotfiles.json"
+        previous = destination.read_bytes()
+        self.assertFalse((self.home / ".config/opencode/cli.json").exists())
+        self.run_tool("themectl", "render", "nord")
+        self.assertEqual(destination.read_bytes(), previous)
+
+    def test_opencode_malformed_cli_config_is_not_touched(self):
+        config = self.home / ".config/opencode/cli.json"
+        config.parent.mkdir(parents=True)
+        config.write_text("{invalid settings\n")
+        self.run_tool("themectl", "set", "mono")
+        self.run_tool("themectl", "next")
+        self.run_tool("themectl", "apply")
+        self.assertEqual(config.read_text(), "{invalid settings\n")
+
+    def test_opencode_dangling_symlink_backup_and_permissions(self):
+        destination = self.home / ".config/opencode/themes/dotfiles.json"
+        destination.parent.mkdir(parents=True)
+        missing = self.root / "missing-theme.json"
+        destination.symlink_to(missing)
+        self.run_tool("themectl", "set", "mono")
+        self.assertFalse(missing.exists())
+        backup = next((self.root / "backups/themes").glob("opencode-dotfiles.json.orig*"))
+        self.assertTrue(backup.is_symlink())
+        self.assertEqual(os.readlink(backup), str(missing))
+        destination.chmod(0o640)
+        self.run_tool("themectl", "set", "nord")
+        self.assertEqual(destination.stat().st_mode & 0o777, 0o640)
+        self.assertEqual(list(destination.parent.glob(".dotfiles.json.themectl-*")), [])
+
+    def test_opencode_directory_destination_is_not_replaced(self):
+        self.run_tool("themectl", "set", "mono")
+        destination = self.home / ".config/opencode/themes/dotfiles.json"
+        destination.unlink()
+        directory = self.root / "user-theme-directory"
+        directory.mkdir()
+        (directory / "keep").write_text("preserve this directory\n")
+        destination.symlink_to(directory, target_is_directory=True)
+        self.run_tool("hooks/opencode.sh", success=False)
+        self.assertTrue(destination.is_symlink())
+        self.assertEqual((directory / "keep").read_text(), "preserve this directory\n")
+
+    def test_opencode_hook_failure_keeps_previous_theme_after_activation(self):
+        self.run_tool("themectl", "set", "mono")
+        destination = self.home / ".config/opencode/themes/dotfiles.json"
+        previous = destination.read_bytes()
+        (self.themes / "templates/opencode-theme.json.tpl").write_text('{"base": {}, "dark": {}}\n')
+        result = self.run_tool("themectl", "set", "nord")
+        self.assertIn("hook opencode.sh failed", result.stderr)
+        self.assertEqual(destination.read_bytes(), previous)
+        self.assertEqual(self.run_tool("themectl", "current").stdout.strip(), "nord")
 
     def test_powerarrow_segment_text_is_readable(self):
         def luminance(hex_color):
