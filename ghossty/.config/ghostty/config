@@ -2,3 +2,7 @@
 config-file = theme
 window-decoration = none
 shell-integration = detect 
+
+# Remote tmux can copy via OSC 52; paste explicitly with Ctrl+Shift+V.
+clipboard-write = allow
+clipboard-read = deny
