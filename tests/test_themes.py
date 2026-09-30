@@ -67,6 +67,33 @@ class ThemeTests(unittest.TestCase):
         self.assertNotEqual(target.read_text(), previous)
         self.assertEqual(target.resolve(), (self.themes / "out/alacritty.toml").resolve())
 
+    def test_mono_palette_switch_preserves_layout_selection(self):
+        state = self.home / ".local/state/awesome/theme-layout"
+        state.parent.mkdir(parents=True)
+        state.write_text("mono\n")
+        self.run_tool("themectl", "set", "mono")
+        palette = self.home / ".config/awesome/themes/powerarrow/colors.lua"
+        self.assertIn('accent = "#c2d89a"', palette.read_text())
+        self.assertIn('background = "#171a18"', (self.themes / "out/alacritty.toml").read_text())
+        target = os.readlink(palette)
+        self.run_tool("themectl", "set", "nord")
+        self.assertEqual(state.read_text(), "mono\n")
+        self.assertEqual(os.readlink(palette), target)
+        self.assertNotIn('accent = "#c2d89a"', palette.read_text())
+
+    def test_awesome_layout_selection(self):
+        config = self.home / ".config/awesome"
+        for name in ("mono", "powerarrow"):
+            theme = config / "themes" / name / "theme.lua"
+            theme.parent.mkdir(parents=True)
+            theme.write_text("return {}\n")
+        (self.home / ".local/state/awesome").mkdir(parents=True)
+        result = subprocess.run([
+            "lua", str(ROOT / "tests/test_theme_layout.lua"),
+            str(ROOT / "awesome/.config/awesome/theme-layout.lua"), str(config),
+        ], env=self.env, capture_output=True, text=True, timeout=10)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def desktop_stubs(self, running):
         # Exercise the real reload commands without touching the host desktop.
         commands = self.root / "bin"
@@ -133,6 +160,7 @@ class ThemeTests(unittest.TestCase):
             return 0.2126 * r + 0.7152 * g + 0.0722 * b
 
         template = self.themes / "templates/awesome-colors.lua.tpl"
+        mono_style = ROOT / "awesome/.config/awesome/themes/mono/style.lua"
         for palette in sorted((self.themes / "palettes").glob("[!_]*.lua")):
             rendered = subprocess.run(["lua", str(self.themes / "render.lua"), str(palette), str(template)],
                                       capture_output=True, text=True, check=True).stdout
@@ -142,6 +170,19 @@ class ThemeTests(unittest.TestCase):
                 with self.subTest(palette=palette.stem, segment=name):
                     hi, lo = sorted((luminance(bg), luminance(fg)), reverse=True)
                     self.assertGreaterEqual((hi + 0.05) / (lo + 0.05), 4.5)
+
+            # Mono's selected tags must remain readable with every palette,
+            # including imported palettes with mid-tone accents.
+            colors = self.root / "colors.lua"
+            colors.write_text(rendered)
+            output = subprocess.check_output([
+                "lua", "-e",
+                'local style = dofile(arg[1]); local c = dofile(arg[2]); '
+                'print(c.accent); print(style.on(c.accent, c)); os.exit(0)',
+                "--", "mono-contrast", str(mono_style), str(colors),
+            ], text=True).splitlines()
+            hi, lo = sorted(map(luminance, output), reverse=True)
+            self.assertGreaterEqual((hi + 0.05) / (lo + 0.05), 4.5, palette.stem)
 
     def test_preview_includes_enabled_waybar_plugins(self):
         plugin = self.root / "plugins/test-widget"
@@ -175,6 +216,8 @@ class ThemeTests(unittest.TestCase):
 
     def test_concurrent_next_waits_and_reads_current_under_lock(self):
         self.run_tool("themectl", "set", "mocha-peach")
+        names = self.run_tool("themectl", "list").stdout.splitlines()
+        expected = names[(names.index("mocha-peach") + 2) % len(names)]
         with (self.themes / ".apply.lock").open("w") as lock:
             fcntl.flock(lock, fcntl.LOCK_EX)
             processes = [subprocess.Popen([str(self.themes / "themectl"), "next"],
@@ -189,7 +232,7 @@ class ThemeTests(unittest.TestCase):
                 for process in processes:
                     stdout, stderr = process.communicate(timeout=20)
                     self.assertEqual(process.returncode, 0, stdout + stderr)
-        self.assertEqual(self.run_tool("themectl", "current").stdout.strip(), "rose-pine")
+        self.assertEqual(self.run_tool("themectl", "current").stdout.strip(), expected)
 
     def source_palette(self):
         source = self.root / "colors.toml"

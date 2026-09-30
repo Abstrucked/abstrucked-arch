@@ -106,7 +106,8 @@ awful.spawn.with_shell([=[
 
 -- {{{ Variable definitions
 
-local chosen_theme = os.getenv("AWESOME_THEME") or "powerarrow"
+local theme_layout = require("theme-layout")
+local chosen_theme = theme_layout.get()
 local modkey = "Mod4"
 local altkey = "Mod1"
 local terminal = os.getenv("TERMINAL") or "alacritty"
@@ -216,6 +217,10 @@ beautiful.init(gfs.get_configuration_dir() .. "themes/" .. chosen_theme .. "/the
 
 -- {{{ Menu
 local myawesomemenu = {
+	{ "desktop layout", {
+		{ "Mono", function() theme_layout.set("mono") end },
+		{ "Powerarrow", function() theme_layout.set("powerarrow") end },
+	} },
 	{
 		"hotkeys",
 		function()
@@ -266,7 +271,7 @@ end)
 screen.connect_signal("arrange", function(s)
 	local only_one = #s.tiled_clients == 1
 	for _, c in pairs(s.clients) do
-		if (only_one and not c.floating) or c.maximized then
+		if (only_one and not c.floating and not beautiful.keep_single_client_border) or c.maximized or c.fullscreen then
 			c.border_width = 0
 		else
 			c.border_width = beautiful.border_width
@@ -764,7 +769,7 @@ awful.rules.rules = {
 	},
 
 	-- Titlebars
-	{ rule_any = { type = { "dialog", "normal" } }, properties = { titlebars_enabled = false } },
+	{ rule_any = { type = { "dialog", "normal" } }, properties = { titlebars_enabled = beautiful.titlebars_enabled or false } },
 
 	-- Set Brave to map on the primary screen and tag 3.
 	{
@@ -789,6 +794,7 @@ awful.rules.rules = {
 -- {{{ Signals
 -- Signal function to execute when a new client appears.
 client.connect_signal("manage", function(c)
+	if beautiful.client_shape then beautiful.client_shape(c) end
 	-- Set the windows at the slave,
 	-- i.e. put it at the end of others instead of setting it master.
 	if not awesome.startup then
@@ -800,6 +806,13 @@ client.connect_signal("manage", function(c)
 		awful.placement.no_offscreen(c)
 	end
 end)
+
+-- Themes can round normal clients while keeping maximized/fullscreen edges square.
+for _, property in ipairs({ "fullscreen", "maximized", "maximized_horizontal", "maximized_vertical" }) do
+	client.connect_signal("property::" .. property, function(c)
+		if beautiful.client_shape then beautiful.client_shape(c) end
+	end)
+end
 
 -- Add a titlebar if titlebars_enabled is set to true in the rules.
 client.connect_signal("request::titlebars", function(c)

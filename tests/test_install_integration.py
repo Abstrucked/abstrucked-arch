@@ -22,9 +22,12 @@ class InstallIntegrationTests(unittest.TestCase):
             prefixes = ("lib/", "themes/", "plugins/", "awesome/", "hyprland/",
                         "ssh/", "alacritty/", "btop/", "nvim/", "pcmanfm/", "scripts/",
                         "ghossty/", "gnupg/", "xsession/", "picom/")
-            # Copy tracked inputs only, not local theme output, caches or state.
-            names = subprocess.check_output(["git", "ls-files", "-z"], cwd=ROOT).decode().split("\0")
-            for name in filter(None, names):
+            # Include new first-party inputs before staging, but no ignored
+            # theme output, caches or state.
+            names = subprocess.check_output(
+                ["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z"], cwd=ROOT,
+            ).decode().split("\0")
+            for name in sorted(set(filter(None, names))):
                 if name != "install.sh" and not name.startswith(prefixes):
                     continue
                 if name.startswith("scripts/.local/lib/python"):
@@ -74,3 +77,5 @@ class InstallIntegrationTests(unittest.TestCase):
                     subprocess.run(["luac", "-p", str(dest)], check=True, env=env)
                 self.assertTrue((home / ".config/alacritty/alacritty.toml").is_symlink())
                 self.assertTrue((home / ".local/bin/themectl").exists())
+                for path in ("themes/colors.lua", "themes/mono/theme.lua", "theme-layout.lua"):
+                    self.assertTrue((home / ".config/awesome" / path).is_file(), path)
