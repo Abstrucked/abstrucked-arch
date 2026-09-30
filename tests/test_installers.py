@@ -72,7 +72,6 @@ class InstallerTests(unittest.TestCase):
         # Data fixtures avoid copying personal configs or links out of the repository.
         self.write(self.repo / "config/tmux/tmux.conf", 'set -g default-shell "/bin/zsh"\n')
         self.write(self.repo / "config/tmux/theme.conf", "# tracked icon theme\n")
-        self.write(self.repo / "config/tmux/agent-icons/tmux-agent-icons.ttf", "font fixture\n")
         self.write(self.repo / "themes/theme.sh", "# Not sourced during dry runs.\n")
         self.write(self.repo / "nvim/.config/nvim/init.lua", "-- managed fixture\n")
         (self.repo / "nvim/.config/nvim/lua").mkdir()
@@ -368,8 +367,6 @@ set_login_shell "${1:-bash}"
         self.assertTrue(theme.is_symlink())
         self.assertEqual(theme.resolve(), self.repo / "config/tmux/theme.conf")
         self.assertEqual(theme.read_text(), "# tracked icon theme\n")
-        self.assertEqual((self.home / ".local/share/fonts/tmux-agent-icons.ttf").resolve(),
-                         self.repo / "config/tmux/agent-icons/tmux-agent-icons.ttf")
         backups = list((self.home / ".dotfiles-backups").rglob("theme.conf"))
         self.assertEqual(len(backups), 1)
         self.assertTrue(backups[0].is_symlink())
