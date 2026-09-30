@@ -246,6 +246,63 @@ Without `--manager`, the helper skips in non-interactive mode, dry-run mode, or 
 - **pass-insert-utility** - Helper for inserting passwords into apps
 - **nvim-launcher** - Pre-configured Neovim launcher with API key loading
 
+## Tmux: Vi navigation and SSH clipboard
+
+The prefix is **Ctrl+a**. Use tmux 3.2+ and an OSC 52-capable terminal such as
+Alacritty or Ghostty. Both terminal configs allow clipboard writes; paste from
+your computer with **Ctrl+Shift+V** (Cmd+V on macOS).
+
+| Keys | Action |
+|------|--------|
+| `prefix` then `h/j/k/l` | Select a pane |
+| `prefix` then `[` | Enter Vi copy mode |
+| `h/j/k/l`, `w/b/e`, `0/^/$` | Move by character, word or line boundary |
+| `H/M/L`, `g/G`, `Ctrl+u/d`, `Ctrl+b/f` | Viewport top/middle/bottom, history top/bottom, half/full pages |
+| `/`, `?`, `n/N` | Search forward/backward and repeat/reverse |
+| `v`, `V`, `Ctrl+v` | Character, line or rectangular selection |
+| `y` or Enter | Copy selection to tmux and your computer's clipboard, then exit |
+| `Y` or `Alt+y` in copy mode | Copy the selection, exit and paste it into the pane |
+| Escape or `q` | Exit copy mode |
+| `prefix` then `y` | Copy the cursor's displayed line (including any shell prompt) |
+| `prefix` then `Y` | Copy the pane's working directory |
+| `prefix` then `]` | Paste the latest tmux buffer, using bracketed paste when supported |
+| `prefix` then `a` / `A` | Agent picker / direct jump to the most urgent agent |
+
+Mouse-drag selection uses the same clipboard path as keyboard copying. Standard
+tmux Vi motions apply in copy mode; for example, tmux uses a single `g` for the
+top of history. `Ctrl+h/j/k/l` also navigate panes, forwarding to Vim/Neovim when
+one is running in the pane.
+
+### Over SSH, including nested tmux
+
+Load `config/tmux/tmux.conf` on the remote host too. Copying in remote tmux sends
+OSC 52 through SSH to the terminal on your computer. It needs neither X11
+forwarding nor `wl-copy`/`xclip` on the remote host. Clipboard writes must be
+enabled in the terminal you connect from.
+
+For **local tmux → SSH → remote tmux**, each tmux layer needs clipboard support.
+This config enables it for `tmux*` and `screen*` terminals and uses
+`set-clipboard on` so the outer tmux forwards inner clipboard writes. With the
+same prefix on both layers, press **Ctrl+a, Ctrl+a, [** to enter the inner copy
+mode; **Ctrl+a, Ctrl+a, ]** pastes its buffer.
+
+`prefix` then `]` pastes that tmux server's buffer. **Ctrl+Shift+V** pastes your
+computer's current clipboard into the active application, including through
+SSH and nested tmux. It works even if you copied text in another desktop app;
+the remote application does not need permission to read your clipboard.
+
+Reload with `prefix` then `r`. When upgrading from the old clipboard config,
+detach and reattach each existing client once (`prefix` then `d`, then
+`tmux attach -t SESSION`) so terminal capabilities are rebuilt. Existing
+sessions and programs keep running. Reattach each layer for nested tmux.
+
+Check with `tmux info | grep 'Ms:'`: the capability should contain
+`52;%p1%s;%p2%s`, with both the selection and data arguments. To verify the full
+path, copy multiline/Unicode text remotely, paste it into a local app, then
+copy different text locally and paste it into a remote editor. `tmux save-buffer -`
+shows the tmux buffer independently of the system clipboard. If the remote
+host lacks `tmux-256color` terminfo, install it there before using nested tmux.
+
 ## 🚀 App Launchers
 
 Generate custom app launchers that automatically load API keys and run programs. Launchers are created in `~/.local/bin/` with corresponding aliases in `zsh/aliases.zsh`.
