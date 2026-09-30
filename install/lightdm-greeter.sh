@@ -11,8 +11,9 @@
 # changing install/lightdm/.
 set -euo pipefail
 
-declare -r HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-declare -r DOTFILES="$(dirname "$HERE")"
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DOTFILES="$(dirname "$HERE")"
+declare -r HERE DOTFILES
 declare -r LIGHTDM_CONF=/etc/lightdm/lightdm.conf
 declare -r SYNC=/usr/local/libexec/themectl-greeter-sync
 declare -r SYNC_CONF=/etc/lightdm/themectl-greeter.conf

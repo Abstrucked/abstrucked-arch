@@ -230,7 +230,9 @@ for component in "${SELECTED_COMPONENTS[@]}"; do
                         execute rm -f -- "$target" || die "Could not remove $target"
                     fi
                 fi
-                if ! execute stow -d "$DOTFILES_DIR" -t "$HOME" "$package"; then
+                # --no-folding links files, never whole directories: a folded
+                # ~/.local once sent every app's data into scripts/.local.
+                if ! execute stow --no-folding -d "$DOTFILES_DIR" -t "$HOME" "$package"; then
                     if [[ -n "$shell_backup" ]]; then
                         restore_backup "$shell_backup" "$target" || log_error "Restore failed; original config is at $shell_backup"
                     fi
@@ -316,23 +318,30 @@ for component in "${SELECTED_COMPONENTS[@]}"; do
             die "Tmux configuration not found"
         fi
 
-        theme_target=$(readlink -f -- "$XDG_CONFIG_HOME/tmux/theme.conf")
-        backup_item "$theme_target" || die "Failed to back up tmux theme"
-        cat > "$XDG_CONFIG_HOME/tmux/theme.conf" <<'EOF'
-# Tmux theme colors
-set -g status-style bg=black,fg=white
-set -g status-left-style bg=black,fg=brightblue
-set -g status-right-style bg=black,fg=brightblue
-set -g pane-border-style fg=black
-set -g pane-active-border-style fg=blue
-set -g window-status-current-style bg=blue,fg=black
-set -g window-status-style bg=black,fg=white
-set -g message-style bg=brightyellow,fg=black
-EOF
+        # Link the tracked icon theme rather than replacing it with a minimal
+        # generated file. safe_symlink backs up a previous theme or symlink.
+        safe_symlink "$DOTFILES_DIR/config/tmux/theme.conf" "$XDG_CONFIG_HOME/tmux/theme.conf" || die "Failed to link tmux theme"
 
         safe_symlink "$XDG_CONFIG_HOME/tmux/tmux.conf" "$HOME/.tmux.conf" || die "Failed to symlink tmux config"
         if [[ -x "$tpm_dir/bin/install_plugins" ]]; then
             "$tpm_dir/bin/install_plugins" || die "Failed to install tmux plugins"
+        fi
+
+        # Claude Code, Codex and OpenCode report their state to the agent
+        # plugin through hooks; without them the status bar falls back to
+        # guessing. TPM puts plugins under XDG_CONFIG_HOME when tmux.conf
+        # lives there, else under ~/.tmux/plugins.
+        agent_bin=""
+        for agent_dir in "$XDG_CONFIG_HOME/tmux/plugins" "$HOME/.tmux/plugins"; do
+            if [[ -x "$agent_dir/tmux-agentic-plugin/bin/tmux-agent" ]]; then
+                agent_bin="$agent_dir/tmux-agentic-plugin/bin/tmux-agent"
+                break
+            fi
+        done
+        if [[ -z "$agent_bin" ]]; then
+            [[ "$DRY_RUN" == "true" ]] || log_warn "tmux-agentic-plugin not installed; run prefix + I in tmux, then its bin/tmux-agent install-hooks"
+        elif command_exists jq; then
+            execute "$agent_bin" install-hooks || log_warn "Failed to install tmux-agent hooks"
         fi
         progress_complete "done"
         break

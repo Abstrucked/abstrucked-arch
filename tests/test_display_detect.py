@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import subprocess
 import tempfile
+import time
 import unittest
 
 
@@ -157,15 +158,32 @@ class DisplayDetectTests(unittest.TestCase):
         # nothing changed (as our own mode set could) that must be ignored.
         udevadm = self.root / "bin/udevadm"
         udevadm.write_text(
-            "#!/bin/sh\necho 'monitor will print the received events for:'\nsleep 0.3\n"
+            "#!/bin/sh\nprintf ready >\"$WATCH_READY\"\n"
+            "echo 'monitor will print the received events for:'\nsleep 0.3\n"
             f"cp '{docked}' \"$FAKE_XRANDR\"\n"
             "echo 'UDEV  [1.0] change   /devices/pci0000:00/drm/card1 (drm)'\n"
             "sleep 3\necho 'UDEV  [2.0] change   /devices/pci0000:00/drm/card1 (drm)'\nexec sleep 30\n")
         udevadm.chmod(0o755)
-        self.env.update(DISPLAY=":0", XDG_RUNTIME_DIR=str(self.root))
+        ready = self.root / "watch-ready"
+        self.env.update(DISPLAY=":0", XDG_RUNTIME_DIR=str(self.root), WATCH_READY=str(ready))
         watcher = subprocess.Popen([str(SCRIPT), "watch"], env=self.env,
                                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        self.addCleanup(watcher.kill)
+        def stop_watcher():
+            if watcher.poll() is None:
+                watcher.terminate()
+                try:
+                    watcher.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    watcher.kill()
+                    watcher.wait()
+        self.addCleanup(stop_watcher)
+        # Popen does not guarantee the first child has acquired its lock yet.
+        # Wait for its coprocess to start before racing a second watcher.
+        deadline = time.monotonic() + 5
+        while not ready.exists():
+            self.assertIsNone(watcher.poll(), "watcher exited before acquiring its lock")
+            self.assertLess(time.monotonic(), deadline)
+            time.sleep(0.01)
         # A second watcher on the same display leaves the first one to it.
         second = subprocess.run([str(SCRIPT), "watch"], env=self.env, timeout=5)
         self.assertEqual(second.returncode, 0)

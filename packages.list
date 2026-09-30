@@ -8,6 +8,9 @@ lua
 python
 # flock serializes theme switches
 util-linux
+# Shared by Awesome autostart, tmux-agent hooks and optional bar plugins
+jq
+dex
 
 # Terminal and shell
 zsh

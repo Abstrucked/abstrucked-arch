@@ -25,11 +25,37 @@ all; `ai-usagebar detect` turns on every other vendor that already has a
 local credential. Per-vendor setup lives in upstream's `config.example.toml`,
 installed at `/usr/share/ai-usagebar/config.example.toml`.
 
+### OpenRouter from pass
+
+The wrappers read `ai/openrouter_api_key` from `pass`, unless upstream already
+has a key configured or `OPENROUTER_API_KEY` is inherited. Enable OpenRouter
+with `ai-usagebar settings enable openrouter`, then select it in the dashboard
+or scroll to it on Waybar. The bar shows the remaining dollar balance; the
+tooltip and dashboard show upstream's credit and spending details.
+
+Background refreshes use GPG's `--pinentry-mode error`: they can use an
+unlocked agent but never ask for a password. When decryption fails, the bar
+shows `opr locked` with a click-to-unlock tooltip instead of a stale balance.
+Clicking opens a terminal before retrieving the key, so terminal pinentry can
+ask for the GPG passphrase. Cancelling still opens the dashboard for other
+providers. An already unlocked agent needs no prompt.
+
+The decrypted API key is passed only in the child process environment, not
+written to a plaintext file. The dashboard retains that environment while it
+is open; new bar refreshes depend on GPG's cache. Cache expiry follows your
+`gpg-agent.conf` settings. Polling can extend the idle timeout but not the
+maximum cache lifetime. Waybar refreshes immediately after unlocking; Awesome
+updates on its next scheduled poll.
+
 ## Notes
 
-- The 300s interval is upstream's guidance, not a preference: the Anthropic
-  and OpenAI endpoints rate-limit aggressively below it. The scroll bindings
-  refresh through `signal: 13` rather than waiting for the next poll.
+- Waybar refreshes the percentage, tooltip and provider logo every 60s,
+  matching the upstream TUI's refresh cadence. Updates are polled, so they
+  can take up to a minute to appear. Upstream caches requests for 60s and
+  backs off for five minutes after HTTP 429; during that backoff the last
+  available usage remains visible. Upstream recommends 300s for conservative
+  API polling. The scroll bindings refresh through `signal: 13` rather than
+  waiting for the next poll.
 - The usage colours are the palette's, not upstream's: `ai-usage-text`
   drops ai-usagebar's own Pango colour and keeps its usage class (`low`,
   `mid`, `high`, `critical`), which the waybar stylesheet colours like the

@@ -57,6 +57,7 @@ if [[ "$NODE_MANAGER" == n ]]; then
         require_command make "GNU make is required to install n"
         setup_cleanup_trap
         create_temp_dir n-install temp_dir || die "Failed to create n staging directory"
+        # shellcheck disable=SC2154 # temp_dir is assigned by create_temp_dir
         installer="$temp_dir/n-install.sh"
         curl --proto '=https' --proto-redir '=https' -fsSL -o "$installer" \
             https://raw.githubusercontent.com/mklement0/n-install/stable/bin/n-install || die "Failed to download n installer"
@@ -70,6 +71,7 @@ if [[ "$NODE_MANAGER" == n ]]; then
     env -u BASH_ENV -u NODE_VERSION "$N_PREFIX/bin/n" --version || die "n verification failed"
     log_success "n is ready at $N_PREFIX/bin/n"
     log_info "For future Bash/Zsh sessions, use these exports in your shell configuration:"
+    # shellcheck disable=SC2016 # printed literally for the user's shell config
     printf 'export N_PREFIX=%q\nexport PATH="$N_PREFIX/bin:$PATH"\n' "$N_PREFIX"
 else
     [[ "$NVM_DIR" == /* ]] || die "NVM_DIR must be an absolute path"
@@ -93,9 +95,11 @@ else
     fi
     [[ -f "$NVM_DIR/nvm.sh" && -s "$NVM_DIR/nvm.sh" ]] || die "nvm installation failed: nvm.sh missing"
     # Load only the manager in a clean child shell, not the user's shell startup files.
+    # shellcheck disable=SC2016 # $NVM_DIR expands in the child shell
     env -u BASH_ENV -u NODE_VERSION \
         bash --noprofile --norc -c '. "$NVM_DIR/nvm.sh" --no-use && command -v nvm && nvm --version' || die "nvm verification failed"
     log_success "nvm is ready at $NVM_DIR"
     log_info "For future Bash/Zsh sessions, use these lines in your shell configuration:"
+    # shellcheck disable=SC2016 # printed literally for the user's shell config
     printf 'export NVM_DIR=%q\n. "$NVM_DIR/nvm.sh"\n' "$NVM_DIR"
 fi

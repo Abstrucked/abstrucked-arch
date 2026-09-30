@@ -1,8 +1,8 @@
 #!/bin/sh
-# Prints the active AI provider's plan usage for the bars:
-#   --waybar        custom-module JSON: the session percentage, with
+# Prints the active AI provider's plan usage or OpenRouter balance for the bars:
+#   --waybar        custom-module JSON: session percentage or credit balance, with
 #                   ai-usagebar's usage class for the stylesheet to colour
-#   --awesome       JSON for the awesome.lua widget: the percentage plus the
+#   --awesome       JSON for the awesome.lua widget: the value plus the
 #                   path of the provider's logo in ../icons
 #   --icon COLOR    the path of the provider's logo recoloured to COLOR, for
 #                   waybar's image module; empty for a vendor without one
@@ -18,7 +18,8 @@ set -eu
 
 FORMAT='{vendor_short} {session_pct}% · {session_reset}'
 FALLBACK='ai ?'
-ICONS="$(readlink -f "$(dirname "$(readlink -f "$0")")/../icons")"
+PLUGIN_DIR="$(dirname "$(dirname "$(readlink -f "$0")")")"
+ICONS="$PLUGIN_DIR/icons"
 
 # ai-usagebar's short vendor name -> logo in $ICONS.
 LOGOS='{"cld": "claude", "gpt": "openai", "cdx": "openai", "ghc": "copilot"}'
@@ -52,6 +53,41 @@ case "${1:-}" in
     exit 0
     ;;
 esac
+
+# Select the appropriate format, including explicit CLI vendor overrides.
+vendor="$(ai-usagebar settings show 2>/dev/null | jq -r '.primary // "anthropic"')" || vendor=anthropic
+previous_arg=''
+for arg in "$@"; do
+    if [ "$previous_arg" = --vendor ]; then
+        vendor="$arg"
+    fi
+    case "$arg" in --vendor=*) vendor="${arg#--vendor=}" ;; esac
+    previous_arg="$arg"
+done
+
+if [ "$vendor" = openrouter ]; then
+    # shellcheck source=../lib/openrouter-key.sh
+    . "$PLUGIN_DIR/lib/openrouter-key.sh"
+    if ai_usage_load_openrouter_key background; then
+        # shellcheck disable=SC2016 # ${or_balance} is ai-usagebar's placeholder
+        FORMAT='{vendor_short} ${or_balance}'
+    else
+        key_status=$?
+        label='opr locked'
+        message='OpenRouter key is locked or unavailable. Click to open the dashboard and unlock it.'
+        if [ "$key_status" -eq 2 ]; then
+            label='opr ?'
+            message='OpenRouter key is missing. Store it in pass as ai/openrouter_api_key.'
+        fi
+        if [ "$mode" = plain ]; then
+            printf '%s\n' "$label"
+        else
+            jq -cn --arg text "$label" --arg tooltip "$message" \
+                '{text: $text, tooltip: $tooltip, class: "unavailable", icon: ""}'
+        fi
+        exit 0
+    fi
+fi
 
 json=''
 if ! json="$(ai-usagebar --json --format "$FORMAT" "$@" 2>/dev/null)" || [ -z "$json" ]; then

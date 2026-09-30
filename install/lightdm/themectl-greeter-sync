@@ -158,5 +158,6 @@ main() {
 
 # Not `(main) || ...`: that context would silently disable set -e inside main.
 (main)
+# shellcheck disable=SC2181 # `if ! (main)` would disable set -e the same way
 (($? == 0)) || log "sync failed; the greeter keeps the previous theme"
 exit 0

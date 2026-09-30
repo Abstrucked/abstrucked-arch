@@ -1,5 +1,6 @@
 #!/bin/bash
 # Command-line argument parsing
+# shellcheck disable=SC2034 # the flags set here are read by install.sh
 
 # Prevent multiple sourcing
 if [[ -n "${_ARGS_SH_LOADED:-}" ]]; then

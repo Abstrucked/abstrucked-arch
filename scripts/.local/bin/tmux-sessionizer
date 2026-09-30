@@ -59,19 +59,15 @@ fi
 # Create session name (replace dots with underscores for tmux compatibility)
 selected_name=$(basename "$selected" | tr . _)
 
-# Check if tmux is running
-tmux_running=$(pgrep tmux || true)
-
-# Create new session if not in tmux and no tmux running
-if [[ -z "${TMUX:-}" ]] && [[ -z "$tmux_running" ]]; then
-  tmux new-session -s "$selected_name" -c "$selected"
-  exit 0
-fi
-
 # Create session if it doesn't exist
 if ! tmux has-session -t="$selected_name" 2>/dev/null; then
   tmux new-session -ds "$selected_name" -c "$selected"
 fi
 
-# Switch to session
-tmux switch-client -t "$selected_name"
+# An existing server is not the same as an attached client. Outside tmux,
+# attach to the requested session rather than trying to switch no client.
+if [[ -n "${TMUX:-}" ]]; then
+  tmux switch-client -t "$selected_name"
+else
+  tmux attach-session -t "$selected_name"
+fi

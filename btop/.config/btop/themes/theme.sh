@@ -1,6 +1,7 @@
 #!/bin/bash
 # Global theme selector
 # Sources the selected theme based on THEME environment variable
+# shellcheck disable=SC1090,SC1091,SC2034 # theme files resolve at runtime; callers read THEME_FLAVOUR
 
 DOTFILES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 THEME="${THEME:-catppuccin-mocha}"

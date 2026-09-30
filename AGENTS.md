@@ -2,9 +2,10 @@
 
 ## Commands
 - **Test single file**: Run syntax checks with `shellcheck <file>` for shell scripts or `yamllint <file>` for YAML configs
-- **Lint all**: `find . -name "*.sh" -exec shellcheck {} \;` for shell scripts
-- **Format**: Use `shfmt -w <file>` for shell script formatting
-- **Validate configs**: `stow --adopt` to test symlink structure
+- **Lint all**: `python3 -B scripts/check-syntax.py` (first-party Git inputs, including new files and extensionless shell helpers, plus Zsh/Lua/Python syntax; `.shellcheckrc` makes `source` lines resolve)
+- **Run tests**: `pytest tests`
+- **Format**: Use `shfmt -w -i 4 <file>` (`-i 2` for files already indented with two spaces). Plain `shfmt` indents with tabs, so never run it repo-wide
+- **Validate configs**: `stow --simulate --verbose --no-folding -d "$PWD" -t "$HOME" <package>` (read-only; never use `--adopt` for validation, since it moves user files into the repository)
 
 ## Code Style Guidelines
 - **Shell scripts**: Use POSIX-compliant syntax, add `#!/bin/bash` or `#!/bin/sh` headers

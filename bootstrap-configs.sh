@@ -299,8 +299,9 @@ copy_config() {
       return 1
     fi
     if ! rm -rf -- "$dest"; then
-      echo "Error: cannot replace $dest after creating backup" >&2
-      rm -rf -- "$backup_root"
+      # rm can delete part of a directory before failing. The backup may now
+      # be its only complete copy, so retain it for manual recovery.
+      echo "Error: cannot replace $dest; original retained at $backup" >&2
       rm -rf -- "$stage"
       return 1
     fi
@@ -333,7 +334,7 @@ check_sensitive_content() {
   # Best effort only: detect high-confidence key material and literal values.
   # Variable references such as "$API_KEY" and "${API_KEY}" are not values.
   local credential_pattern="-----BEGIN .*PRIVATE KEY-----|(^|[^\$[:alnum:]_])AKIA[0-9A-Z]{16}|(^|[^\$[:alnum:]_])gh[pousr]_[[:alnum:]]{20,}"
-  local assignment_pattern="(^|[[:space:]])(export[[:space:]]+)?[[:alnum:]_-]*(api[_-]?key|secret|password|passwd|token|access[_-]?key[_-]?id)[[:alnum:]_-]*[[:space:]]*="
+  local assignment_pattern="(^|[[:space:]{,;])(export[[:space:]]+)?[\"']?[[:alnum:]_-]*(api[_-]?key|secret|password|passwd|token|access[_-]?key[_-]?id)[[:alnum:]_-]*[\"']?[[:space:]]*[:=][[:space:]]*"
   if ! result=$(find -L "$source" -exec bash -c '
     credential_pattern=$1
      assignment_pattern=$2
@@ -371,15 +372,29 @@ check_sensitive_content() {
           0)
             while IFS= read -r line; do
               [[ "$line" =~ ^[[:space:]]*# ]] && continue
-              [[ "$line" =~ $assignment_pattern ]] || continue
-              value=${line#*=}
-              value="${value#"${value%%[![:space:]]*}"}"
-              # Ignore environment indirections, including a variable used
-              # inside the assigned value, but still inspect literal values
-              # on lines that merely mention a variable in a comment.
-              [[ -z "$value" || "$value" == *\$* || "$value" == env:* || "$value" == env\(* || "$value" == args.* || "$value" == *.* ]] && continue
-              sensitive=true
-              break
+               # Inspect every matching key on a line (JSON may contain more
+               # than one). Only a complete reference is exempt, never an
+               # arbitrary dotted value or a literal containing a dollar sign.
+               reference="^([$][[:alpha:]_][[:alnum:]_]*|[$][{][[:alpha:]_][[:alnum:]_]*[}]|[$][(][^)]*[)]|env:[[:alnum:]_]+|env[(][^)]*[)]|args[.][[:alnum:]_]+)([[:space:]]*(#.*|[,}].*)?)$"
+               single_quote=$(printf "\047")
+               while [[ "$line" =~ $assignment_pattern ]]; do
+                 value=${line#*"${BASH_REMATCH[0]}"}
+                 line=$value
+                 single_quoted=false
+                 if [[ "$value" == \"* ]]; then
+                   value=${value#\"}; value=${value%%\"*}
+                 elif [[ "$value" == "$single_quote"* ]]; then
+                   value=${value#"$single_quote"}; value=${value%%"$single_quote"*}
+                   single_quoted=true
+                 fi
+                 [[ -z "$value" ]] && continue
+                 if [[ "$single_quoted" == false && "$value" =~ $reference ]]; then
+                   continue
+                 fi
+                 sensitive=true
+                 break
+               done
+               [[ "$sensitive" == false ]] || break
             done <<< "$matches"
             ;;
           1) ;;
