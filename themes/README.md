@@ -19,6 +19,8 @@ subcommands, and the theme names for `set` and `render`.
   (formats: nohash, rgb, rgba[:aa], css[:alpha]).
 - `targets.conf` - template, destination (symlinked to `out/`), reload command.
   A destination of `-` renders only.
+- tmux reads its colours as `@thm_*` options from `~/.config/tmux/colors.conf`;
+  the tracked `config/tmux/theme.conf` keeps the layout and ANSI fallbacks.
 - `hooks/*.sh` - for apps whose config themectl cannot own (herdr, rnmui, nvim,
   and the LightDM login screen).
 - `out` - generated, gitignored symlink to an immutable `.generations/` directory.

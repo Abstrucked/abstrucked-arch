@@ -48,6 +48,8 @@ return function(p, mix)
     overlay = mix(p.bg, p.fg, 0.45),
     accent_alt = p.cyan or p.blue,
     selection = mix(p.surface, p.fg, 0.15),
+    -- Readable text on an accent-filled block (the tmux session name).
+    on_accent = on(p.accent),
 
     -- Roles the terminal and editor templates ask for by name.
     cursor = p.fg,
