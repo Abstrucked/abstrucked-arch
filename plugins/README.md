@@ -43,11 +43,20 @@ widget meant to show up in both sessions needs both a `waybar.jsonc` and an
 
 Enabled state lives in `~/.local/state/plugins/enabled`, one id per line.
 Enabling/disabling regenerates the generated files above and runs `themectl
-apply`. The files are built and syntax-checked (`awesome --check`, `luac -p`)
-before any of them, or the state file, is replaced, so a plugin that fails
-to wire up is left disabled and the live setup is unchanged. `themectl apply`
+apply`. Mutations are serialized with a checkout-local lock and use unique
+staging directories. Files are built and syntax-checked (`awesome --check`,
+`luac -p`) before publication. Generated files, helper links and enabled state
+are backed up together and restored if publication fails or a handled signal
+interrupts it.
+If restoration itself fails, the error names the retained recovery directory.
+Unrelated commands in `~/.local/bin` are never replaced, and duplicate helper
+names from enabled plugins are rejected. `list` and `template-waybar` use a
+single state snapshot without creating locks or touching staging files.
+`themectl apply`
 re-renders, re-links and reloads everything (waybar, hyprland,
-awesome, ...) the same way a theme change does.
+awesome, ...) the same way a theme change does. A theme reload failure is
+reported separately: the plugin wiring remains committed, and rerunning
+`themectl apply` retries the reload without repeating the state change.
 
 `themes/templates/waybar-config.jsonc.tpl`, `hyprland/.config/hypr/lua/plugins.lua`
 and `awesome/.config/awesome/plugins.lua` are generated (gitignored) from

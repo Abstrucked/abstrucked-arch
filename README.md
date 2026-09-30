@@ -106,6 +106,12 @@ Backups use unique directories so repeated operations do not overwrite earlier b
 
 Run the isolated regression suite with `python3 -B -m unittest discover -s tests -v`. It uses temporary homes and copied scripts with mocked install commands, not your real home or package manager.
 
+Run `python3 -B scripts/check-syntax.py` for first-party ShellCheck and shell,
+Zsh, Lua and Python syntax validation (requires ShellCheck, Bash, Zsh and Lua).
+CI runs both checks, including a real Stow/theme/plugin integration test in a
+temporary home. Validate Stow manually with `--simulate --verbose`, never
+`--adopt`: adoption moves existing user files into the repository.
+
 ## 🐚 Shell Selection
 
 During installation, you'll be prompted to choose your default shell:
@@ -166,6 +172,11 @@ The bootstrap script will:
 - Provide security guidance for sensitive configurations
 
 **Review before committing:** The scanner is best effort, not a guarantee that copied files are free of secrets. Review all imported files and the staged diff before committing, including external backups under `~/.dotfiles-backups/`. `--yes` skips copy prompts, not sensitive-content checks. `--force-sensitive` overrides detected-content warnings, but does not override scan errors; use it only after reviewing the contents yourself.
+
+The scanner checks common shell, TOML, JSON and YAML credential assignments,
+including dotted token values. Complete environment references remain
+importable. If replacing an imported destination fails during removal, its
+complete backup is retained and the recovery path is printed.
 
 Bootstrap copies configurations but deliberately leaves the original files in place. Before running Stow, compare the imported files, back up the originals, and remove or rename only the originals that Stow reports as conflicts. The installer will not adopt or delete those files automatically.
 
@@ -312,6 +323,7 @@ pass-insert-utility
 - Example: In `load-api-keys.sh`, add `export API_KEY=$(pass show api/key)`.
 
 ### Tips
+- Password input is hidden, and generated passwords are stored without being printed.
 - Use `pass git` for version-controlled password stores.
 - Backup your `~/.password-store/` directory.
 - For apps, prefer environment variables over hardcoded keys.

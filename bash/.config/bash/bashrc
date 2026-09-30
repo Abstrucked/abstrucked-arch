@@ -8,6 +8,7 @@ export XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
 eval "$(starship init bash)"
 
 # Source custom aliases
+# shellcheck source=aliases.sh
 source "${XDG_CONFIG_HOME}/bash/aliases.sh"
 
 # Keybindings
@@ -29,7 +30,7 @@ bind '"\e[5C": forward-word'
 # History
 HISTFILE=~/.bash_history
 HISTSIZE=10000
-SAVEHIST=10000
+HISTFILESIZE=10000
 shopt -s histappend
 
 export EDITOR='nvim'
@@ -61,13 +62,15 @@ export COMP_WORDBREAKS
 
 if type complete &>/dev/null; then
   _pm2_completion () {
-    local si="$IFS"
-    IFS=$'\n' COMPREPLY=($(COMP_CWORD="$COMP_CWORD" \
-                           COMP_LINE="$COMP_LINE" \
-                           COMP_POINT="$COMP_POINT" \
-                           pm2 completion -- "${COMP_WORDS[@]}" \
-                           2>/dev/null)) || return $?
-    IFS="$si"
+    local suggestions
+    suggestions=$(COMP_CWORD="$COMP_CWORD" \
+                  COMP_LINE="$COMP_LINE" \
+                  COMP_POINT="$COMP_POINT" \
+                  pm2 completion -- "${COMP_WORDS[@]}" \
+                  2>/dev/null) || return $?
+    COMPREPLY=()
+    [[ -z "$suggestions" ]] || mapfile -t COMPREPLY <<<"$suggestions"
+    return 0
   }
   complete -o default -F _pm2_completion pm2
 fi
@@ -75,11 +78,13 @@ fi
 
 # asdf completions
 if [[ -f "${ASDF_DATA_DIR:-$HOME/.asdf}/completions/asdf.bash" ]]; then
+  # shellcheck source=/dev/null # Optional user-installed completion.
   source "${ASDF_DATA_DIR:-$HOME/.asdf}/completions/asdf.bash"
 fi
 
 # Local completions
 for _completion in "${XDG_CONFIG_HOME:-$HOME/.config}"/bash/completions/*.bash; do
+  # shellcheck source=/dev/null # Completion files are selected at runtime.
   [[ -r "$_completion" ]] && source "$_completion"
 done
 unset _completion

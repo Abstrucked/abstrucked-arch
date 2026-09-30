@@ -86,6 +86,10 @@ class InstallerTests(unittest.TestCase):
                      "systemctl", "makepkg", "make", "wget", "chsh"):
             self.write(self.bin / name, f"#!{sys.executable}\n" + MOCK)
             (self.bin / name).chmod(0o755)
+        self.write(self.bin / "getent", '#!/bin/bash\n'
+                   '[[ "${FAIL_GETENT:-0}" == 0 ]] || exit 2\n'
+                   'printf "%s:x:1000:1000::%s:%s\\n" "$2" "$HOME" "${ACCOUNT_SHELL:-/usr/bin/zsh}"\n')
+        (self.bin / "getent").chmod(0o755)
         self.log = self.base / "commands.jsonl"
         # Do not inherit BASH_ENV, exported functions, XDG paths or manager settings.
         self.env = {
@@ -278,10 +282,23 @@ set_login_shell "${1:-bash}"
         ])
 
     def test_login_shell_is_left_alone_when_already_current(self):
-        self.env["SHELL"] = str((self.bin / "bash").resolve())
+        self.env["ACCOUNT_SHELL"] = str((self.bin / "bash").resolve())
+        self.env["SHELL"] = "/usr/bin/zsh"
         result = self.login_shell_run()
         self.assertEqual(self.calls(), [])
         self.assertIn("Login shell is already", result.stdout)
+
+    def test_stale_shell_environment_does_not_skip_account_update(self):
+        self.env["SHELL"] = str((self.bin / "bash").resolve())
+        self.env["ACCOUNT_SHELL"] = "/usr/bin/zsh"
+        self.login_shell_run()
+        self.assertEqual(self.calls()[0][0:2], ["sudo", "chsh"])
+
+    def test_account_lookup_failure_does_not_change_shell(self):
+        self.env["FAIL_GETENT"] = "1"
+        result = self.login_shell_run(code=1)
+        self.assertIn("Could not query the login shell", result.stdout)
+        self.assertEqual(self.calls(), [])
 
     def test_login_shell_dry_run_changes_nothing(self):
         self.env["DRY_RUN"] = "true"
@@ -378,6 +395,53 @@ set_login_shell "${1:-bash}"
         self.assertIn("potential sensitive content", result.stdout)
         self.assertIn("Copied: 0", result.stdout)
         self.assertEqual(snapshot(self.repo), before)
+
+    def test_bootstrap_rejects_dotted_json_yaml_and_embedded_literal_secrets(self):
+        samples = (
+            'export API_KEY="example.secret.value"\n',
+            '{"api_key": "example-secret"}\n',
+            'api_key: "example-secret"\n',
+            '"api_key" = "example-secret"\n',
+            'export API_KEY="literal$REFERENCE"\n',
+            "export API_KEY='$REFERENCE'\n",
+            '{"api_key": "$REFERENCE", "token": "literal"}\n',
+        )
+        for text in samples:
+            with self.subTest(text=text):
+                self.write(self.home / ".config/nvim/settings", text)
+                before = snapshot(self.repo)
+                result = self.run_script("bootstrap-configs.sh", args=("--yes",), code=0)
+                self.assertIn("potential sensitive content", result.stdout)
+                self.assertEqual(snapshot(self.repo), before)
+
+    def test_bootstrap_keeps_reference_only_configuration_importable(self):
+        self.write(self.home / ".zshrc", 'export API_KEY="$REFERENCE"\n'
+                   'export TOKEN=$(pass service)\n'
+                   '# PASSWORD="not an assignment"\n')
+        result = self.run_script("bootstrap-configs.sh", args=("--yes",), code=0)
+        self.assertIn("Copied: 1", result.stdout)
+
+    def test_partial_destination_removal_keeps_complete_backup(self):
+        dest = self.repo / "btop/.config/btop"
+        self.write(dest / "removed-first", "first original\n")
+        self.write(dest / "remaining", "second original\n")
+        self.write(self.home / ".config/btop/replacement", "new\n")
+        real_rm = shutil.which("rm")
+        (self.bin / "rm").unlink()
+        self.write(self.bin / "rm", f"#!{sys.executable}\n"
+                   "import os, sys\nfrom pathlib import Path\n"
+                   f"if sys.argv[-1] == {str(dest)!r}:\n"
+                   "    (Path(sys.argv[-1]) / 'removed-first').unlink()\n"
+                   "    sys.exit(42)\n"
+                   f"os.execv({real_rm!r}, [{real_rm!r}, *sys.argv[1:]])\n")
+        (self.bin / "rm").chmod(0o755)
+        result = self.run_script("bootstrap-configs.sh", args=("--yes",), code=1)
+        self.assertIn("original retained at", result.stdout)
+        backups = list((self.home / ".dotfiles-backups").glob("bootstrap.*/original"))
+        self.assertEqual(len(backups), 1)
+        self.assertEqual((backups[0] / "removed-first").read_text(), "first original\n")
+        self.assertEqual((backups[0] / "remaining").read_text(), "second original\n")
+        self.assertEqual(list(self.repo.rglob(".bootstrap-stage.*")), [])
 
     def test_awesome_copy_rejects_sensitive_symlink_target(self):
         source = self.home / ".config/awesome"

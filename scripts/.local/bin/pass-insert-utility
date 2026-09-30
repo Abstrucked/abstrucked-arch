@@ -187,7 +187,7 @@ insert_password() {
     local pass_path="$1"
     local password="$2"
 
-    echo "$password" | pass insert --echo "$pass_path"
+    printf '%s\n' "$password" | pass insert --echo "$pass_path"
 }
 
 # Append export to load-api-keys.sh
@@ -257,13 +257,14 @@ do_insert() {
     local password
     if [[ "$GENERATE_PASSWORD" == true ]]; then
         password=$(generate_password)
-        print_info "Generated password: $password"
+        print_info "Generated a password without displaying it."
     else
         echo -n "Enter password (or press Enter to generate): "
-        read -r password
+        read -r -s password
+        printf '\n'
         if [[ -z "$password" ]]; then
             password=$(generate_password)
-            print_info "Generated password: $password"
+            print_info "Generated a password without displaying it."
         fi
     fi
 

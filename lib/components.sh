@@ -139,7 +139,7 @@ select_window_manager() {
 # Point the account's login shell at the selected shell. Stow only installs the
 # rc file, so without this the shell selection never reaches /etc/passwd.
 set_login_shell() {
-    local shell_name=${1:-${SELECTED_SHELL:-}} shell_path current_path user
+    local shell_name=${1:-${SELECTED_SHELL:-}} shell_path current_path user account
 
     [[ -n "$shell_name" ]] || return 0
 
@@ -155,19 +155,25 @@ set_login_shell() {
     # chsh and /etc/shells both expect a real path, not a symlink such as /bin/zsh.
     shell_path=$(readlink -f -- "$shell_path")
 
-    if [[ -n "${SHELL:-}" ]]; then
-        current_path=$(readlink -f -- "$SHELL" 2>/dev/null) || current_path="$SHELL"
-        if [[ "$current_path" == "$shell_path" ]]; then
-            log_info "Login shell is already $shell_path"
-            return 0
-        fi
+    # SHELL describes the launching session and can remain stale after chsh.
+    # Consult NSS so local accounts and directory-backed accounts both work.
+    user=${USER:-$(id -un)}
+    require_command getent "getent is required to query the account's login shell"
+    if ! account=$(getent passwd "$user") || [[ "$account" != *:* ]]; then
+        log_error "Could not query the login shell for $user"
+        return 1
+    fi
+    current_path=${account##*:}
+    current_path=$(readlink -f -- "$current_path" 2>/dev/null) || current_path="${account##*:}"
+    if [[ "$current_path" == "$shell_path" ]]; then
+        log_info "Login shell is already $shell_path"
+        return 0
     fi
 
     if [[ -r /etc/shells ]] && ! grep -qxF -- "$shell_path" /etc/shells; then
         log_warn "$shell_path is not listed in /etc/shells; chsh may refuse it."
     fi
 
-    user=${USER:-$(id -un)}
     log_info "Setting login shell to $shell_path"
     # sudo avoids a password prompt that would hang a non-interactive run.
     execute sudo chsh -s "$shell_path" "$user"

@@ -299,6 +299,7 @@ watch() {
   local line last
   last="$(output_signature)"
   coproc UDEV { exec udevadm monitor --udev --subsystem-match=drm; }
+  # shellcheck disable=SC2153 # Bash creates UDEV_PID for the named coprocess.
   local udev_pid="$UDEV_PID" udev_fd="${UDEV[0]}"
   trap 'kill "$udev_pid" 2>/dev/null' EXIT
   trap 'exit 0' TERM INT HUP
