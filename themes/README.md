@@ -150,3 +150,49 @@ Implementation: `awesome/.config/awesome/themes/mono/`. Both layouts read the
 shared `themes.colors` module; `themectl` keeps its existing generated
 `themes/powerarrow/colors.lua` destination for compatibility. The Lua layout
 themes window decorations; the applications inside them use their own configs.
+
+## OpenCode TUI
+
+`themectl` also renders the active palette as a complete OpenCode V2 custom theme
+and publishes it to `${XDG_CONFIG_HOME:-$HOME/.config}/opencode/themes/dotfiles.json`.
+The publisher validates the generated tokens before replacing the file atomically,
+backs up a pre-existing theme or manual edits, and never edits OpenCode's `cli.json`.
+OpenCode does not need to be installed to run `themectl`; the publisher uses Python 3.
+
+To generate the theme, run `themectl apply`, then restart OpenCode and select
+**dotfiles** through `/themes`. Alternatively, merge these fields into your
+existing `${XDG_CONFIG_HOME:-$HOME/.config}/opencode/cli.json` (do not replace
+other settings):
+
+```json
+{
+  "$schema": "https://opencode.ai/v2/cli.json",
+  "theme": {
+    "name": "dotfiles",
+    "mode": "system"
+  }
+}
+```
+
+The generated theme contains the active palette's `light` or `dark` mode;
+`system` mode follows the terminal appearance, and OpenCode uses the available
+theme mode if the requested mode is not present. `theme.name = "system"` is a
+different option that derives colors from the terminal instead of this custom theme.
+
+A new theme requires an OpenCode restart for discovery. In testing with
+OpenCode v2.0.20, replacing a loaded theme file did **not** refresh the running TUI.
+Restart the TUI after `themectl set`, `next`, or `apply` to load the new colors;
+the hook does not restart your sessions or background service. Select another
+theme at any time to opt out—palette switches will not override your selection.
+A project-local `.opencode/themes/dotfiles.json` can override this global theme,
+and `OPENCODE_CLI_CONFIG_CONTENT` can override the theme selected in `cli.json`.
+
+Backups use `${DOTFILES_BACKUP_ROOT:-$HOME/.dotfiles-backups}/themes/opencode-dotfiles.json.orig*`.
+An ownership hash under `${XDG_STATE_HOME:-$HOME/.local/state}/themes/` avoids
+backing up every ordinary managed palette update. A failed publisher leaves the
+previous OpenCode theme intact and reports a hook failure; it does not roll back
+the active palette for other apps. Fix the failure and run `themectl apply` again.
+
+This applies to the terminal UI only, not OpenCode Desktop. The hook honors
+`XDG_CONFIG_HOME`; the dotfiles installer still expects its existing default
+XDG configuration location for the rest of the packages.
