@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+# Print git branch and status for a directory as a tmux status segment.
+# Usage: tmux-git-status <dir>   (prints nothing outside a git work tree)
+
+set -euo pipefail
+
+cd "${1:-.}" 2>/dev/null || exit 0
+
+# Keep a slow repo from stalling the status bar
+run_git() {
+    if command -v timeout >/dev/null 2>&1; then
+        timeout 1 git "$@"
+    else
+        git "$@"
+    fi
+}
+
+status=$(run_git status --porcelain=v2 --branch 2>/dev/null) || exit 0
+
+branch=""
+oid=""
+ahead=0
+behind=0
+staged=0
+unstaged=0
+untracked=0
+conflicted=0
+
+while IFS= read -r line; do
+    case "$line" in
+        "# branch.head "*) branch=${line#\# branch.head } ;;
+        "# branch.oid "*) oid=${line#\# branch.oid } ;;
+        "# branch.ab "*)
+            read -r _ _ a b <<<"$line"
+            ahead=${a#+}
+            behind=${b#-}
+            ;;
+        1\ * | 2\ *)
+            [[ ${line:2:1} != "." ]] && staged=1
+            [[ ${line:3:1} != "." ]] && unstaged=1
+            ;;
+        "? "*) untracked=1 ;;
+        "u "*) conflicted=1 ;;
+    esac
+done <<<"$status"
+
+[[ -n "$branch" ]] || exit 0
+if [[ "$branch" == "(detached)" ]]; then
+    branch="${oid:0:7}"
+fi
+# '#' would start a tmux format sequence
+branch=${branch//#/##}
+
+flags=""
+((conflicted)) && flags+="✘"
+((staged)) && flags+="+"
+((unstaged)) && flags+="!"
+((untracked)) && flags+="?"
+
+out="#[fg=magenta] ${branch}"
+if [[ -n "$flags" ]]; then
+    out+=" #[fg=yellow]${flags}"
+else
+    out+=" #[fg=green]✓"
+fi
+
+sync=""
+((ahead > 0)) && sync+="↑${ahead}"
+((behind > 0)) && sync+="↓${behind}"
+[[ -n "$sync" ]] && out+=" #[fg=cyan]${sync}"
+
+printf '%s\n' "$out"
