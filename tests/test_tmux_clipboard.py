@@ -17,7 +17,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG = ROOT / "config/tmux/tmux.conf"
-TMUX = shutil.which("tmux")
+TMUX = os.environ.get("TMUX_TEST_BINARY") or shutil.which("tmux")
 OSC52 = re.compile(rb"\x1b\]52;[^;]*;([A-Za-z0-9+/=]*)(?:\x07|\x1b\\)")
 
 
@@ -34,7 +34,8 @@ class TmuxClipboardTests(unittest.TestCase):
         self.work = self.root / "work ' $HOME; # space"
         self.work.mkdir()
         self.env = {"HOME": str(self.home), "XDG_CONFIG_HOME": str(self.home / ".config"),
-                    "PATH": os.defpath, "TERM": "xterm-256color", "LC_ALL": "C.UTF-8",
+                    "PATH": str(Path(TMUX).parent) + os.pathsep + os.defpath,
+                    "TERM": "xterm-256color", "LC_ALL": "C.UTF-8",
                     "SHELL": "/bin/sh"}
         # No DISPLAY, WAYLAND_DISPLAY, SSH forwarding or clipboard utilities.
         self.socket = str(self.root / "outer")
@@ -65,6 +66,9 @@ with received.open("wb", buffering=0) as output:
         self.addCleanup(self.stop_servers)
         self.tmux("new-session", "-d", "-s", "test", "-x", "100", "-y", "30",
                   "-c", str(self.work), self.app)
+        # Bulk PTY writes represent keystrokes, not pastes. Older tmux (e.g.
+        # Ubuntu's 3.4) otherwise bypasses bindings after closely timed keys.
+        self.tmux("set-option", "-g", "assume-paste-time", "0")
         self.wait_for(self.ready.exists)
         self.master, self.slave = pty.openpty()
         termios.tcsetwinsize(self.slave, (30, 100))
@@ -198,6 +202,7 @@ with received.open("wb", buffering=0) as output:
         self.ready.unlink()
         self.tmux("new-session", "-d", "-s", "test", "-x", "100", "-y", "29",
                   "-c", str(self.work), self.app, socket=self.inner)
+        self.tmux("set-option", "-g", "assume-paste-time", "0", socket=self.inner)
         self.wait_for(self.ready.exists)
         attach = shlex.join(["env", "-u", "TMUX", TMUX, "-S", self.inner,
                              "attach-session", "-t", "test"])
@@ -206,7 +211,9 @@ with received.open("wb", buffering=0) as output:
             "list-clients", "-F", "#{client_termname}", socket=self.inner).stdout)
         # Double prefix reaches the inner tmux, as it does through SSH.
         self.enter_copy_mode(nested=True)
-        os.write(self.master, b"g0vG$y")
+        # End on the final word's last character. Older tmux lets $ move past
+        # that character and includes a trailing newline in the selection.
+        os.write(self.master, b"g0vG0wey")
         expected = self.content.read_bytes()
         self.assertEqual(self.clipboard(), expected)
         self.assert_buffer(expected, socket=self.inner)
