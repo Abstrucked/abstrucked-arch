@@ -112,6 +112,36 @@ fi
                     expected.append(f"{action} -t home")
                     self.assertEqual(calls, expected)
 
+    def test_gtk_bookmarks_adds_xdg_folders_once_and_keeps_existing(self):
+        for name in ("awk", "dirname", "mkdir", "python3", "touch"):
+            (self.bin / name).symlink_to(shutil.which(name))
+        # Pictures is configured but missing and Videos is unset, so neither
+        # is bookmarked; the space and the accent must be URI-encoded.
+        self.script("xdg-user-dir", '''
+case "$1" in
+  DOCUMENTS) echo "$HOME/Documents" ;;
+  DOWNLOAD) echo "$HOME/My Downloads" ;;
+  MUSIC) echo "$HOME/Música" ;;
+  PICTURES) echo "$HOME/Pictures" ;;
+  *) echo "$HOME" ;;
+esac''')
+        for folder in ("Documents", "My Downloads", "Música"):
+            (self.home / folder).mkdir()
+        bookmarks = self.home / ".config/gtk-3.0/bookmarks"
+        bookmarks.parent.mkdir(parents=True)
+        documents = (self.home / "Documents").as_uri()
+        # Already bookmarked under a label, and a last line without a newline.
+        bookmarks.write_text(f"{documents} Docs\nsftp://server/srv")
+        for _ in range(2):
+            self.run_helper("gtk-bookmarks")
+        self.assertEqual(bookmarks.read_text().splitlines(), [
+            f"{documents} Docs",
+            "sftp://server/srv",
+            (self.home / "My Downloads").as_uri(),
+            (self.home / "Música").as_uri(),
+        ])
+        self.assertIn("/My%20Downloads", bookmarks.read_text())
+
     def test_shared_dependencies_and_theme_are_portable(self):
         shared = (ROOT / "packages.list").read_text().splitlines()
         hypr = (ROOT / "packages-hyprland.list").read_text().splitlines()
@@ -121,6 +151,21 @@ fi
         config = (ROOT / "btop/.config/btop/btop.conf").read_text()
         self.assertIn('color_theme = "themectl"', config)
         self.assertNotIn("/home/abstrucked", config)
+
+    def test_sessions_set_qt6ct_and_shells_leave_toolkit_themes_alone(self):
+        # Qt and GTK take their themes from themectl's config files; a shell
+        # export would override them for every app started from a terminal.
+        sessions = {
+            "xsession/.xprofile": "export QT_QPA_PLATFORMTHEME=qt6ct",
+            "hyprland/.config/hypr/environment.conf": "env = QT_QPA_PLATFORMTHEME,qt6ct",
+            "hyprland/.config/hypr/lua/environment.lua": 'hl.env("QT_QPA_PLATFORMTHEME", "qt6ct")',
+        }
+        for path, line in sessions.items():
+            self.assertIn(line, (ROOT / path).read_text().splitlines(), path)
+        for path in ("zsh/.zshrc", "bash/.config/bash/bashrc"):
+            rc = (ROOT / path).read_text()
+            for name in ("GTK_THEME", "QT_QPA_PLATFORMTHEME"):
+                self.assertNotRegex(rc, rf"(?m)^\s*export {name}=", f"{path} exports {name}")
 
     def test_bash_completion_preserves_spaces_globs_and_ifs_on_failure(self):
         config = (ROOT / "bash/.config/bash/bashrc").read_text()

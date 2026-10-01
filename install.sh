@@ -250,7 +250,11 @@ for component in "${SELECTED_COMPONENTS[@]}"; do
         # Generated theme files are symlinks into themes/out, which is not
         # tracked; render them so the stowed configs do not dangle.
         execute "$DOTFILES_DIR/themes/themectl" apply || log_warn "themectl apply failed; run it manually"
-        
+
+        # PCManFM's side pane and GTK file dialogs list Documents, Downloads,
+        # ... only as bookmarks; add the XDG folders, keeping existing ones.
+        execute "$DOTFILES_DIR/scripts/.local/bin/gtk-bookmarks" || log_warn "gtk-bookmarks failed; run it manually"
+
         progress_complete "done"
         break
     fi

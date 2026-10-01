@@ -39,14 +39,18 @@ class InstallIntegrationTests(unittest.TestCase):
                 else:
                     shutil.copy2(source, dest)
 
-            for name in ("bash", "basename", "cat", "cp", "date", "dirname", "echo", "flock", "grep", "id",
-                         "ln", "lua", "luac", "mkdir", "mktemp", "mv", "readlink", "realpath",
-                         "rm", "rmdir", "sed", "sleep", "sort", "stow", "timeout", "touch", "xargs"):
+            for name in ("awk", "bash", "basename", "cat", "cp", "date", "dirname", "echo", "flock", "grep", "id",
+                         "ln", "lua", "luac", "mkdir", "mktemp", "mv", "python3", "readlink", "realpath",
+                         "rm", "rmdir", "sed", "sleep", "sort", "stow", "tail", "timeout", "touch", "xargs"):
                 executable = shutil.which(name)
                 self.assertIsNotNone(executable, name)
                 (commands / name).symlink_to(executable)
-            for name in ("git", "curl", "pacman", "awesome"):
-                body = 'exec luac -p "${@: -1}"' if name == "awesome" else "exit 0"
+            # Only Downloads is configured, so gtk-bookmarks adds exactly one.
+            stubs = {"awesome": 'exec luac -p "${@: -1}"',
+                     "xdg-user-dir": '[[ "$1" == DOWNLOAD ]] && echo "$HOME/Downloads" || echo "$HOME"'}
+            (home / "Downloads").mkdir(parents=True)
+            for name in ("git", "curl", "pacman", "awesome", "xdg-user-dir"):
+                body = stubs.get(name, "exit 0")
                 path = commands / name
                 path.write_text("#!/bin/bash\n" + body + "\n")
                 path.chmod(0o755)
@@ -65,6 +69,13 @@ class InstallIntegrationTests(unittest.TestCase):
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
                 self.assertNotIn("refresh failed", result.stdout + result.stderr)
                 self.assertNotIn("apply failed", result.stdout + result.stderr)
+                self.assertNotIn("gtk-bookmarks failed", result.stdout + result.stderr)
+                self.assertEqual((home / ".config/gtk-3.0/bookmarks").read_text(),
+                                 (home / "Downloads").as_uri() + "\n")
+                # The scripts package puts the API-key loader in ~, but its
+                # repository lint script must stay out of the home directory.
+                self.assertTrue((home / "load-api-keys.sh").is_symlink())
+                self.assertFalse(os.path.lexists(home / "check-syntax.py"))
                 self.assertEqual((repo / "themes/out/.theme-name").read_text(), "mocha-peach\n")
                 for path in ("alacritty/theme.toml", "hypr/lua/theme.lua", "waybar/config.jsonc",
                              "awesome/themes/powerarrow/colors.lua", "btop/themes/themectl.theme"):

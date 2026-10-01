@@ -1,4 +1,5 @@
 """Theme operations run only in disposable checkouts and homes."""
+import configparser
 import fcntl
 import os
 from pathlib import Path
@@ -12,6 +13,18 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 AWESOME_RESTART = 'require("theme-session").restart()\n'
+
+
+def contrast(a, b):
+    """WCAG contrast ratio between two #rrggbb colors."""
+    def luminance(hex_color):
+        def channel(c):
+            c /= 255
+            return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+        r, g, b = (channel(int(hex_color[i:i + 2], 16)) for i in (1, 3, 5))
+        return 0.2126 * r + 0.7152 * g + 0.0722 * b
+    hi, lo = sorted((luminance(a), luminance(b)), reverse=True)
+    return (hi + 0.05) / (lo + 0.05)
 
 
 class ThemeTests(unittest.TestCase):
@@ -70,7 +83,8 @@ class ThemeTests(unittest.TestCase):
     def test_matching_palette_switch_preserves_layout_selection(self):
         state = self.home / ".local/state/awesome/theme-layout"
         state.parent.mkdir(parents=True)
-        for name, accent, bg in (("mono", "#c2d89a", "#171a18"), ("slate", "#96b3cf", "#16191f")):
+        for name, accent, bg in (("mono", "#c2d89a", "#171a18"), ("slate", "#96b3cf", "#16191f"),
+                                 ("nocturne", "#b8a6ff", "#14111a")):
             with self.subTest(layout=name):
                 state.write_text(name + "\n")
                 self.run_tool("themectl", "set", name)
@@ -85,7 +99,7 @@ class ThemeTests(unittest.TestCase):
 
     def test_awesome_layout_selection(self):
         config = self.home / ".config/awesome"
-        for name in ("mono", "slate", "powerarrow"):
+        for name in ("mono", "slate", "nocturne", "powerarrow"):
             theme = config / "themes" / name / "theme.lua"
             theme.parent.mkdir(parents=True)
             theme.write_text("return {}\n")
@@ -210,6 +224,82 @@ class ThemeTests(unittest.TestCase):
                 hi, lo = sorted((luminance(colors["@thm_accent"]), luminance(colors["@thm_on_accent"])),
                                 reverse=True)
                 self.assertGreaterEqual((hi + 0.05) / (lo + 0.05), 4.5)
+
+    def render(self, palette, template):
+        return subprocess.run(["lua", str(self.themes / "render.lua"), str(palette),
+                               str(self.themes / "templates" / template)],
+                              capture_output=True, text=True, check=True).stdout
+
+    def test_gtk3_recolors_with_the_gtk4_named_colors(self):
+        # adw-gtk3 draws GTK3 widgets from libadwaita's named colors, so GTK3
+        # apps such as PCManFM match GTK4 ones only while the two agree.
+        define = re.compile(r"^@define-color (\w+) (#[0-9a-fA-F]{6});$", re.M)
+        for palette in sorted((self.themes / "palettes").glob("[!_]*.lua")):
+            with self.subTest(palette=palette.stem):
+                gtk4 = dict(define.findall(self.render(palette, "gtk4.css.tpl")))
+                gtk3 = dict(define.findall(self.render(palette, "gtk3.css.tpl")))
+                self.assertIn("window_bg_color", gtk4)
+                self.assertEqual({name: gtk3.get(name) for name in gtk4}, gtk4)
+
+    def test_gtk3_theme_follows_palette_variant(self):
+        palettes = sorted((self.themes / "palettes").glob("[!_]*.lua"))
+        variants = set()
+        for palette in palettes:
+            with self.subTest(palette=palette.stem):
+                variant = subprocess.check_output(
+                    ["lua", "-e", "io.write(dofile(arg[1]).variant or 'dark'); os.exit(0)",
+                     "--", "variant", str(palette)],
+                    text=True)
+                variants.add(variant)
+                settings = self.render(palette, "gtk3-settings.ini.tpl")
+                theme, dark = ("adw-gtk3", "0") if variant == "light" else ("adw-gtk3-dark", "1")
+                self.assertIn(f"\ngtk-theme-name={theme}\n", settings)
+                self.assertIn(f"\ngtk-application-prefer-dark-theme={dark}\n", settings)
+        self.assertEqual(variants, {"dark", "light"})
+
+    def test_qt_palette_matches_gtk_and_stays_readable(self):
+        # QPalette role order in qt6ct color schemes.
+        roles = ("WindowText", "Button", "Light", "Midlight", "Dark", "Mid", "Text", "BrightText",
+                 "ButtonText", "Base", "Window", "Shadow", "Highlight", "HighlightedText", "Link",
+                 "LinkVisited", "AlternateBase", "NoRole", "ToolTipBase", "ToolTipText", "PlaceholderText")
+        define = re.compile(r"^@define-color (\w+) (#[0-9a-fA-F]{6});$", re.M)
+        for palette in sorted((self.themes / "palettes").glob("[!_]*.lua")):
+            with self.subTest(palette=palette.stem):
+                scheme = configparser.ConfigParser(interpolation=None)
+                scheme.read_string(self.render(palette, "qt6ct-colors.conf.tpl"))
+                groups = {}
+                for group in ("active", "inactive", "disabled"):
+                    colors = [c.strip() for c in scheme["ColorScheme"][group + "_colors"].split(",")]
+                    self.assertEqual(len(colors), len(roles), group)
+                    for color in colors:
+                        self.assertRegex(color, r"^#[0-9a-fA-F]{6}$", group)
+                    groups[group] = dict(zip(roles, colors))
+                active = groups["active"]
+                gtk = dict(define.findall(self.render(palette, "gtk3.css.tpl")))
+                self.assertEqual(
+                    {role: active[role] for role in ("Window", "WindowText", "Base", "Text",
+                                                     "Highlight", "HighlightedText")},
+                    {"Window": gtk["window_bg_color"], "WindowText": gtk["window_fg_color"],
+                     "Base": gtk["view_bg_color"], "Text": gtk["view_fg_color"],
+                     "Highlight": gtk["accent_bg_color"], "HighlightedText": gtk["accent_fg_color"]})
+                for text, background in (("Text", "Base"), ("WindowText", "Window"), ("BrightText", "Dark")):
+                    self.assertGreaterEqual(contrast(active[text], active[background]), 4.5,
+                                            f"{text} on {background}")
+
+    def test_qt_settings_use_the_scheme_and_the_gtk_font(self):
+        palette = self.themes / "palettes/nord.lua"
+        settings = self.render(palette, "qt6ct.conf.tpl")
+        config = configparser.ConfigParser(interpolation=None)
+        config.read_string(settings)
+        self.assertEqual(config["Appearance"]["color_scheme_path"], "~/.config/qt6ct/colors/themectl.conf")
+        self.assertEqual(config["Appearance"]["custom_palette"], "true")
+        gtk_font = re.search(r"^gtk-font-name=(.+) (\d+)$",
+                             self.render(palette, "gtk3-settings.ini.tpl"), re.M).groups()
+        for key in ("general", "fixed"):
+            # Unquoted, QSettings splits the value at its commas and qt6ct gets no font.
+            font = config["Fonts"][key]
+            self.assertTrue(font.startswith('"') and font.endswith('"'), key)
+            self.assertEqual(tuple(font.strip('"').split(",")[:2]), gtk_font, key)
 
     def test_preview_includes_enabled_waybar_plugins(self):
         plugin = self.root / "plugins/test-widget"

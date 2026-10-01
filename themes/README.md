@@ -21,6 +21,16 @@ subcommands, and the theme names for `set` and `render`.
   A destination of `-` renders only.
 - tmux reads its colours as `@thm_*` options from `~/.config/tmux/colors.conf`;
   the tracked `config/tmux/theme.conf` keeps the layout and ANSI fallbacks.
+- GTK3 apps (PCManFM included) follow the palette through adw-gtk3
+  (`adw-gtk-theme`): `gtk3-settings.ini` selects `adw-gtk3` or `adw-gtk3-dark` by
+  the palette's `variant`, and `gtk3.css` recolors it with libadwaita's named
+  colors, kept in step with `gtk4.css`. Stock Adwaita ignores those colors.
+  GTK3 has no live reload, so open windows change on their next start.
+- Qt6 apps (qBittorrent) follow it through qt6ct: the session sets
+  `QT_QPA_PLATFORMTHEME=qt6ct` (`xsession/.xprofile`, Hyprland's environment),
+  `qt6ct.conf` picks Fusion, GTK file dialogs and the GTK font, and
+  `qt6ct-colors.conf` maps the same palette keys as `gtk3.css` onto Qt's
+  palette roles. qt6ct repaints open Qt apps a few seconds after a switch.
 - `hooks/*.sh` - for apps whose config themectl cannot own (herdr, rnmui, nvim,
   and the LightDM login screen).
 - `out` - generated, gitignored symlink to an immutable `.generations/` directory.
@@ -97,6 +107,30 @@ design's JSON tokens. Direct links use `#mono`, `#linen`, or `#tide`.
 The gallery uses illustrative apps and system data. Its controls and token
 exports do not apply settings. Mono is also available as a real Lua layout below;
 Linen and Tide are design concepts.
+
+## Nocturne for AwesomeWM
+
+Nocturne is a dark plum desktop with a lilac accent. A 44 px top bar has no
+background of its own: workspaces 1–9 (the selected one a filled accent square)
+and the focused app on the left, the date and time centered, and one status
+group on the right with plugin widgets, network, volume, battery, a layout chip
+(click or scroll to change) and a small dot. The dot opens a drop-down with
+network traffic, volume, CPU/memory, free disk, battery, Lock and Session; it
+closes on a second click or when the pointer leaves it. Windows have 12 px gaps
+and corners; only the focused one draws its 1 px accent border. Floating windows
+get Slate's compact titlebar.
+
+```bash
+awesome-client 'require("theme-layout").set("nocturne")'
+themectl set nocturne
+```
+
+Or choose **Super+W → Awesome → desktop layout → Nocturne**. The layout works
+with any palette. It asks for Manrope and Spline Sans Mono and falls back to
+Inter/sans and JetBrains Mono when they are not installed.
+
+Implementation: `awesome/.config/awesome/themes/nocturne/` and
+`palettes/nocturne.lua`, reusing Mono's icons, palette helpers and pollers.
 
 ## Slate for AwesomeWM
 

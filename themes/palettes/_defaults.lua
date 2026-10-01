@@ -59,6 +59,10 @@ return function(p, mix)
 
     -- The Adwaita stylesheet the login screen's GTK theme builds on.
     adwaita_css = dark and "gtk-contained-dark.css" or "gtk-contained.css",
+    -- The GTK3 theme gtk3.css recolors (package adw-gtk-theme), and whether
+    -- apps should ask for their dark variant.
+    gtk3_theme = dark and "adw-gtk3-dark" or "adw-gtk3",
+    gtk_prefer_dark = dark and 1 or 0,
 
     -- Catppuccin's extra hues. btop's gradient is the only real consumer.
     mauve = p.magenta,

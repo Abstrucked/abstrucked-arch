@@ -218,6 +218,7 @@ beautiful.init(gfs.get_configuration_dir() .. "themes/" .. chosen_theme .. "/the
 -- {{{ Menu
 local myawesomemenu = {
 	{ "desktop layout", {
+		{ "Nocturne", function() theme_layout.set("nocturne") end },
 		{ "Slate", function() theme_layout.set("slate") end },
 		{ "Mono", function() theme_layout.set("mono") end },
 		{ "Powerarrow", function() theme_layout.set("powerarrow") end },
@@ -348,8 +349,7 @@ local globalkeys = my_table.join(
 	awful.key({ modkey }, "Escape", awful.tag.history.restore, { description = "go back", group = "tag" }),
 	----------------------------------------------------------------------
 	awful.key({ modkey }, "`", function()
-		awful.spawn.with_shell("GTK_THEME=Adwaita:dark pcmanfm")
-		--awful.spawn("pcmanfm")
+		awful.spawn("pcmanfm")
 	end, { description = "Open PcManFm", group = "hotkeys" }),
 	awful.key({ modkey, "Shift" }, "`", function()
 		awful.spawn("pcmanfm")

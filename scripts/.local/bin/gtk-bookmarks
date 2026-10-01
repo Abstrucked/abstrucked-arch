@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# Bookmark the XDG user folders (Documents, Downloads, ...) for GTK.
+# PCManFM's side pane lists Home, Desktop and Trash itself and every other
+# place from these bookmarks; GTK's Open/Save dialogs read the same file.
+# Safe to rerun: existing bookmarks, including ones added in PCManFM, are kept
+# and a folder that is already bookmarked is never added twice.
+set -euo pipefail
+
+declare -r BOOKMARKS="${XDG_CONFIG_HOME:-$HOME/.config}/gtk-3.0/bookmarks"
+# xdg-user-dir names, in pane order. Desktop is left out: PCManFM shows it.
+declare -ra DIRS=(DOCUMENTS DOWNLOAD MUSIC PICTURES VIDEOS PROJECTS)
+
+for tool in xdg-user-dir python3; do
+  if ! command -v "$tool" >/dev/null; then
+    echo "gtk-bookmarks: $tool is not installed" >&2
+    exit 1
+  fi
+done
+
+# Bookmarks are file:// URIs, so spaces and localized names must be encoded.
+uri() {
+  python3 -c 'import pathlib, sys; print(pathlib.Path(sys.argv[1]).as_uri())' "$1"
+}
+
+mkdir -p "$(dirname "$BOOKMARKS")"
+touch "$BOOKMARKS"
+# Appending to a last line without its newline would merge two bookmarks.
+if [[ -s "$BOOKMARKS" && -n "$(tail -c 1 "$BOOKMARKS")" ]]; then
+  echo >>"$BOOKMARKS"
+fi
+
+for name in "${DIRS[@]}"; do
+  dir="$(xdg-user-dir "$name")"
+  # xdg-user-dir answers $HOME for a folder user-dirs.dirs does not set.
+  [[ "$dir" != "$HOME" && -d "$dir" ]] || continue
+  entry="$(uri "$dir")"
+  # Each line is "<uri>" or "<uri> <label>".
+  if ! awk -v uri="$entry" '$1 == uri { found = 1 } END { exit !found }' "$BOOKMARKS"; then
+    printf '%s\n' "$entry" >>"$BOOKMARKS"
+  fi
+done
