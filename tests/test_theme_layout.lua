@@ -48,4 +48,7 @@ assert(layout.set("mono") == "mono")
 assert(layout.get() == "mono", "an empty environment override is ignored")
 assert(layout.set("powerarrow") == "powerarrow", "switching back is supported")
 assert(restarts == 3)
+assert(layout.set("slate") == "slate", "new layouts use the same selection path")
+assert(dofile(module_path).get() == "slate", "Slate survives a new Lua session")
+assert(restarts == 4)
 os.getenv = getenv

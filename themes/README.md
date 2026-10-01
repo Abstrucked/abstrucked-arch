@@ -98,6 +98,42 @@ The gallery uses illustrative apps and system data. Its controls and token
 exports do not apply settings. Mono is also available as a real Lua layout below;
 Linen and Tide are design concepts.
 
+## Slate for AwesomeWM
+
+Slate is a minimal desktop with cool charcoal surfaces, a mist-blue accent,
+and an original geometric wallpaper. A single 37 px top rail holds nine numbered
+workspaces with small activity markers, the focused app, enabled plugin widgets,
+system status, network, volume, battery, clock/calendar, layout and session controls.
+The focused app, date and secondary status widgets collapse on narrow outputs.
+All dimensions follow Awesome's DPI setting.
+
+Windows have 12 px tiling gaps, 1 px borders and 6 px corners. Tiled windows use
+their own app chrome; floating windows get a compact 28 px titlebar with minimize
+and close controls. Maximized and fullscreen windows have square corners.
+The launcher, calendar, volume controls and `Super+B` panel toggle use the existing
+bindings. System status opens on hover or by clicking its small blue dot.
+
+![Slate running in AwesomeWM with illustrative app windows](previews/slate-desktop.png)
+
+With the Awesome package stowed, select the new layout and matching palette:
+
+```bash
+awesome-client 'require("theme-layout").set("slate")'
+themectl set slate
+```
+
+Or choose **Super+W → Awesome → desktop layout → Slate** after reloading Awesome.
+Layout selection is saved independently of the palette, so `themectl set nord`
+also works with Slate. Other layouts remain available in the same menu.
+`AWESOME_THEME` in the login environment takes precedence over the saved layout.
+
+Implementation: `awesome/.config/awesome/themes/slate/` and `palettes/slate.lua`.
+Slate reuses Mono's vector icons, palette helpers and shared status pollers.
+The desktop preview comes from an isolated AwesomeWM session; its app content
+and plugin readings are illustrative. A [wallpaper preview](previews/slate-wallpaper.png)
+shows the desktop without windows. Applications render their own interfaces;
+the matching palette is available to the existing app templates through `themectl`.
+
 ## Mono for AwesomeWM
 
 Mono has three floating panel islands, 14 px tiling gaps, 1 px focus borders,

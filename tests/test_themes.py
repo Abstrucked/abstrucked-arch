@@ -67,23 +67,25 @@ class ThemeTests(unittest.TestCase):
         self.assertNotEqual(target.read_text(), previous)
         self.assertEqual(target.resolve(), (self.themes / "out/alacritty.toml").resolve())
 
-    def test_mono_palette_switch_preserves_layout_selection(self):
+    def test_matching_palette_switch_preserves_layout_selection(self):
         state = self.home / ".local/state/awesome/theme-layout"
         state.parent.mkdir(parents=True)
-        state.write_text("mono\n")
-        self.run_tool("themectl", "set", "mono")
-        palette = self.home / ".config/awesome/themes/powerarrow/colors.lua"
-        self.assertIn('accent = "#c2d89a"', palette.read_text())
-        self.assertIn('background = "#171a18"', (self.themes / "out/alacritty.toml").read_text())
-        target = os.readlink(palette)
-        self.run_tool("themectl", "set", "nord")
-        self.assertEqual(state.read_text(), "mono\n")
-        self.assertEqual(os.readlink(palette), target)
-        self.assertNotIn('accent = "#c2d89a"', palette.read_text())
+        for name, accent, bg in (("mono", "#c2d89a", "#171a18"), ("slate", "#96b3cf", "#16191f")):
+            with self.subTest(layout=name):
+                state.write_text(name + "\n")
+                self.run_tool("themectl", "set", name)
+                palette = self.home / ".config/awesome/themes/powerarrow/colors.lua"
+                self.assertIn(f'accent = "{accent}"', palette.read_text())
+                self.assertIn(f'background = "{bg}"', (self.themes / "out/alacritty.toml").read_text())
+                target = os.readlink(palette)
+                self.run_tool("themectl", "set", "nord")
+                self.assertEqual(state.read_text(), name + "\n")
+                self.assertEqual(os.readlink(palette), target)
+                self.assertNotIn(f'accent = "{accent}"', palette.read_text())
 
     def test_awesome_layout_selection(self):
         config = self.home / ".config/awesome"
-        for name in ("mono", "powerarrow"):
+        for name in ("mono", "slate", "powerarrow"):
             theme = config / "themes" / name / "theme.lua"
             theme.parent.mkdir(parents=True)
             theme.write_text("return {}\n")

@@ -122,7 +122,7 @@ return function(args)
     widgets.system.forced_width = dpi(12)
     awful.tooltip({ objects = { widgets.system }, timer_function = summary })
     widgets.system:buttons(gears.table.join(awful.button({}, 1, function()
-        naughty.notify({ title = "System / Mono", text = summary(), screen = awful.screen.focused() })
+        naughty.notify({ title = theme.system_title or "System / Mono", text = summary(), screen = awful.screen.focused() })
     end)))
     return widgets
 end
