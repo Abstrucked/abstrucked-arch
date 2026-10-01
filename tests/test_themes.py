@@ -184,6 +184,31 @@ class ThemeTests(unittest.TestCase):
             hi, lo = sorted(map(luminance, output), reverse=True)
             self.assertGreaterEqual((hi + 0.05) / (lo + 0.05), 4.5, palette.stem)
 
+    def test_tmux_colors_cover_theme_and_stay_readable(self):
+        theme = (ROOT / "config/tmux/theme.conf").read_text()
+        used = set(re.findall(r"#\{(@thm_\w+)\}", theme))
+        fallbacks = set(re.findall(r"^set -g (@thm_\w+) ", theme, re.M))
+        self.assertTrue(used)
+        self.assertEqual(used, fallbacks)
+
+        def luminance(hex_color):
+            def channel(c):
+                c /= 255
+                return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+            r, g, b = (channel(int(hex_color[i:i + 2], 16)) for i in (1, 3, 5))
+            return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+        template = self.themes / "templates/tmux-colors.conf.tpl"
+        for palette in sorted((self.themes / "palettes").glob("[!_]*.lua")):
+            with self.subTest(palette=palette.stem):
+                rendered = subprocess.run(["lua", str(self.themes / "render.lua"), str(palette), str(template)],
+                                          capture_output=True, text=True, check=True).stdout
+                colors = dict(re.findall(r"^set -g (@thm_\w+) '(#[0-9a-fA-F]{6})'$", rendered, re.M))
+                self.assertEqual(set(colors), fallbacks)
+                hi, lo = sorted((luminance(colors["@thm_accent"]), luminance(colors["@thm_on_accent"])),
+                                reverse=True)
+                self.assertGreaterEqual((hi + 0.05) / (lo + 0.05), 4.5)
+
     def test_preview_includes_enabled_waybar_plugins(self):
         plugin = self.root / "plugins/test-widget"
         plugin.mkdir()
