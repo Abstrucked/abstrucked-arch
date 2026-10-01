@@ -1,0 +1,682 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f6f5f1">
+  <meta name="description" content="Three considered AwesomeWM concepts: Mono, Linen, and Tide. Explore interactive desktops, original wallpapers, and their design tokens.">
+  <title>A quieter desktop — AwesomeWM theme studies</title>
+  <style>
+    :root { color-scheme: light; --paper: #f6f5f1; --ink: #252723; --muted: #72746c; --rule: #ddded6; --mono: "JetBrains Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace; --sans: "Inter", "Helvetica Neue", Arial, sans-serif; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--paper); color: var(--ink); font-family: var(--sans); -webkit-font-smoothing: antialiased; }
+    button, input { font: inherit; }
+    button, a, input { -webkit-tap-highlight-color: transparent; }
+    button { cursor: pointer; color: inherit; }
+    button:focus-visible, a:focus-visible, input:focus-visible { outline: 2px solid #66803e; outline-offset: 5px; }
+    button { border: 0; }
+    a { color: inherit; text-decoration: none; }
+    [hidden] { display: none !important; }
+    .icon { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
+    .sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
+    .wrap { width: min(1280px, calc(100% - 96px)); margin: 0 auto; }
+    .masthead { height: 86px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--rule); }
+    .brand { display: inline-flex; gap: 11px; align-items: center; font-weight: 650; font-size: 16px; letter-spacing: -.5px; }
+    .brand-mark { display: grid; grid-template-columns: repeat(2, 6px); gap: 3px; transform: rotate(-8deg); }
+    .brand-mark i { width: 6px; height: 6px; background: var(--ink); }
+    .brand-mark i:last-child { background: #94a27a; }
+    .masthead-right { display: flex; align-items: center; gap: 26px; color: var(--muted); font: 10px var(--mono); letter-spacing: 1.1px; }
+    .edition { display: inline-flex; align-items: center; gap: 8px; }
+    .edition::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: #7d8b63; }
+    .hero { padding: 45px 0 37px; display: flex; justify-content: space-between; align-items: flex-end; gap: 30px; }
+    .eyebrow { font: 10px var(--mono); letter-spacing: 1.8px; text-transform: uppercase; color: var(--muted); }
+    .hero h1 { margin: 14px 0 0; font-weight: 500; font-size: clamp(34px, 4vw, 53px); letter-spacing: -2.5px; line-height: 1.1; }
+    .hero h1 span { color: #92958b; }
+    .hero p { margin: 0 0 3px; color: #75776f; font-size: 13px; line-height: 1.8; max-width: 310px; }
+    .theme-navigation { display: flex; justify-content: space-between; align-items: center; gap: 20px; margin-bottom: 17px; }
+    .theme-tabs { display: flex; gap: 6px; background: #eaece4; border-radius: 8px; padding: 5px; }
+    .theme-tab { min-width: 134px; background: transparent; border-radius: 5px; padding: 11px 18px; display: flex; align-items: center; gap: 12px; font-size: 12px; color: #73766b; transition: background .18s, box-shadow .18s; }
+    .theme-tab .index { font: 9px var(--mono); opacity: .65; }
+    .theme-tab[aria-selected="true"] { background: #fff; color: var(--ink); box-shadow: 0 1px 4px #2527230d; }
+    .theme-tab .tab-dot { margin-left: auto; width: 6px; height: 6px; border-radius: 50%; background: var(--dot); }
+    .preview-tools { display: flex; align-items: center; gap: 17px; }
+    .quiet-button { background: transparent; display: flex; align-items: center; gap: 7px; padding: 7px 0; color: #62665b; font-size: 11px; }
+    .quiet-button:hover { color: #252723; }
+    .quiet-button .icon { width: 14px; height: 14px; }
+    .tool-divider { width: 1px; height: 15px; background: var(--rule); }
+    .preview-frame { border: 1px solid #d5d7cd; border-radius: 10px; padding: 7px; background: #e7e8e1; box-shadow: 0 16px 35px -30px #262b26aa; }
+    .screen-scroll { overflow: auto; border-radius: 5px; }
+    .desktop { --bg: #171a18; --surface: #202420; --raised: #292e28; --text: #e3e8dd; --subtle: #99a391; --accent: #c2d89a; --line: #363e33; --syntax: #d8c69c; container-type: inline-size; position: relative; width: 100%; aspect-ratio: 16 / 9; background: var(--bg); color: var(--text); overflow: hidden; font-family: var(--mono); isolation: isolate; }
+    .desktop[data-theme="linen"] { --bg: #eae5dc; --surface: #faf8f3; --raised: #f0ece3; --text: #46473e; --subtle: #817d70; --accent: #a76043; --line: #ded9ce; --syntax: #778155; }
+    .desktop[data-theme="tide"] { --bg: #101d29; --surface: #162734; --raised: #203644; --text: #dce9ee; --subtle: #8da6b5; --accent: #90cbd0; --line: #304955; --syntax: #c6b7df; }
+    .desktop .icon { width: 1.3cqw; height: 1.3cqw; stroke-width: 1.65; }
+    .desktop button { background: transparent; font-family: inherit; }
+    .desktop button:focus-visible, .desktop input:focus-visible { outline: .15cqw solid var(--accent); outline-offset: .2cqw; }
+    .wallpaper { position: absolute; inset: 0; overflow: hidden; z-index: -2; }
+    .wallpaper svg { width: 100%; height: 100%; }
+    .wallpaper-signature { position: absolute; bottom: 3.7cqw; left: 3.1cqw; font: .67cqw var(--mono); text-transform: uppercase; letter-spacing: .18cqw; color: var(--subtle); }
+    .wallpaper-signature b { display: block; font: 500 2.2cqw var(--sans); letter-spacing: -.08cqw; color: var(--text); margin-bottom: .6cqw; }
+    .wallpaper-corner { position: absolute; right: 3cqw; bottom: 3.7cqw; color: var(--subtle); font-size: .67cqw; letter-spacing: .08cqw; }
+    .wm-bar { position: absolute; display: flex; align-items: center; z-index: 5; font-size: .85cqw; }
+    .bar-island { display: flex; align-items: center; background: var(--surface); border: 1px solid var(--line); height: 3.3cqw; border-radius: .65cqw; padding: 0 1.2cqw; gap: 1.1cqw; box-shadow: 0 .2cqw .6cqw #00000008; }
+    .bar-left { left: 1.6cqw; top: 1.5cqw; }
+    .bar-center { left: 50%; top: 1.5cqw; transform: translateX(-50%); }
+    .bar-right { right: 1.6cqw; top: 1.5cqw; }
+    .launcher-toggle { color: var(--accent); padding: .15cqw; display: flex; align-items: center; }
+    .launcher-toggle .icon { width: 1.55cqw; height: 1.55cqw; }
+    .bar-separator { width: 1px; height: 1.15cqw; background: var(--line); }
+    .workspaces { display: flex; gap: .4cqw; align-items: center; }
+    .workspace { min-width: 2.15cqw; height: 2.1cqw; padding: 0 .5cqw; color: var(--subtle); border-radius: .35cqw; font-size: .78cqw; }
+    .workspace[aria-pressed="true"] { background: var(--accent); color: var(--bg); }
+    .workspace:hover { box-shadow: inset 0 0 0 1px var(--accent); }
+    .bar-app { color: var(--subtle); font-size: .74cqw; }
+    .bar-clock { color: var(--text); font-weight: 500; }
+    .bar-date { color: var(--subtle); font-size: .76cqw; }
+    .system-status { display: flex; gap: .85cqw; align-items: center; }
+    .battery { display: flex; gap: .45cqw; align-items: center; font-size: .78cqw; }
+    .status-dot { width: .42cqw; height: .42cqw; border-radius: 100%; background: var(--accent); display: inline-block; }
+    .window { position: absolute; background: var(--surface); border: 1px solid var(--line); border-radius: .65cqw; box-shadow: 0 1.5cqw 3cqw #0000001c; overflow: hidden; transition: left .25s, top .25s, width .25s, height .25s; }
+    .window.focused { border-color: #788b62; }
+    .window-title { height: 3.1cqw; padding: 0 1.15cqw; display: flex; align-items: center; gap: .65cqw; border-bottom: 1px solid var(--line); font-size: .77cqw; color: var(--subtle); }
+    .window-title .icon { width: 1.05cqw; height: 1.05cqw; color: var(--accent); }
+    .window-title strong { color: var(--text); font-weight: 400; }
+    .window-title .right { margin-left: auto; display: flex; gap: .65cqw; align-items: center; }
+    .window-title .window-dot { width: .42cqw; height: .42cqw; border-radius: 50%; background: var(--subtle); opacity: .5; }
+    .editor { left: 2.5cqw; top: 7.2cqw; width: 58.2cqw; height: 39cqw; }
+    .editor-content { display: flex; height: calc(100% - 5.2cqw); }
+    .file-tree { width: 13cqw; padding: 1.3cqw 0; border-right: 1px solid var(--line); flex-shrink: 0; color: var(--subtle); font-size: .76cqw; }
+    .tree-label { font-size: .61cqw; letter-spacing: .09cqw; padding: 0 1cqw 1.05cqw; }
+    .tree-row { display: flex; gap: .65cqw; align-items: center; padding: .53cqw 1cqw; white-space: nowrap; }
+    .tree-row .icon { width: .95cqw; height: .95cqw; }
+    .tree-row.selected { background: var(--raised); color: var(--accent); }
+    .tree-row.indent { padding-left: 2.3cqw; }
+    .code-pane { flex: 1; min-width: 0; }
+    .editor-tab { display: flex; align-items: center; gap: .75cqw; width: fit-content; padding: .8cqw 1.4cqw; border-right: 1px solid var(--line); border-bottom: 1px solid var(--accent); font-size: .75cqw; }
+    .editor-tab i { width: .4cqw; height: .4cqw; background: var(--accent); border-radius: 50%; }
+    .code { counter-reset: code-line; margin: 0; padding: 1.3cqw 0; font: .91cqw/1.95 var(--mono); white-space: pre; }
+    .code .line { display: block; padding: 0 1.1cqw 0 0; min-height: 1.77cqw; }
+    .code .line::before { counter-increment: code-line; content: counter(code-line); display: inline-block; text-align: right; width: 2.2cqw; margin-right: 1.65cqw; color: var(--subtle); opacity: .65; font-size: .75cqw; }
+    .code .line.current { background: var(--raised); }
+    .comment { color: var(--subtle); }
+    .keyword { color: var(--syntax); }
+    .string, .accent { color: var(--accent); }
+    .code-cursor { border-left: .55cqw solid var(--accent); }
+    .editor-status { position: absolute; bottom: 0; left: 0; right: 0; height: 2.1cqw; background: var(--raised); display: flex; align-items: center; gap: 1.2cqw; color: var(--subtle); font-size: .66cqw; padding-right: 1cqw; }
+    .editor-status b { align-self: stretch; background: var(--accent); color: var(--bg); display: flex; align-items: center; padding: 0 1cqw; font-size: .64cqw; font-weight: 600; }
+    .editor-status .status-end { margin-left: auto; }
+    .terminal { left: 62.1cqw; top: 7.2cqw; width: 35.4cqw; height: 22.6cqw; }
+    .terminal-content { padding: 1.4cqw 1.5cqw; font-size: .82cqw; line-height: 1.85; }
+    .prompt { margin-bottom: 1.1cqw; }
+    .prompt .path { color: var(--subtle); }
+    .fetch { display: flex; gap: 2cqw; margin: .5cqw 0 1.3cqw; }
+    .arch-logo { width: 6.8cqw; height: 8.3cqw; color: var(--accent); margin: .7cqw 0 0 .3cqw; flex-shrink: 0; }
+    .fetch-info { font-size: .76cqw; line-height: 1.85; }
+    .fetch-info b { color: var(--accent); font-weight: 500; }
+    .fetch-info .host { color: var(--text); margin-bottom: .45cqw; }
+    .terminal-palette { display: flex; gap: .3cqw; margin-top: .7cqw; }
+    .terminal-palette i { width: 1.15cqw; height: .65cqw; border-radius: .1cqw; }
+    .caret { display: inline-block; vertical-align: middle; width: .5cqw; height: 1cqw; background: var(--accent); margin-left: .5cqw; }
+    .music { left: 62.1cqw; top: 31.2cqw; width: 35.4cqw; height: 15cqw; }
+    .music-content { padding: 1.4cqw; display: flex; align-items: center; gap: 1.5cqw; }
+    .album { width: 6.6cqw; height: 6.6cqw; border-radius: .35cqw; background: #353e30; display: grid; place-items: center; flex-shrink: 0; position: relative; overflow: hidden; }
+    .album::before, .album::after { content: ""; position: absolute; width: 5cqw; height: 5cqw; border: 1px solid #a7b590; border-radius: 50%; transform: translate(-1.5cqw, .2cqw); }
+    .album::after { transform: translate(1.5cqw, -.2cqw); }
+    .track-info { flex: 1; }
+    .track-info h3 { font: 500 1.02cqw var(--sans); margin: 0 0 .5cqw; }
+    .track-info p { font: .73cqw var(--sans); color: var(--subtle); margin: 0; }
+    .track-controls { display: flex; align-items: center; gap: 1.3cqw; margin-top: 1.1cqw; color: var(--subtle); }
+    .track-controls .play { color: var(--accent); }
+    .track-progress { height: .2cqw; background: var(--line); margin: 0 1.5cqw; position: relative; }
+    .track-progress::before { content: ""; position: absolute; background: var(--accent); width: 43%; height: 100%; }
+    .track-time { display: flex; justify-content: space-between; margin: .65cqw 1.5cqw; color: var(--subtle); font-size: .58cqw; }
+    .linen-note, .tide-monitor, .dock { display: none; }
+    .desktop[data-theme="linen"] .wallpaper-signature { left: 10cqw; bottom: 4cqw; }
+    .desktop[data-theme="linen"] .wallpaper-corner { bottom: 4.1cqw; }
+    .desktop[data-theme="linen"] .bar-left { left: 1.5cqw; top: 1.5cqw; bottom: 1.5cqw; width: 4.5cqw; }
+    .desktop[data-theme="linen"] .bar-left .bar-island { flex-direction: column; width: 100%; height: 100%; padding: 1.3cqw .7cqw; border-radius: .75cqw; gap: 1.7cqw; }
+    .desktop[data-theme="linen"] .bar-left .bar-separator { height: 1px; width: 1.8cqw; }
+    .desktop[data-theme="linen"] .workspaces { flex-direction: column; gap: .9cqw; }
+    .desktop[data-theme="linen"] .workspace { width: 2.65cqw; height: 2.65cqw; }
+    .desktop[data-theme="linen"] .workspace[aria-pressed="true"] { color: #faf8f3; }
+    .desktop[data-theme="linen"] .bar-app { writing-mode: vertical-rl; margin-top: auto; transform: rotate(180deg); font-size: .67cqw; letter-spacing: .08cqw; }
+    .desktop[data-theme="linen"] .bar-center { left: 10cqw; top: 2.5cqw; transform: none; }
+    .desktop[data-theme="linen"] .bar-center .bar-island, .desktop[data-theme="linen"] .bar-right .bar-island { border: 0; background: transparent; padding: 0; box-shadow: none; }
+    .desktop[data-theme="linen"] .bar-right { top: 2.5cqw; right: 3.3cqw; }
+    .desktop[data-theme="linen"] .editor { left: 10cqw; top: 9cqw; width: 53cqw; height: 35.8cqw; border-color: #cbb8a9; border-radius: .35cqw; }
+    .desktop[data-theme="linen"] .file-tree { width: 11.5cqw; }
+    .desktop[data-theme="linen"] .code { font-size: .85cqw; }
+    .desktop[data-theme="linen"] .code .line::before { width: 1.8cqw; margin-right: 1.2cqw; }
+    .desktop[data-theme="linen"] .terminal { left: 65cqw; top: 25.8cqw; width: 31.5cqw; height: 19cqw; border-radius: .35cqw; }
+    .desktop[data-theme="linen"] .terminal-content { padding: 1cqw 1.3cqw; }
+    .desktop[data-theme="linen"] .fetch { gap: 1.5cqw; margin-bottom: .4cqw; }
+    .desktop[data-theme="linen"] .arch-logo { width: 5.5cqw; height: 6.7cqw; }
+    .desktop[data-theme="linen"] .fetch-info { font-size: .7cqw; }
+    .desktop[data-theme="linen"] .prompt { margin-bottom: .6cqw; }
+    .desktop[data-theme="linen"] .music { display: none; }
+    .desktop[data-theme="linen"] .linen-note { display: block; left: 65cqw; top: 9cqw; width: 31.5cqw; height: 14.8cqw; padding: 1.4cqw 2cqw; background: #f8f5ec; border-radius: .35cqw; }
+    .note-label { font-size: .62cqw; letter-spacing: .13cqw; color: var(--accent); display: flex; align-items: center; justify-content: space-between; }
+    .linen-note h3 { font: 400 1.95cqw/1.2 Georgia, serif; letter-spacing: -.06cqw; margin: .85cqw 0 .6cqw; }
+    .linen-note p { font: .76cqw/1.8 var(--sans); color: var(--subtle); margin: 0; }
+    .note-bottom { border-top: 1px solid var(--line); margin-top: .8cqw; padding-top: .6cqw; font-size: .63cqw; color: var(--subtle); display: flex; justify-content: space-between; }
+    .desktop[data-theme="linen"] .editor-status b { color: #fffaf2; }
+    .desktop[data-theme="tide"]::before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 3.7cqw; background: var(--surface); border-bottom: 1px solid var(--line); }
+    .desktop[data-theme="tide"] .wm-bar { top: 0; height: 3.7cqw; }
+    .desktop[data-theme="tide"] .bar-island { background: transparent; border: 0; height: 100%; padding: 0; box-shadow: none; }
+    .desktop[data-theme="tide"] .bar-left { left: 1.7cqw; }
+    .desktop[data-theme="tide"] .bar-right { right: 1.7cqw; }
+    .desktop[data-theme="tide"] .workspace { border-radius: 0; height: 3.7cqw; margin: 0 .25cqw; }
+    .desktop[data-theme="tide"] .workspace[aria-pressed="true"] { border-bottom: .16cqw solid var(--accent); background: transparent; color: var(--accent); }
+    .desktop[data-theme="tide"] .editor { left: 5cqw; top: 8.2cqw; width: 55.5cqw; height: 35.8cqw; border-radius: 1cqw; border-color: #668d9d; }
+    .desktop[data-theme="tide"] .file-tree { width: 11.7cqw; }
+    .desktop[data-theme="tide"] .code { font-size: .85cqw; }
+    .desktop[data-theme="tide"] .terminal { left: 63cqw; top: 11.8cqw; width: 32cqw; height: 23cqw; border-radius: 1cqw; }
+    .desktop[data-theme="tide"] .fetch { gap: 1.3cqw; }
+    .desktop[data-theme="tide"] .music { display: none; }
+    .desktop[data-theme="tide"] .tide-monitor { display: block; left: 63cqw; top: 36.2cqw; width: 32cqw; height: 7.8cqw; border-radius: .8cqw; padding: 1.4cqw; }
+    .monitor-top { display: flex; justify-content: space-between; align-items: center; font-size: .71cqw; color: var(--subtle); }
+    .monitor-top strong { color: var(--accent); font-size: .92cqw; font-weight: 400; }
+    .monitor-graph { display: flex; align-items: flex-end; height: 2.9cqw; gap: .3cqw; margin-top: .5cqw; }
+    .monitor-graph i { flex: 1; background: var(--accent); opacity: .55; border-radius: .12cqw .12cqw 0 0; }
+    .desktop[data-theme="tide"] .wallpaper-signature { bottom: 3.1cqw; left: 3cqw; }
+    .desktop[data-theme="tide"] .wallpaper-signature b { font-size: 1.55cqw; }
+    .desktop[data-theme="tide"] .wallpaper-corner { bottom: 3.2cqw; }
+    .desktop[data-theme="tide"] .dock { display: flex; position: absolute; z-index: 5; bottom: 2.2cqw; left: 50%; transform: translateX(-50%); padding: .6cqw; gap: .6cqw; background: #162734ed; border: 1px solid var(--line); border-radius: 1cqw; box-shadow: 0 .6cqw 2cqw #00000022; }
+    .dock button { display: grid; place-items: center; width: 3.1cqw; height: 3.1cqw; border-radius: .65cqw; color: var(--subtle); }
+    .dock button:hover, .dock button[aria-pressed="true"] { background: var(--raised); color: var(--accent); }
+    .dock .icon { width: 1.5cqw; height: 1.5cqw; }
+    .workspace-content { position: absolute; inset: 0; }
+    .desktop.windows-hidden .workspace-content { display: none; }
+    .desktop.windows-hidden .wallpaper-signature { bottom: 9cqw; left: 12cqw; }
+    .desktop.windows-hidden .wallpaper-signature b { font-size: 5cqw; letter-spacing: -.2cqw; margin-bottom: 1.2cqw; }
+    .desktop.windows-hidden .wallpaper-signature { font-size: .85cqw; }
+    .browser-window { left: 12cqw; top: 8.3cqw; width: 76cqw; height: 37.5cqw; }
+    .browser-address { margin: 0 auto; background: var(--raised); width: 45%; text-align: center; padding: .42cqw; border-radius: .3cqw; font-size: .66cqw; }
+    .browser-page { padding: 2.3cqw 3.5cqw; font-family: var(--sans); height: calc(100% - 3.1cqw); position: relative; overflow: hidden; }
+    .browser-site-nav { display: flex; justify-content: space-between; font-size: .72cqw; }
+    .browser-site-nav b { font-size: 1.1cqw; letter-spacing: -.04cqw; }
+    .browser-hero { position: relative; z-index: 1; width: 60%; padding-top: 4cqw; }
+    .browser-hero small { font: .65cqw var(--mono); letter-spacing: .13cqw; color: var(--accent); }
+    .browser-hero h2 { font-size: 4.25cqw; line-height: 1.03; font-weight: 450; letter-spacing: -.2cqw; margin: 1.3cqw 0; }
+    .browser-hero p { color: var(--subtle); font-size: .95cqw; line-height: 1.8; max-width: 24cqw; }
+    .browser-orb { position: absolute; right: -7cqw; top: 6cqw; width: 34cqw; height: 34cqw; border: 1px solid var(--accent); border-radius: 50%; box-shadow: inset 2cqw -2cqw 5cqw var(--raised); opacity: .65; }
+    .browser-orb::before, .browser-orb::after { content: ""; position: absolute; inset: 3cqw; border: 1px solid var(--line); border-radius: 50%; }
+    .browser-orb::after { inset: 6cqw; }
+    .browser-page-footer { position: absolute; bottom: 2.4cqw; color: var(--subtle); font: .64cqw var(--mono); }
+    .files-window { left: 16cqw; top: 10cqw; width: 69cqw; height: 34cqw; }
+    .files-body { display: flex; height: calc(100% - 3.1cqw); }
+    .files-sidebar { width: 15cqw; border-right: 1px solid var(--line); padding: 2cqw 1.1cqw; color: var(--subtle); font-size: .82cqw; }
+    .files-sidebar p { display: flex; align-items: center; gap: .8cqw; padding: .75cqw; margin: 0 0 .35cqw; }
+    .files-sidebar .active { background: var(--raised); border-radius: .4cqw; color: var(--accent); }
+    .file-grid { flex: 1; padding: 2.3cqw; }
+    .file-breadcrumb { color: var(--subtle); font-size: .76cqw; margin-bottom: 2.7cqw; }
+    .folder-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2.8cqw 1cqw; }
+    .folder { text-align: center; font-size: .8cqw; }
+    .folder .icon { display: block; width: 3.5cqw; height: 3.5cqw; margin: 0 auto .8cqw; color: var(--accent); stroke-width: 1; fill: var(--raised); }
+    .folder small { display: block; color: var(--subtle); font-size: .59cqw; margin-top: .45cqw; }
+    .file-count { margin-top: 2.5cqw; color: var(--subtle); font-size: .67cqw; }
+    .launcher { position: absolute; z-index: 10; left: 50%; top: 11cqw; transform: translateX(-50%); width: 38cqw; background: var(--surface); border: 1px solid var(--accent); border-radius: .8cqw; padding: 1.4cqw; box-shadow: 0 3cqw 12cqw #0008; }
+    .launcher label { display: flex; gap: .9cqw; align-items: center; border-bottom: 1px solid var(--line); padding: .3cqw .3cqw 1.2cqw; }
+    .launcher input { width: 100%; background: none; border: 0; color: var(--text); font: .95cqw var(--mono); padding: .3cqw; }
+    .launcher input::placeholder { color: var(--subtle); }
+    .launcher-results { padding-top: .8cqw; }
+    .launcher-results button { display: flex; align-items: center; gap: 1cqw; width: 100%; text-align: left; padding: 1cqw; border-radius: .4cqw; font-size: .85cqw; }
+    .launcher-results button:hover, .launcher-results button:focus-visible { background: var(--raised); color: var(--accent); }
+    .launcher-results small { margin-left: auto; color: var(--subtle); font-size: .65cqw; }
+    .launcher-help { color: var(--subtle); font-size: .63cqw; margin: 1cqw .3cqw 0; }
+    .caption { display: flex; align-items: center; justify-content: space-between; color: var(--muted); padding: 16px 2px 0; font: 9px var(--mono); letter-spacing: .35px; gap: 15px; }
+    .caption-left { display: flex; align-items: center; gap: 8px; }
+    .caption-left::before { content: ""; display: inline-block; width: 5px; height: 5px; border-radius: 50%; background: #87946f; }
+    .mobile-hint { display: none; }
+    .details { display: grid; grid-template-columns: 1.2fr 1fr 1fr; gap: 48px; padding: 39px 0 41px; border-bottom: 1px solid var(--rule); }
+    .concept-heading { display: flex; align-items: baseline; gap: 12px; }
+    .concept-heading h2 { font-size: 29px; font-weight: 500; letter-spacing: -1.2px; margin: 0; }
+    .concept-heading .concept-index { color: var(--muted); font: 10px var(--mono); }
+    .concept-description { margin: 12px 0 0; color: #72746c; font-size: 12px; line-height: 1.8; max-width: 330px; }
+    .section-label { display: flex; justify-content: space-between; align-items: center; font: 9px var(--mono); letter-spacing: 1px; text-transform: uppercase; color: var(--muted); margin: 0 0 19px; }
+    .section-label span { font-size: 8px; text-transform: none; letter-spacing: 0; color: #878a80; }
+    .swatches { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+    .swatch { padding: 0; background: none; text-align: left; }
+    .swatch-color { display: block; height: 36px; border-radius: 4px; border: 1px solid #0000000c; margin-bottom: 8px; transition: transform .15s; }
+    .swatch:hover .swatch-color { transform: translateY(-3px); }
+    .swatch code { font: 8px var(--mono); color: var(--muted); }
+    .spec-list { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 18px; margin: 0; }
+    .spec-list div { display: flex; flex-direction: column; gap: 5px; }
+    .spec-list dt { font: 9px var(--mono); color: #818479; }
+    .spec-list dd { margin: 0; font-size: 11px; }
+    .collection { padding: 35px 0 38px; }
+    .collection-heading { display: flex; justify-content: space-between; align-items: center; margin-bottom: 21px; }
+    .collection-heading h2 { font-size: 13px; font-weight: 500; margin: 0; }
+    .collection-heading span { color: var(--muted); font: 9px var(--mono); }
+    .concept-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; }
+    .concept-card { background: transparent; padding: 0; text-align: left; border-radius: 5px; }
+    .mini-desktop { position: relative; height: 155px; border-radius: 5px; overflow: hidden; border: 1px solid #00000012; transition: box-shadow .2s, transform .2s; }
+    .concept-card:hover .mini-desktop { transform: translateY(-3px); }
+    .concept-card[aria-pressed="true"] .mini-desktop { box-shadow: 0 0 0 3px var(--paper), 0 0 0 4px #969d86; }
+    .mini-mono { background: radial-gradient(ellipse at 110% 100%, #56624a, #171a18 70%); }
+    .mini-linen { background: radial-gradient(circle at 94% 5%, #ceaf99, transparent 55%), #eae5dc; }
+    .mini-tide { background: radial-gradient(ellipse at 85% 100%, #3b7186, #101d29 75%); }
+    .mini-bar { position: absolute; height: 9%; left: 4%; top: 5%; right: 4%; display: flex; justify-content: space-between; }
+    .mini-bar i { width: 28%; border-radius: 2px; background: #292e28; }
+    .mini-bar i:nth-child(2) { width: 16%; }
+    .mini-bar i:nth-child(3) { width: 23%; }
+    .mini-window { position: absolute; left: 6%; top: 20%; width: 55%; height: 64%; border: 1px solid #5d6b50; border-radius: 3px; background: #202420; padding: 13px 10px; }
+    .mini-window::before { content: ""; position: absolute; top: 7px; left: 10px; right: 10px; height: 1px; background: #424b3b; }
+    .mini-window i { display: block; background: #6c7a5a; opacity: .65; height: 2px; width: 66%; margin: 7px 0; }
+    .mini-window i:nth-child(2) { width: 42%; }
+    .mini-window i:nth-child(3) { width: 76%; }
+    .mini-window i:nth-child(4) { width: 51%; }
+    .mini-side { position: absolute; left: 64%; top: 20%; width: 30%; height: 37%; background: #202420; border: 1px solid #363e33; border-radius: 3px; }
+    .mini-side::after { content: ""; width: 65%; height: 2px; position: absolute; top: 45%; left: 18%; background: #7a8965; box-shadow: 0 7px #515b45, 0 -7px #515b45; }
+    .mini-small { position: absolute; left: 64%; top: 62%; width: 30%; height: 22%; border: 1px solid #363e33; background: #202420; border-radius: 3px; }
+    .mini-linen .mini-bar { width: 5%; bottom: 5%; right: auto; height: auto; background: #faf8f3; border-radius: 3px; }
+    .mini-linen .mini-bar i { display: none; }
+    .mini-linen .mini-window { background: #faf8f3; border-color: #cbb8a9; left: 14%; width: 51%; top: 17%; height: 68%; }
+    .mini-linen .mini-window::before { background: #ded9ce; }
+    .mini-linen .mini-window i { background: #ac795e; }
+    .mini-linen .mini-side { background: #faf8f3; border-color: #ded9ce; left: 69%; width: 26%; top: 48%; }
+    .mini-linen .mini-side::after { background: #bc9379; box-shadow: 0 7px #d0b8a6, 0 -7px #d0b8a6; }
+    .mini-linen .mini-small { background: #f8f5ec; border-color: #ded9ce; left: 69%; width: 26%; top: 17%; height: 26%; }
+    .mini-tide .mini-bar { left: 0; right: 0; top: 0; background: #162734; height: 8%; }
+    .mini-tide .mini-bar i { display: none; }
+    .mini-tide .mini-window { background: #162734; border-color: #527382; top: 18%; height: 62%; }
+    .mini-tide .mini-window::before { background: #304955; }
+    .mini-tide .mini-window i { background: #83b2ba; }
+    .mini-tide .mini-side { background: #162734; border-color: #304955; top: 25%; }
+    .mini-tide .mini-side::after { background: #789aa8; box-shadow: 0 7px #405e6c, 0 -7px #405e6c; }
+    .mini-tide .mini-small { background: #162734; border-color: #304955; top: 66%; height: 14%; }
+    .mini-dock { position: absolute; width: 20%; height: 9%; bottom: 4%; left: 40%; border-radius: 3px; background: #203644; }
+    .card-label { display: flex; justify-content: space-between; align-items: center; margin-top: 14px; }
+    .card-name { font-size: 12px; font-weight: 500; }
+    .card-name small { font: 9px var(--mono); color: var(--muted); margin-right: 9px; }
+    .card-label .icon { width: 14px; height: 14px; color: #838977; }
+    .card-description { display: block; margin-top: 7px; color: var(--muted); font-size: 10px; }
+    .footer { padding: 24px 0 30px; border-top: 1px solid var(--rule); display: flex; justify-content: space-between; align-items: center; gap: 20px; color: var(--muted); font: 9px/1.7 var(--mono); }
+    .export-button { background: transparent; padding: 7px 0; font: 10px var(--mono); display: inline-flex; align-items: center; gap: 8px; }
+    .export-button .icon { width: 14px; height: 14px; }
+    .toast { position: fixed; z-index: 30; bottom: 28px; left: 50%; transform: translate(-50%, 12px); background: #262e24; color: #f3f5eb; padding: 12px 20px; border-radius: 6px; box-shadow: 0 6px 30px #0002; opacity: 0; transition: opacity .2s, transform .2s; font: 11px var(--mono); pointer-events: none; }
+    .toast.visible { opacity: 1; transform: translate(-50%, 0); }
+    .focus-mode { overflow: hidden; }
+    .focus-mode .preview-frame { position: fixed; inset: 0; z-index: 20; padding: 0; border: 0; border-radius: 0; background: #101410; display: flex; align-items: center; justify-content: center; }
+    .focus-mode .screen-scroll { width: min(100vw, 177.7778vh); border-radius: 0; }
+    .focus-mode .desktop { min-width: 0; }
+    .exit-focus { display: none; position: fixed; z-index: 21; bottom: 15px; right: 17px; color: #eff2e9; background: #151b17e8; border: 1px solid #5f6e57; padding: 10px 14px; border-radius: 6px; font: 10px var(--mono); }
+    .focus-mode .exit-focus { display: block; }
+    .noscript { border: 1px solid var(--rule); padding: 24px; margin-bottom: 20px; font-size: 13px; line-height: 1.7; }
+    @media (min-width: 1600px) { .wrap { width: min(1440px, calc(100% - 140px)); } .mini-desktop { height: 180px; } }
+    @media (max-width: 1050px) { .wrap { width: calc(100% - 48px); } .hero h1 { font-size: 42px; } .hero p { max-width: 250px; font-size: 12px; } .details { gap: 27px; grid-template-columns: 1.05fr 1fr; } .specs { grid-column: 1 / -1; } .spec-list { grid-template-columns: repeat(4, 1fr); } .mini-desktop { height: 125px; } .theme-tab { min-width: 115px; padding-inline: 12px; } }
+    @media (max-width: 720px) { .wrap { width: calc(100% - 32px); } .masthead { height: 67px; } .masthead-right { gap: 0; } .masthead-right > span:last-child { display: none; } .hero { display: block; padding: 33px 0 28px; } .hero h1 { font-size: 38px; letter-spacing: -1.8px; } .hero p { margin-top: 18px; max-width: 340px; font-size: 12px; } .hero p br { display: none; } .theme-navigation { flex-wrap: wrap; gap: 13px; } .theme-tabs { flex: 1; } .theme-tab { min-width: 0; flex: 1; justify-content: center; padding: 11px 10px; gap: 8px; } .theme-tab .tab-dot { margin-left: 0; } .preview-tools { width: 100%; justify-content: flex-end; } .desktop { min-width: 720px; } .preview-frame { padding: 4px; } .caption { line-height: 1.7; align-items: flex-start; } .caption-right { display: none; } .mobile-hint { display: block; white-space: nowrap; } .details { grid-template-columns: 1fr; gap: 26px; padding: 29px 0; } .concept-description { max-width: 100%; } .swatch-color { height: 43px; } .swatch code { font-size: 9px; } .spec-list { grid-template-columns: repeat(2, 1fr); } .concept-cards { grid-template-columns: 1fr; gap: 27px; } .mini-desktop { height: auto; aspect-ratio: 2.15; } .collection-heading span { font-size: 8px; } .footer { flex-direction: column; align-items: flex-start; gap: 12px; } .card-description { font-size: 11px; } }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; scroll-behavior: auto !important; } }
+    @media print { .wrap { width: 100%; } .preview-tools, .footer, .toast { display: none; } .hero { padding: 20px 0; } .details { break-inside: avoid; } .desktop { print-color-adjust: exact; -webkit-print-color-adjust: exact; } }
+  </style>
+</head>
+<body>
+  <svg class="sprite" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <defs>
+      <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h7v7h-7z"/></symbol>
+      <symbol id="i-terminal" viewBox="0 0 24 24"><path d="m5 7 5 5-5 5m8 0h6"/></symbol>
+      <symbol id="i-code" viewBox="0 0 24 24"><path d="m8 6-6 6 6 6m8-12 6 6-6 6M14 3l-4 18"/></symbol>
+      <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 6a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+      <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H5v18h14V8zM14 3v6h5M8 13h8m-8 4h5"/></symbol>
+      <symbol id="i-wifi" viewBox="0 0 24 24"><path d="M2 8a16 16 0 0 1 20 0M5 12a11 11 0 0 1 14 0m-11 4a6 6 0 0 1 8 0M12 20h.01"/></symbol>
+      <symbol id="i-volume" viewBox="0 0 24 24"><path d="M11 4 6 8H3v8h3l5 4zM15 8a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14"/></symbol>
+      <symbol id="i-battery" viewBox="0 0 24 24"><rect x="2" y="6" width="17" height="12" rx="2"/><path d="M22 10v4M5 9h10v6H5z"/></symbol>
+      <symbol id="i-expand" viewBox="0 0 24 24"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/></symbol>
+      <symbol id="i-window" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18m-13 5h8"/></symbol>
+      <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 19 19 5M5 5h14v14"/></symbol>
+      <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12m-5-5 5 5 5-5M4 17v4h16v-4"/></symbol>
+      <symbol id="i-music" viewBox="0 0 24 24"><path d="M9 18V5l11-2v13M9 8l11-2"/><ellipse cx="6" cy="18" rx="3" ry="3"/><ellipse cx="17" cy="16" rx="3" ry="3"/></symbol>
+      <symbol id="i-play" viewBox="0 0 24 24"><path d="m8 4 12 8-12 8z"/></symbol>
+      <symbol id="i-prev" viewBox="0 0 24 24"><path d="M5 5v14M19 5 8 12l11 7z"/></symbol>
+      <symbol id="i-next" viewBox="0 0 24 24"><path d="M19 5v14M5 5l11 7-11 7z"/></symbol>
+      <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10" cy="10" r="6"/><path d="m15 15 6 6"/></symbol>
+      <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/></symbol>
+      <symbol id="i-home" viewBox="0 0 24 24"><path d="m3 10 9-7 9 7v11h-7v-7h-4v7H3z"/></symbol>
+      <symbol id="i-star" viewBox="0 0 24 24"><path d="m12 3 3 6 7 1-5 5 1 7-6-3-6 3 1-7-5-5 7-1z"/></symbol>
+    </defs>
+  </svg>
+  <div class="wrap">
+    <header class="masthead">
+      <a class="brand" href="#top" aria-label="AwesomeWM studies home"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span> awesome / studies</a>
+      <div class="masthead-right"><span class="edition">DESKTOP COLLECTION</span><span>VOL. 01 — 2026</span></div>
+    </header>
+    <main id="top">
+      <section class="hero" aria-labelledby="page-title">
+        <div><div class="eyebrow">Three themes. A little more breathing room.</div><h1 id="page-title">A quieter <span>desktop.</span></h1></div>
+        <p>Considered spaces for the things you do.<br> Three minimal directions for AwesomeWM,<br> each with a character of its own.</p>
+      </section>
+      <noscript><div class="noscript">Enable JavaScript for the interactive desktop previews. The collection below shows all three directions: Mono, Linen, and Tide.</div></noscript>
+      <section aria-label="Interactive theme preview">
+        <div class="theme-navigation">
+          <div class="theme-tabs" role="tablist" aria-label="Theme direction">
+            <button class="theme-tab" id="tab-mono" role="tab" aria-selected="true" aria-controls="theme-panel" data-theme="mono"><span class="index">01</span> Mono <span class="tab-dot" style="--dot:#8c9c72"></span></button>
+            <button class="theme-tab" id="tab-linen" role="tab" aria-selected="false" aria-controls="theme-panel" tabindex="-1" data-theme="linen"><span class="index">02</span> Linen <span class="tab-dot" style="--dot:#b67b5e"></span></button>
+            <button class="theme-tab" id="tab-tide" role="tab" aria-selected="false" aria-controls="theme-panel" tabindex="-1" data-theme="tide"><span class="index">03</span> Tide <span class="tab-dot" style="--dot:#6f9da9"></span></button>
+          </div>
+          <div class="preview-tools">
+            <button class="quiet-button" id="windows-toggle" aria-pressed="true"><svg class="icon" aria-hidden="true"><use href="#i-window"/></svg><span>Windows on</span></button>
+            <span class="tool-divider" aria-hidden="true"></span>
+            <button class="quiet-button" id="focus-toggle"><svg class="icon" aria-hidden="true"><use href="#i-expand"/></svg> Focus view</button>
+          </div>
+        </div>
+        <div id="theme-panel" role="tabpanel" aria-labelledby="tab-mono" tabindex="0">
+          <div class="preview-frame" id="preview-frame">
+            <div class="screen-scroll" tabindex="0" aria-label="Desktop preview; scroll horizontally on small screens">
+              <div class="desktop" id="desktop" data-theme="mono" aria-label="Mono desktop preview"></div>
+            </div>
+          </div>
+          <div class="caption"><span class="caption-left">INTERACTIVE CONCEPT <span aria-hidden="true">/</span> <span id="scene-caption">Floating bar · tiled workspace</span></span><span class="caption-right">Try the workspace numbers or the app launcher ↗</span><span class="mobile-hint">Swipe to explore →</span></div>
+          <div class="details">
+            <div><div class="concept-heading"><span class="concept-index" id="concept-index">01 /</span><h2 id="concept-name">Mono</h2></div><p class="concept-description" id="concept-description"></p></div>
+            <div><h3 class="section-label">The palette <span>Click a color to copy</span></h3><div class="swatches" id="swatches"></div></div>
+            <div class="specs"><h3 class="section-label">The details <span>Proposed AwesomeWM values</span></h3><dl class="spec-list" id="spec-list"></dl></div>
+          </div>
+        </div>
+      </section>
+      <section class="collection" aria-labelledby="collection-title">
+        <div class="collection-heading"><h2 id="collection-title">Three ways to make it yours.</h2><span>EXPLORE THE COLLECTION ↓</span></div>
+        <div class="concept-cards">
+          <button class="concept-card" data-theme="mono" aria-pressed="true" aria-label="Preview Mono: dark, precise, quietly technical">
+            <div class="mini-desktop mini-mono" aria-hidden="true"><div class="mini-bar"><i></i><i></i><i></i></div><div class="mini-window"><i></i><i></i><i></i><i></i></div><div class="mini-side"></div><div class="mini-small"></div></div>
+            <span class="card-label"><span class="card-name"><small>01</small> Mono</span><svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></span><span class="card-description">Dark, precise, quietly technical.</span>
+          </button>
+          <button class="concept-card" data-theme="linen" aria-pressed="false" aria-label="Preview Linen: warm, tactile, deliberately unhurried">
+            <div class="mini-desktop mini-linen" aria-hidden="true"><div class="mini-bar"><i></i></div><div class="mini-window"><i></i><i></i><i></i><i></i></div><div class="mini-side"></div><div class="mini-small"></div></div>
+            <span class="card-label"><span class="card-name"><small>02</small> Linen</span><svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></span><span class="card-description">Warm, tactile, deliberately unhurried.</span>
+          </button>
+          <button class="concept-card" data-theme="tide" aria-pressed="false" aria-label="Preview Tide: cool, spacious, a softer after-dark">
+            <div class="mini-desktop mini-tide" aria-hidden="true"><div class="mini-bar"><i></i></div><div class="mini-window"><i></i><i></i><i></i><i></i></div><div class="mini-side"></div><div class="mini-small"></div><div class="mini-dock"></div></div>
+            <span class="card-label"><span class="card-name"><small>03</small> Tide</span><svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></span><span class="card-description">Cool, spacious, a softer after-dark.</span>
+          </button>
+        </div>
+      </section>
+    </main>
+    <footer class="footer"><span>DESIGNED FOR AWESOMEWM / BUILT FOR FOCUS<br>HTML design studies · illustrative apps &amp; system data</span><button class="export-button" id="export-button">Download design tokens <svg class="icon" aria-hidden="true"><use href="#i-download"/></svg></button></footer>
+  </div>
+  <button class="exit-focus" id="exit-focus">Exit focus view · Esc</button>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script>
+    "use strict";
+
+    // Self-contained visual studies: no network requests or changes to the WM.
+    const themes = {
+      mono: {
+        name: "Mono", index: "01", mood: "A clear head. A clean slate.", signature: "Less noise. More signal.",
+        description: "Graphite surfaces, a restrained lime accent, and three floating bar islands. Tight, balanced tiling keeps your work front and center.",
+        caption: "Floating bar · tiled workspace", bar: "Floating · 36 px", gap: 14, radius: 8, font: "Inter + JetBrains Mono",
+        palette: { bg: "#171A18", surface: "#202420", fg: "#E3E8DD", accent: "#C2D89A", muted: "#99A391" },
+        layout: "tile", barPosition: "top", border: 1, wallpaper: "Sculpted graphite",
+      },
+      linen: {
+        name: "Linen", index: "02", mood: "Room to think.", signature: "A softer kind of focus.",
+        description: "Paper-white windows on warm stone, with a touch of terracotta. A slim left rail and generous margins give the desktop an almost analog calm.",
+        caption: "Vertical rail · balanced workspace", bar: "Left rail · 48 px", gap: 20, radius: 4, font: "Inter + JetBrains Mono",
+        palette: { bg: "#EAE5DC", surface: "#FAF8F3", fg: "#46473E", accent: "#A76043", muted: "#817D70" },
+        layout: "tile", barPosition: "left", border: 1, wallpaper: "Warm geometry",
+      },
+      tide: {
+        name: "Tide", index: "03", mood: "Find your flow.", signature: "Made for the quiet hours.",
+        description: "Deep ocean blue, icy highlights, and softly rounded windows. A fine top bar and a small app dock frame a more open, floating workspace.",
+        caption: "Edge-to-edge bar · floating workspace", bar: "Top edge · 32 px", gap: 24, radius: 12, font: "Inter + JetBrains Mono",
+        palette: { bg: "#101D29", surface: "#162734", fg: "#DCE9EE", accent: "#90CBD0", muted: "#8DA6B5" },
+        layout: "floating", barPosition: "top", border: 1, wallpaper: "Ocean contours",
+      },
+    };
+    const themeOrder = Object.keys(themes);
+    const desktop = document.getElementById("desktop");
+    let currentTheme = "mono";
+    let currentWorkspace = "1";
+    let windowsVisible = true;
+    let toastTimer;
+    let launcherTrigger;
+
+    const icon = (name, extra = "") => `<svg class="icon ${extra}" aria-hidden="true"><use href="#i-${name}"/></svg>`;
+    const titlebar = (name, title, detail = "") => `<div class="window-title">${icon(name)}<strong>${title}</strong><span>${detail}</span><span class="right"><span class="window-dot"></span><span class="window-dot"></span></span></div>`;
+
+    function wallpaper(theme) {
+      if (theme === "linen") {
+        return `<svg viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><defs><linearGradient id="linen-ground" x2="1" y2="1"><stop stop-color="#eee9e0"/><stop offset="1" stop-color="#dfd5c6"/></linearGradient><linearGradient id="linen-arch" x2=".8" y2="1"><stop stop-color="#b78466"/><stop offset="1" stop-color="#d7bea7"/></linearGradient><linearGradient id="linen-shadow" x2="1" y2=".3"><stop stop-color="#a8957e" stop-opacity=".27"/><stop offset="1" stop-color="#d6c5ae" stop-opacity="0"/></linearGradient></defs><path fill="url(#linen-ground)" d="M0 0h1600v900H0z"/><circle cx="1320" cy="210" r="305" fill="#e3d2bf"/><path d="M1220 900V340a205 205 0 0 1 410 0v560" fill="url(#linen-arch)"/><path d="m1220 455-560 445h560z" fill="url(#linen-shadow)"/><path d="M1340 900V370a105 105 0 0 1 210 0v530" fill="#ddc6ae"/><path d="M0 774c320-90 452-28 659 126H0z" fill="#e5ded1"/><circle cx="975" cy="149" r="91" fill="#f2ece2" opacity=".64"/></svg>`;
+      }
+      if (theme === "tide") {
+        return `<svg viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><defs><linearGradient id="tide-ground" x2=".8" y2="1"><stop stop-color="#101b26"/><stop offset="1" stop-color="#173342"/></linearGradient><linearGradient id="tide-wave" x2=".1" y2="1"><stop stop-color="#548895"/><stop offset="1" stop-color="#1c3e51"/></linearGradient><linearGradient id="tide-wave-two" x2="1" y2="1"><stop stop-color="#23414f"/><stop offset="1" stop-color="#346879"/></linearGradient></defs><path fill="url(#tide-ground)" d="M0 0h1600v900H0z"/><path d="M730 900C920 700 840 380 1160 280s376-216 500-310v930z" fill="#203f4c"/><path d="M960 900c-110-316 253-506 210-682S1440-60 1620-30v930z" fill="url(#tide-wave)"/><path d="M1265 900c-377-232-55-472 35-611S1280 27 1480-30h160v930z" fill="url(#tide-wave-two)"/><path d="M1490 940c-458-199-229-405-65-555s11-348 205-390v945z" fill="#173441"/><path d="M960 900c-110-316 253-506 210-682S1440-60 1620-30M1265 900c-377-232-55-472 35-611S1280 27 1480-30" fill="none" stroke="#87b4b8" stroke-opacity=".22" stroke-width="2"/></svg>`;
+      }
+      return `<svg viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><defs><linearGradient id="mono-ground" x2="1" y2="1"><stop stop-color="#141715"/><stop offset="1" stop-color="#293026"/></linearGradient><linearGradient id="mono-fold" x1=".2" y1="1" x2=".9" y2="0"><stop stop-color="#1a201a"/><stop offset=".7" stop-color="#414c37"/><stop offset="1" stop-color="#59664b"/></linearGradient><linearGradient id="mono-inner" x2="1" y2=".2"><stop stop-color="#151a15"/><stop offset="1" stop-color="#333e2d"/></linearGradient></defs><path fill="url(#mono-ground)" d="M0 0h1600v900H0z"/><path d="M600 900c218-59 426-111 447-342s-16-418 248-506 475 44 495 192v656z" fill="url(#mono-fold)"/><path d="M771 900c120-176 396-236 416-441s-57-356 191-382c199-21 295 49 310 186v637z" fill="url(#mono-inner)"/><path d="M1231 900c-211-173-106-292 132-373s289-102 324-308v681z" fill="#242d21"/><path d="M600 900c218-59 426-111 447-342s-16-418 248-506" fill="none" stroke="#70805d" stroke-opacity=".16" stroke-width="2"/></svg>`;
+    }
+
+    function bars() {
+      return `<div class="wm-bar bar-left"><div class="bar-island"><button class="launcher-toggle" aria-label="Open app launcher" aria-expanded="false" aria-controls="launcher">${icon("grid")}</button><span class="bar-separator"></span><div class="workspaces" role="group" aria-label="Workspaces">${[1, 2, 3, 4].map(n => `<button class="workspace" data-workspace="${n}" aria-label="Workspace ${n}: ${["code", "web", "files", "empty"][n - 1]}" aria-pressed="${String(n) === currentWorkspace}">${String(n).padStart(2, "0")}</button>`).join("")}</div><span class="bar-app" id="bar-app">nvim</span></div></div><div class="wm-bar bar-center"><div class="bar-island"><span class="bar-date">Wed, 30 Sep</span><span class="bar-clock">09:41</span></div></div><div class="wm-bar bar-right"><div class="bar-island"><span class="status-dot"></span><div class="system-status" aria-label="Illustrative status: connected, sound on, battery 86 percent">${icon("wifi")}${icon("volume")}<span class="battery">${icon("battery")} 86%</span></div></div></div>`;
+    }
+
+    function editor(theme) {
+      const t = themes[theme];
+      const code = [
+        `<span class="comment">-- a little room to breathe</span>`,
+        `<span class="keyword">local</span> beautiful = <span class="keyword">require</span>(<span class="string">"beautiful"</span>)`,
+        ``,
+        `<span class="keyword">local</span> theme = {}`,
+        ``,
+        `theme.name         = <span class="string">"${theme}"</span>`,
+        `theme.bg_normal    = <span class="string">"${t.palette.bg.toLowerCase()}"</span>`,
+        `theme.fg_normal    = <span class="string">"${t.palette.fg.toLowerCase()}"</span>`,
+        `theme.border_focus = <span class="string">"${t.palette.accent.toLowerCase()}"</span>`,
+        ``,
+        `theme.useless_gap  = <span class="keyword">${t.gap}</span>`,
+        `theme.border_width = <span class="keyword">1</span>`,
+        ``,
+        `<span class="keyword">return</span> theme<span class="code-cursor"></span>`,
+      ];
+      return `<section class="window editor focused" aria-label="Neovim theme editor mockup">${titlebar("code", "theme.lua", "— nvim")}<div class="editor-content"><aside class="file-tree"><div class="tree-label">EXPLORER</div><div class="tree-row">${icon("folder")} awesome</div><div class="tree-row indent">${icon("folder")} themes</div><div class="tree-row indent selected">${icon("file")} theme.lua</div><div class="tree-row">${icon("file")} rc.lua</div><div class="tree-row">${icon("file")} keys.lua</div><div class="tree-row">${icon("folder")} widgets</div></aside><div class="code-pane"><div class="editor-tab">theme.lua <i></i></div><pre class="code">${code.map((line, n) => `<span class="line${n === 13 ? " current" : ""}">${line || " "}</span>`).join("")}</pre></div></div><div class="editor-status"><b>NORMAL</b><span>⑂ main</span><span>theme.lua</span><span class="status-end">Lua &nbsp; utf-8 &nbsp; 14:13</span></div></section>`;
+    }
+
+    function terminal(theme) {
+      const t = themes[theme];
+      return `<section class="window terminal" aria-label="Terminal mockup">${titlebar("terminal", "~", "— alacritty")}<div class="terminal-content"><div class="prompt"><span class="accent">❯</span> <span class="path">~</span> fastfetch</div><div class="fetch"><svg class="arch-logo" viewBox="0 0 100 120" aria-hidden="true"><path fill="currentColor" d="M50 3 30 45l15 9-20-1L3 110l29-16c2-24 6-39 18-39s16 15 18 39l29 16-15-36-19-10 14 1z"/></svg><div class="fetch-info"><div class="host">abstrucked<span class="accent">@</span>arch</div><div><b>os</b> &nbsp;&nbsp; Arch Linux</div><div><b>wm</b> &nbsp;&nbsp; awesome</div><div><b>theme</b> ${t.name.toLowerCase()}</div><div><b>shell</b> zsh</div><div><b>uptime</b> 2h 14m</div><div class="terminal-palette">${[t.palette.bg, t.palette.muted, t.palette.accent, "#d8c69c", "#a8bac5", t.palette.fg].map(c => `<i style="background:${c}"></i>`).join("")}</div></div></div><span class="accent">❯</span> <span class="path">~</span><span class="caret"></span></div></section>`;
+    }
+
+    function extras() {
+      return `<section class="window music" aria-label="Music widget mockup">${titlebar("music", "in the background", "")}<div class="music-content"><div class="album" aria-hidden="true"></div><div class="track-info"><h3>A Walk</h3><p>Tycho · Dive</p><div class="track-controls" aria-label="Illustrative music controls">${icon("prev")}${icon("play", "play")}${icon("next")}</div></div><span class="accent">♡</span></div><div class="track-progress"></div><div class="track-time"><span>2:14</span><span>5:16</span></div></section><section class="window linen-note" aria-label="Daily note mockup"><div class="note-label">A SMALL REMINDER ${icon("star")}</div><h3>Do less.<br>Make it matter.</h3><p>One thing at a time is enough.</p><div class="note-bottom"><span>Wednesday, September 30</span><span>↗</span></div></section><section class="window tide-monitor" aria-label="System monitor mockup"><div class="monitor-top"><span>SYSTEM / AT EASE</span><strong>12% <span class="comment">cpu</span></strong></div><div class="monitor-graph" aria-hidden="true">${[25, 35, 30, 48, 65, 44, 35, 42, 62, 80, 69, 53, 38, 42, 31, 50, 70, 55, 40, 28, 38, 30, 20, 29, 39, 26, 34, 25, 20, 32].map(h => `<i style="height:${h}%"></i>`).join("")}</div></section>`;
+    }
+
+    function browserWindow() {
+      return `<section class="window browser-window" aria-label="Browser mockup"><div class="window-title">${icon("globe")}<span>New perspective</span><div class="browser-address">○ &nbsp; studio.example / journal</div><span>+</span></div><div class="browser-page"><div class="browser-site-nav"><b>still.</b><span>Journal &nbsp;&nbsp;&nbsp; Objects &nbsp;&nbsp;&nbsp; About</span></div><div class="browser-hero"><small>NOTES ON A CONSIDERED LIFE / 001</small><h2>A little less.<br>A little better.</h2><p>Good things happen when you make space.<br>A field guide to finding your own rhythm.</p></div><div class="browser-orb"></div><div class="browser-page-footer">SLOW IDEAS FOR A FAST WORLD &nbsp; ↗</div></div></section>`;
+    }
+
+    function filesWindow() {
+      return `<section class="window files-window" aria-label="File manager mockup">${titlebar("folder", "Home", "— pcmanfm")}<div class="files-body"><aside class="files-sidebar"><p class="active">${icon("home")} Home</p><p>${icon("star")} Favorites</p><p>${icon("download")} Downloads</p><p>${icon("folder")} Projects</p></aside><div class="file-grid"><div class="file-breadcrumb">home &nbsp; / &nbsp; <span class="accent">abstrucked</span></div><div class="folder-grid">${[["Projects", "12 items"], ["Documents", "8 items"], ["Downloads", "3 items"], ["Pictures", "24 items"], ["Music", "16 items"], [".dotfiles", "40 items"]].map(([name, count]) => `<div class="folder">${icon("folder")}${name}<small>${count}</small></div>`).join("")}</div><div class="file-count">6 folders &nbsp; · &nbsp; 128 GB available</div></div></div></section>`;
+    }
+
+    function launcher() {
+      return `<div class="launcher" id="launcher" role="dialog" aria-label="App launcher" hidden><label>${icon("search")}<input id="launcher-search" type="search" aria-label="Find a preview app" placeholder="Where would you like to go?" autocomplete="off"></label><div class="launcher-results">${[["1", "terminal", "Code & terminal", "Neovim · Alacritty"], ["2", "globe", "Web browser", "Reading space"], ["3", "folder", "File manager", "Home folder"], ["4", "window", "Empty workspace", "A little breathing room"]].map(([workspace, glyph, name, hint]) => `<button data-launch="${workspace}">${icon(glyph)}<span>${name}</span><small>${hint}</small></button>`).join("")}<p id="no-results" class="launcher-help" hidden>No matching apps.</p></div><p class="launcher-help">Enter to open &nbsp; · &nbsp; Esc to close &nbsp; / &nbsp; Preview apps</p></div>`;
+    }
+
+    function renderDesktop() {
+      const t = themes[currentTheme];
+      desktop.dataset.theme = currentTheme;
+      desktop.setAttribute("aria-label", `${t.name} desktop preview`);
+      desktop.innerHTML = `<div class="wallpaper">${wallpaper(currentTheme)}</div><div class="wallpaper-signature"><b>${t.mood}</b>${t.signature}</div><div class="wallpaper-corner">${t.name.toLowerCase()} / ${t.index}<br><br>awesomewm.</div>${bars()}<div class="workspace-content" data-scene="1">${editor(currentTheme)}${terminal(currentTheme)}${extras()}</div><div class="workspace-content" data-scene="2" hidden>${browserWindow()}</div><div class="workspace-content" data-scene="3" hidden>${filesWindow()}</div><nav class="dock" aria-label="Preview apps">${[["1", "terminal", "Code & terminal"], ["2", "globe", "Web browser"], ["3", "folder", "File manager"]].map(([workspace, glyph, name]) => `<button data-workspace="${workspace}" aria-label="${name}" aria-pressed="${workspace === currentWorkspace}">${icon(glyph)}</button>`).join("")}<span class="bar-separator" style="align-self:center"></span><button class="launcher-toggle" aria-label="Open app launcher" aria-expanded="false" aria-controls="launcher">${icon("grid")}</button></nav>${launcher()}`;
+      setWorkspace(currentWorkspace);
+    }
+
+    function selectTheme(name, updateHash = true) {
+      if (!themes[name]) return;
+      currentTheme = name;
+      const t = themes[name];
+      document.querySelectorAll(".theme-tab").forEach(tab => {
+        const selected = tab.dataset.theme === name;
+        tab.setAttribute("aria-selected", String(selected));
+        tab.tabIndex = selected ? 0 : -1;
+      });
+      document.querySelectorAll(".concept-card").forEach(card => card.setAttribute("aria-pressed", String(card.dataset.theme === name)));
+      document.getElementById("theme-panel").setAttribute("aria-labelledby", `tab-${name}`);
+      document.getElementById("concept-name").textContent = t.name;
+      document.getElementById("concept-index").textContent = `${t.index} /`;
+      document.getElementById("concept-description").textContent = t.description;
+      document.getElementById("scene-caption").textContent = t.caption;
+      document.getElementById("swatches").innerHTML = Object.entries(t.palette).map(([role, hex]) => `<button class="swatch" data-color="${hex}" aria-label="Copy ${role} color ${hex}" title="${role}: ${hex}"><span class="swatch-color" style="background:${hex}"></span><code>${hex}</code></button>`).join("");
+      document.getElementById("spec-list").innerHTML = [["Panel", t.bar], ["Window gap", `${t.gap} px`], ["Corner radius", `${t.radius} px`], ["Typography", t.font]].map(([key, value]) => `<div><dt>${key}</dt><dd>${value}</dd></div>`).join("");
+      renderDesktop();
+      if (updateHash) {
+        try { history.replaceState(null, "", `#${name}`); } catch { /* Some file previews restrict History API access. */ }
+      }
+    }
+
+    function setWorkspace(number) {
+      currentWorkspace = number;
+      desktop.querySelectorAll("[data-workspace]").forEach(button => button.setAttribute("aria-pressed", String(button.dataset.workspace === number)));
+      desktop.querySelectorAll("[data-scene]").forEach(scene => { scene.hidden = scene.dataset.scene !== number; });
+      document.getElementById("bar-app").textContent = { "1": "nvim", "2": "browser", "3": "files", "4": "desktop" }[number];
+      desktop.classList.toggle("windows-hidden", !windowsVisible || number === "4");
+    }
+
+    function closeLauncher(restoreFocus = false) {
+      const panel = document.getElementById("launcher");
+      panel.hidden = true;
+      desktop.querySelectorAll(".launcher-toggle").forEach(button => button.setAttribute("aria-expanded", "false"));
+      if (restoreFocus && launcherTrigger?.isConnected) launcherTrigger.focus();
+    }
+
+    function toggleLauncher(trigger) {
+      const panel = document.getElementById("launcher");
+      if (!panel.hidden) { closeLauncher(true); return; }
+      launcherTrigger = trigger;
+      panel.hidden = false;
+      desktop.querySelectorAll(".launcher-toggle").forEach(button => button.setAttribute("aria-expanded", "true"));
+      const input = document.getElementById("launcher-search");
+      input.value = "";
+      desktop.querySelectorAll("[data-launch]").forEach(button => { button.hidden = false; });
+      document.getElementById("no-results").hidden = true;
+      input.focus();
+    }
+
+    function notify(message) {
+      const toast = document.getElementById("toast");
+      clearTimeout(toastTimer);
+      toast.textContent = message;
+      toast.classList.add("visible");
+      toastTimer = setTimeout(() => toast.classList.remove("visible"), 2600);
+    }
+
+    async function copyColor(hex) {
+      try {
+        if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(hex);
+        } else {
+          const input = document.createElement("textarea");
+          input.value = hex;
+          input.style.cssText = "position:fixed;top:0;left:-9999px";
+          document.body.append(input);
+          const focused = document.activeElement;
+          input.select();
+          const copied = document.execCommand("copy");
+          input.remove();
+          focused?.focus();
+          if (!copied) throw new Error("Clipboard unavailable");
+        }
+        notify(`Copied ${hex}`);
+      } catch { notify(`Color: ${hex} · clipboard unavailable in this preview`); }
+    }
+
+    function focusView(enabled) {
+      document.body.classList.toggle("focus-mode", enabled);
+      // Keep keyboard navigation inside the enlarged preview while it is open.
+      document.querySelectorAll(".masthead, .hero, .theme-navigation, .caption, .details, .collection, .footer").forEach(element => { element.inert = enabled; });
+      if (enabled) document.getElementById("exit-focus").focus();
+      else document.getElementById("focus-toggle").focus();
+    }
+
+    document.querySelectorAll(".theme-tab, .concept-card").forEach(button => {
+      button.addEventListener("click", () => {
+        selectTheme(button.dataset.theme);
+        if (button.classList.contains("concept-card")) {
+          document.querySelector(".theme-navigation").scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth", block: "start" });
+          document.getElementById(`tab-${currentTheme}`).focus({ preventScroll: true });
+        }
+      });
+    });
+
+    document.querySelector(".theme-tabs").addEventListener("keydown", event => {
+      if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+      event.preventDefault();
+      const index = themeOrder.indexOf(currentTheme);
+      const next = event.key === "Home" ? 0 : event.key === "End" ? 2 : (index + (event.key === "ArrowRight" ? 1 : -1) + 3) % 3;
+      selectTheme(themeOrder[next]);
+      document.getElementById(`tab-${currentTheme}`).focus();
+    });
+
+    desktop.addEventListener("click", event => {
+      const workspace = event.target.closest("[data-workspace]");
+      const toggle = event.target.closest(".launcher-toggle");
+      const launch = event.target.closest("[data-launch]");
+      if (toggle) { toggleLauncher(toggle); return; }
+      if (workspace || launch) {
+        if (!windowsVisible) document.getElementById("windows-toggle").click();
+        setWorkspace((workspace || launch).dataset[workspace ? "workspace" : "launch"]);
+        closeLauncher(Boolean(launch));
+      } else if (!event.target.closest(".launcher")) closeLauncher();
+    });
+
+    desktop.addEventListener("input", event => {
+      if (event.target.id !== "launcher-search") return;
+      const query = event.target.value.toLowerCase().trim();
+      const buttons = [...desktop.querySelectorAll("[data-launch]")];
+      buttons.forEach(button => { button.hidden = !button.textContent.toLowerCase().includes(query); });
+      document.getElementById("no-results").hidden = buttons.some(button => !button.hidden);
+    });
+
+    desktop.addEventListener("keydown", event => {
+      if (event.target.id === "launcher-search" && event.key === "Enter") {
+        event.preventDefault();
+        desktop.querySelector("[data-launch]:not([hidden])")?.click();
+      }
+      if (event.target.id === "launcher-search" && event.key === "ArrowDown") {
+        event.preventDefault();
+        desktop.querySelector("[data-launch]:not([hidden])")?.focus();
+      }
+    });
+
+    document.getElementById("swatches").addEventListener("click", event => {
+      const swatch = event.target.closest("[data-color]");
+      if (swatch) copyColor(swatch.dataset.color);
+    });
+
+    document.getElementById("windows-toggle").addEventListener("click", event => {
+      windowsVisible = !windowsVisible;
+      event.currentTarget.setAttribute("aria-pressed", String(windowsVisible));
+      event.currentTarget.querySelector("span").textContent = windowsVisible ? "Windows on" : "Windows off";
+      setWorkspace(currentWorkspace);
+    });
+    document.getElementById("focus-toggle").addEventListener("click", () => focusView(true));
+    document.getElementById("exit-focus").addEventListener("click", () => focusView(false));
+    document.addEventListener("keydown", event => {
+      if (event.key !== "Escape") return;
+      if (!document.getElementById("launcher").hidden) closeLauncher(true);
+      else if (document.body.classList.contains("focus-mode")) focusView(false);
+    });
+    window.addEventListener("hashchange", () => {
+      const name = location.hash.slice(1);
+      if (themes[name]) selectTheme(name, false);
+    });
+
+    document.getElementById("export-button").addEventListener("click", () => {
+      const t = themes[currentTheme];
+      const tokens = {
+        name: t.name, status: "HTML design concept", palette: t.palette,
+        awesomewm: { bg_normal: t.palette.bg, fg_normal: t.palette.fg, bg_focus: t.palette.surface, border_focus: t.palette.accent, border_width: t.border, useless_gap: t.gap, corner_radius: t.radius, layout: t.layout, bar_position: t.barPosition, panel: t.bar },
+        typography: t.font, wallpaper: t.wallpaper,
+        note: "Design tokens only. Panel widgets, client shapes, and wallpaper require Lua integration; corner_radius is a design token, not a built-in Beautiful property.",
+      };
+      const blob = new Blob([JSON.stringify(tokens, null, 2) + "\n"], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `awesome-${currentTheme}-design-tokens.json`;
+      document.body.append(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      notify(`${t.name} design tokens downloaded`);
+    });
+
+    selectTheme(themes[location.hash.slice(1)] ? location.hash.slice(1) : "mono", false);
+  </script>
+</body>
+</html>
