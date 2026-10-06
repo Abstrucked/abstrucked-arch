@@ -52,6 +52,10 @@ theme.popup_fg = c.fg
 theme.popup_shape = rounded
 theme.tooltip_bg = c.surface
 theme.tooltip_fg = c.fg
+-- Box-drawn tooltips (ai-usagebar's) only line up in a monospace face, and
+-- theme.font is a proportional sans here. Give every Mono tooltip the widget
+-- font so panels built from ASCII art do not ragged their right edge.
+theme.tooltip_font = theme.widget_font
 theme.tooltip_border_color = line
 theme.tooltip_border_width = dpi(1)
 theme.tooltip_shape = rounded

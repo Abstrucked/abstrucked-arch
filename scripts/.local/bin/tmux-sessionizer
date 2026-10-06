@@ -35,6 +35,7 @@ find_dirs() {
   [[ -d "$HOME" ]] && dirs+=("$HOME")
   [[ -d "$HOME/.config" ]] && dirs+=("$HOME/.config")
   [[ -d "$HOME/_dev" ]] && dirs+=("$HOME/_dev")
+  [[ -d "$HOME/Projects" ]] && dirs+=("$HOME/Projects")
   
   # Add current directory
   dirs+=("$(pwd)")

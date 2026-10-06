@@ -218,6 +218,7 @@ beautiful.init(gfs.get_configuration_dir() .. "themes/" .. chosen_theme .. "/the
 -- {{{ Menu
 local myawesomemenu = {
 	{ "desktop layout", {
+		{ "Tide", function() theme_layout.set("tide") end },
 		{ "Nocturne", function() theme_layout.set("nocturne") end },
 		{ "Slate", function() theme_layout.set("slate") end },
 		{ "Mono", function() theme_layout.set("mono") end },

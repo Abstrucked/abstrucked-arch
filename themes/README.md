@@ -106,7 +106,31 @@ design's JSON tokens. Direct links use `#mono`, `#linen`, or `#tide`.
 
 The gallery uses illustrative apps and system data. Its controls and token
 exports do not apply settings. Mono is also available as a real Lua layout below;
-Linen and Tide are design concepts.
+Tide is also available as a Lua layout; Linen remains a design concept.
+
+## Tide for AwesomeWM
+
+Tide implements the [Tide preview](previews/awesome-themes.html#tide): ocean
+blue surfaces, icy highlights, a 32 px top bar with underlined workspaces,
+24 px gaps and 12 px window corners. Workspaces start in the floating layout;
+the layout chip still lets you switch to tiling. Floating windows have compact
+titlebars. Inter and JetBrains Mono match the preview typography.
+
+The centered bottom dock launches your configured terminal and browser,
+PCManFM, and the app launcher. A desktop CPU graph shows live readings from
+the shared status poller. Both sit behind application windows and hide for
+fullscreen clients. The contour wallpaper is drawn at each screen's resolution
+and adapts to the active palette. The top bar keeps the existing plugin widgets,
+volume controls, calendar and system status panel.
+
+```bash
+awesome-client 'require("theme-layout").set("tide")'
+themectl set tide
+```
+
+Or choose **Super+W → Awesome → desktop layout → Tide**. Layout and palette
+can be selected independently. Implementation: `awesome/.config/awesome/themes/tide/`
+and `palettes/tide.lua`.
 
 ## Nocturne for AwesomeWM
 
