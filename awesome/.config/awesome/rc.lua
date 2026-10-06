@@ -95,8 +95,9 @@ awful.spawn.with_shell([=[
 	fi
 	printf 'awesome.started:true\n' | xrdb -merge
 	if command -v dex >/dev/null 2>&1; then
-		dex --environment Awesome --autostart --search-paths \
-			"${XDG_CONFIG_DIRS:-/etc/xdg}/autostart:${XDG_CONFIG_HOME:-$HOME/.config}/autostart"
+		# dex's default search order is $XDG_CONFIG_HOME first, then XDG_CONFIG_DIRS,
+		# so user entries override or hide (Hidden=true) system ones.
+		dex --environment Awesome --autostart
 	else
 		logger -t awesome 'dex is not installed; skipping XDG autostart entries'
 	fi
