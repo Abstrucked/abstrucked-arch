@@ -41,15 +41,6 @@ export N_PREFIX="${N_PREFIX:-$HOME/n}"
 export ASDF_DATA_DIR="${ASDF_DATA_DIR:-$HOME/.asdf}"
 export PATH="$HOME/.local/bin:$N_PREFIX/bin:${ASDF_DATA_DIR}/shims:$PATH"
 
-# Set GTK dark theme
-export GTK_THEME=Adwaita:dark
-
-# Set Qt to use GTK theme
-export QT_QPA_PLATFORMTHEME=gtk2
-
-# Set QT5 configuration tool
-export QT_QPA_PLATFORMTHEME=qt5ct
-
 ###-begin-pm2-completion-###
 ### credits to npm for the completion file model
 #

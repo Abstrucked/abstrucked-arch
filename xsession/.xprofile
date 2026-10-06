@@ -11,6 +11,9 @@
 # the panel's reported physical dimensions, making an identical point size
 # render larger under Awesome.
 export WINIT_X11_SCALE_FACTOR=1.0
+# Qt apps take the themectl palette through qt6ct, as GTK apps do through
+# adw-gtk3 (themes/README.md). Hyprland sets the same value itself.
+export QT_QPA_PLATFORMTHEME=qt6ct
 export PATH="$HOME/.local/bin:$HOME/n/bin:$HOME/.asdf/shims:$HOME/.local/share/pnpm:$PATH"
 
 # Arrange the monitors (ultrawide first, 16:9 to its right, a laptop panel

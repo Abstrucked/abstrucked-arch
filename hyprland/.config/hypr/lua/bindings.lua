@@ -28,7 +28,7 @@ exec(mainMod .. " + S", "hypr-keybinds")
 exec(mainMod .. " + left", "hypr-workspace view previous")
 exec(mainMod .. " + right", "hypr-workspace view next")
 hl.bind(mainMod .. " + ESCAPE", hl.dsp.focus({ workspace = "previous" }))
-exec(mainMod .. " + grave", "GTK_THEME=Adwaita:dark pcmanfm")
+exec(mainMod .. " + grave", "pcmanfm")
 exec(mainMod .. " + SHIFT + grave", "pcmanfm")
 
 -- Non-empty tag browsing (lain.util.tag_view_nonempty).

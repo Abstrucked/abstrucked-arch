@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Run the tmux-agentic-plugin command installed by TPM.
+
+set -euo pipefail
+
+for agent_bin in \
+  "${XDG_CONFIG_HOME:-$HOME/.config}/tmux/plugins/tmux-agentic-plugin/bin/tmux-agent" \
+  "$HOME/.tmux/plugins/tmux-agentic-plugin/bin/tmux-agent"; do
+  if [[ -x "$agent_bin" ]]; then
+    exec "$agent_bin" "$@"
+  fi
+done
+
+echo "Error: tmux-agentic-plugin is not installed. In tmux, press your prefix then I to install plugins." >&2
+exit 1

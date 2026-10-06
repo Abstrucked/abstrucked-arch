@@ -250,7 +250,11 @@ for component in "${SELECTED_COMPONENTS[@]}"; do
         # Generated theme files are symlinks into themes/out, which is not
         # tracked; render them so the stowed configs do not dangle.
         execute "$DOTFILES_DIR/themes/themectl" apply || log_warn "themectl apply failed; run it manually"
-        
+
+        # PCManFM's side pane and GTK file dialogs list Documents, Downloads,
+        # ... only as bookmarks; add the XDG folders, keeping existing ones.
+        execute "$DOTFILES_DIR/scripts/.local/bin/gtk-bookmarks" || log_warn "gtk-bookmarks failed; run it manually"
+
         progress_complete "done"
         break
     fi
@@ -264,7 +268,8 @@ for component in "${SELECTED_COMPONENTS[@]}"; do
     if [[ "$name" == "theme" ]]; then
         progress_step "Applying system theme"
         # themectl renders every app's colors from one palette; see themes/README.md.
-        execute "$DOTFILES_DIR/themes/themectl" set "${DOTFILES_THEME:-mocha-peach}" || die "Failed to apply theme"
+        # DOTFILES_THEME names that palette (layouts are selected separately).
+        execute "$DOTFILES_DIR/themes/themectl" set --colors "${DOTFILES_THEME:-mocha-peach}" || die "Failed to apply theme"
         progress_complete "done"
         break
     fi

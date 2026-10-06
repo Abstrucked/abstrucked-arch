@@ -14,8 +14,8 @@ hl.env("GDK_BACKEND", "wayland,x11")
 hl.env("GTK_USE_PORTAL", "1")
 hl.env("MOZ_ENABLE_WAYLAND", "1")
 hl.env("QT_QPA_PLATFORM", "wayland;xcb")
--- Follow the GTK settings (dark preference, font). qt5ct is not installed.
-hl.env("QT_QPA_PLATFORMTHEME", "gtk3")
+-- Qt apps take the themectl palette through qt6ct (themes/README.md).
+hl.env("QT_QPA_PLATFORMTHEME", "qt6ct")
 hl.env("QT_WAYLAND_DISABLE_WINDOWDECORATION", "1")
 hl.env("SDL_VIDEODRIVER", "wayland")
 hl.env("ELECTRON_OZONE_PLATFORM_HINT", "auto")

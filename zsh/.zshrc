@@ -14,8 +14,6 @@ export THEME=catppuccin-mocha
 export THEME_BG_DIR="$HOME/.backgrounds"
 export EDITOR='nvim'
 export VISUAL='nvim'
-export GTK_THEME=Adwaita:dark
-export QT_QPA_PLATFORMTHEME=qt5ct
 
 # ═══════════════════════════════════════════════════════════════
 # PATH Management (consolidated)

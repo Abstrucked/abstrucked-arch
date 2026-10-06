@@ -95,8 +95,9 @@ awful.spawn.with_shell([=[
 	fi
 	printf 'awesome.started:true\n' | xrdb -merge
 	if command -v dex >/dev/null 2>&1; then
-		dex --environment Awesome --autostart --search-paths \
-			"${XDG_CONFIG_DIRS:-/etc/xdg}/autostart:${XDG_CONFIG_HOME:-$HOME/.config}/autostart"
+		# dex's default search order is $XDG_CONFIG_HOME first, then XDG_CONFIG_DIRS,
+		# so user entries override or hide (Hidden=true) system ones.
+		dex --environment Awesome --autostart
 	else
 		logger -t awesome 'dex is not installed; skipping XDG autostart entries'
 	fi
@@ -218,6 +219,9 @@ beautiful.init(gfs.get_configuration_dir() .. "themes/" .. chosen_theme .. "/the
 -- {{{ Menu
 local myawesomemenu = {
 	{ "desktop layout", {
+		{ "Tide", function() theme_layout.set("tide") end },
+		{ "Nocturne", function() theme_layout.set("nocturne") end },
+		{ "Slate", function() theme_layout.set("slate") end },
 		{ "Mono", function() theme_layout.set("mono") end },
 		{ "Powerarrow", function() theme_layout.set("powerarrow") end },
 	} },
@@ -331,6 +335,12 @@ local globalkeys = my_table.join(
 		awful.spawn("screenshot_2")
 	end, { description = "take a screenshot::fullhd", group = "hotkeys" }),
 
+	-- Switch picom to an opaque, effect-free profile so screen shares and
+	-- recordings don't capture translucent windows
+	awful.key({ modkey, "Shift" }, "p", function()
+		awful.spawn("picom-capture")
+	end, { description = "toggle picom capture mode (screenshare/recording)", group = "hotkeys" }),
+
 	-- X screen locker
 	awful.key({ altkey, "Control" }, "@", function()
 		awful.spawn(scrlocker)
@@ -347,8 +357,7 @@ local globalkeys = my_table.join(
 	awful.key({ modkey }, "Escape", awful.tag.history.restore, { description = "go back", group = "tag" }),
 	----------------------------------------------------------------------
 	awful.key({ modkey }, "`", function()
-		awful.spawn.with_shell("GTK_THEME=Adwaita:dark pcmanfm")
-		--awful.spawn("pcmanfm")
+		awful.spawn("pcmanfm")
 	end, { description = "Open PcManFm", group = "hotkeys" }),
 	awful.key({ modkey, "Shift" }, "`", function()
 		awful.spawn("pcmanfm")

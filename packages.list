@@ -24,6 +24,12 @@ ghostty
 
 # Shared desktop applications and utilities
 pcmanfm
+# The GTK3 theme themectl's gtk3.css recolors, so PCManFM follows the palette
+adw-gtk-theme
+# Applies themectl's Qt palette to Qt6 apps (QT_QPA_PLATFORMTHEME=qt6ct)
+qt6ct
+# gtk-bookmarks reads the Documents, Downloads, ... folders from xdg-user-dir
+xdg-user-dirs
 
 # System monitoring
 btop

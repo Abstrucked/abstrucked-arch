@@ -20,7 +20,30 @@ package.loaded["gears.filesystem"] = {
 }
 package.loaded["theme-session"] = { restart = function() restarts = restarts + 1 end }
 
+local function saved()
+    local file = io.open(state_path, "r")
+    if not file then return nil end
+    local name = file:read("*l")
+    file:close()
+    return name
+end
+
 local layout = dofile(module_path)
+
+-- validate() reports what set() would accept without writing or restarting.
+assert(layout.validate("mono") == "mono", "validate returns the name")
+assert(layout.validate("tide") == "tide", "Tide validates like any other layout")
+assert(restarts == 0, "validate never restarts the desktop")
+assert(saved() == nil, "validate never writes the saved layout")
+assert(not pcall(layout.validate, "missing"), "validate rejects uninstalled layouts")
+assert(not pcall(layout.validate, "../mono"), "validate rejects path traversal")
+assert(restarts == 0 and saved() == nil, "failed validation is equally mutation-free")
+override = "powerarrow"
+assert(not pcall(layout.validate, "mono"), "validate checks the running process override")
+assert(layout.validate("powerarrow") == "powerarrow", "validate accepts the effective override")
+override = nil
+assert(restarts == 0 and saved() == nil)
+
 assert(layout.get() == "powerarrow", "fresh installs retain the existing default")
 assert(layout.set("mono") == "mono")
 assert(restarts == 1, "selection uses the workspace-preserving restart")
@@ -48,4 +71,12 @@ assert(layout.set("mono") == "mono")
 assert(layout.get() == "mono", "an empty environment override is ignored")
 assert(layout.set("powerarrow") == "powerarrow", "switching back is supported")
 assert(restarts == 3)
+assert(layout.set("slate") == "slate", "new layouts use the same selection path")
+assert(dofile(module_path).get() == "slate", "Slate survives a new Lua session")
+assert(restarts == 4)
+assert(layout.set("tide") == "tide", "Tide uses the same selection path")
+assert(dofile(module_path).get() == "tide", "Tide survives a new Lua session")
+assert(restarts == 5)
+assert(layout.validate("mono") == "mono", "validate keeps working after a selection")
+assert(restarts == 5 and saved() == "tide", "validate stays mutation-free afterwards")
 os.getenv = getenv
