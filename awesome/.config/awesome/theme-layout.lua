@@ -21,11 +21,18 @@ function M.get()
     return available(name) and name or "powerarrow"
 end
 
-function M.set(name)
+-- Check a selection the running process would accept, without writing state
+-- or restarting. Returns the name, or raises.
+function M.validate(name)
     assert(available(name), "Unknown AwesomeWM layout: " .. tostring(name))
     local override = os.getenv("AWESOME_THEME")
     assert(not override or override == "" or override == name,
         "AWESOME_THEME overrides the saved layout; unset it in your login environment first")
+    return name
+end
+
+function M.set(name)
+    M.validate(name)
     gfs.make_directories(state_dir)
     local file = assert(io.open(state_path .. ".new", "w"))
     assert(file:write(name .. "\n"))

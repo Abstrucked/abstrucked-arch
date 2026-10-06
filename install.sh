@@ -268,7 +268,8 @@ for component in "${SELECTED_COMPONENTS[@]}"; do
     if [[ "$name" == "theme" ]]; then
         progress_step "Applying system theme"
         # themectl renders every app's colors from one palette; see themes/README.md.
-        execute "$DOTFILES_DIR/themes/themectl" set "${DOTFILES_THEME:-mocha-peach}" || die "Failed to apply theme"
+        # DOTFILES_THEME names that palette (layouts are selected separately).
+        execute "$DOTFILES_DIR/themes/themectl" set --colors "${DOTFILES_THEME:-mocha-peach}" || die "Failed to apply theme"
         progress_complete "done"
         break
     fi

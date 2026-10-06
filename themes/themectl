@@ -1,12 +1,18 @@
 #!/bin/bash
-# themectl - render one palette into every app's config and reload the apps.
+# themectl - select an AwesomeWM layout (theme) and render one palette into
+# every app's config. Layouts and palettes are independent; see README.md.
 set -euo pipefail
 
 SELF="$(readlink -f "${BASH_SOURCE[0]}")"
 THEME_DIR="$(dirname "$SELF")"
 STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/themes"
 BACKUP_DIR="${DOTFILES_BACKUP_ROOT:-$HOME/.dotfiles-backups}/themes"
-DEFAULT_THEME="mocha-peach"
+DEFAULT_PALETTE="mocha-peach"
+DEFAULT_LAYOUT="powerarrow"
+# Required IPC only succeeded when Awesome echoes back this exact marker.
+IPC_MARKER="themectl-ok"
+# Set while applying a palette that hands its Awesome restart to layout.set.
+SUPPRESS_AWESOME_RELOAD=0
 staged=""
 legacy_out=""
 cleanup() {
@@ -27,35 +33,171 @@ usage() {
   cat <<USAGE
 Usage: themectl <command> [args]
 
-  list             List available themes
-  current          Print the active theme
-  set <name>       Render, link and reload with <name>
-  next             Switch to the next theme
-  apply            Re-render and reload the active theme
-  render <name>    Render into a new temporary preview directory
+A theme is an AwesomeWM layout (powerarrow, mono, slate, nocturne, tide); a
+palette is the color scheme every app's config is rendered from. The two are
+independent: switching one keeps the other.
+
+  list                        List available layouts
+  list --colors               List available palettes
+  current                     Print the active layout
+  current --colors            Print the active palette
+  set <theme>                 Switch the layout, keeping the palette
+  set --colors <palette>      Switch the palette, keeping the layout
+  set <theme> --colors <palette>   Switch both with one Awesome restart
+  next                        Switch to the next layout
+  next --colors               Switch to the next palette
+  apply                       Re-render and reload the active palette
+  render --colors <palette>   Render into a temporary preview directory
+  help                        Show this help
+
+set and render also accept --colors=<palette>. Switching a layout needs a
+running AwesomeWM and its awesome-client; palette switches and apply work
+anywhere (Hyprland, cold installs).
 USAGE
 }
 
 die() { echo "themectl: $*" >&2; exit 1; }
 
-themes() {
+# AwesomeWM layout directories (themes/<name>/theme.lua). Prefer the installed
+# config the running Awesome reads, but only when it really carries layouts: a
+# palette link (themes/powerarrow/colors.lua) alone must not shadow the
+# repository's checkout. Read-only resolution uses the chosen root.
+layout_has_entries() {
+  local root="$1" dir name
+  [[ -d "$root" ]] || return 1
+  for dir in "$root"/*/; do
+    [[ -d "$dir" ]] || continue
+    name="$(basename "$dir")"
+    [[ "$name" =~ ^[a-z0-9][a-z0-9-]*$ ]] || continue
+    [[ -r "$dir/theme.lua" ]] && return 0
+  done
+  return 1
+}
+
+layout_root() {
+  local root="${XDG_CONFIG_HOME:-$HOME/.config}/awesome/themes"
+  if layout_has_entries "$root"; then
+    echo "$root"
+  else
+    echo "$THEME_DIR/../awesome/.config/awesome/themes"
+  fi
+}
+
+layouts() {
+  local root dir name
+  root="$(layout_root)"
+  [[ -d "$root" ]] || return 0
+  for dir in "$root"/*/; do
+    [[ -d "$dir" ]] || continue
+    name="$(basename "$dir")"
+    [[ "$name" =~ ^[a-z0-9][a-z0-9-]*$ ]] || continue
+    [[ -r "$dir/theme.lua" ]] || continue
+    echo "$name"
+  done
+}
+
+palettes() {
   local f name
   for f in "$THEME_DIR"/palettes/*.lua; do
     name="$(basename "$f" .lua)"
-    # _defaults.lua fills in what a palette omits; it is not a theme.
+    # _defaults.lua fills in what a palette omits; it is not a palette.
     [[ "$name" == _* ]] && continue
     echo "$name"
   done
 }
 
-current() {
+# Resolve the selection against the chosen theme root, using theme-layout.lua's
+# M.get precedence: AWESOME_THEME wins over the saved selection, and an
+# unavailable name falls back to Powerarrow. Read-only.
+current_layout() {
+  local root name=""
+  root="$(layout_root)"
+  if [[ -n "${AWESOME_THEME:-}" ]]; then
+    name="$AWESOME_THEME"
+  elif [[ -r "${XDG_STATE_HOME:-$HOME/.local/state}/awesome/theme-layout" ]]; then
+    IFS= read -r name <"${XDG_STATE_HOME:-$HOME/.local/state}/awesome/theme-layout" || true
+  fi
+  if [[ "$name" =~ ^[a-z0-9][a-z0-9-]*$ ]] && [[ -r "$root/$name/theme.lua" ]]; then
+    echo "$name"
+  else
+    echo "$DEFAULT_LAYOUT"
+  fi
+}
+
+# The palette name is read from the active generation, with the historical
+# themes/current state as fallback, so display-detect and cold installs keep
+# finding it. Read-only.
+current_palette() {
   if [[ -r "$THEME_DIR/out/.theme-name" ]]; then
     cat "$THEME_DIR/out/.theme-name"
   elif [[ -r "$STATE_DIR/current" ]]; then
     cat "$STATE_DIR/current"
   else
-    echo "$DEFAULT_THEME"
+    echo "$DEFAULT_PALETTE"
   fi
+}
+
+validate_layout_name() {
+  local name="$1"
+  [[ "$name" =~ ^[a-z0-9][a-z0-9-]*$ ]] || die "invalid theme name '$name'"
+  [[ -r "$(layout_root)/$name/theme.lua" ]] || die "unknown theme '$name' (try: themectl list)"
+}
+
+validate_palette_name() {
+  local name="$1"
+  [[ "$name" =~ ^[a-z0-9][a-z0-9-]*$ ]] || die "invalid palette name '$name'"
+  [[ -r "$THEME_DIR/palettes/$name.lua" ]] || die "unknown palette '$name' (try: themectl list --colors)"
+}
+
+# Required Awesome IPC. awesome-client exits 0 even when the evaluated Lua
+# raises an error (awful.remote returns the error as its reply string), so a
+# call only succeeded when the exact success-marker line comes back. Prints a
+# truthful error and returns 1 on failure; it never continues best-effort.
+awesome_ipc() {
+  local chunk="$1" out status=0 line trimmed
+  if ! command -v awesome-client >/dev/null 2>&1; then
+    echo "themectl: selecting a layout needs a running AwesomeWM and its awesome-client" >&2
+    return 1
+  fi
+  out="$(AWESOME_RLWRAP='' timeout --kill-after=1s 10s awesome-client "$chunk" 9>&- </dev/null 2>&1)" || status=$?
+  if [[ "$status" == 0 ]]; then
+    while IFS= read -r line; do
+      trimmed="${line#"${line%%[![:space:]]*}"}"
+      if [[ "$trimmed" == "string \"$IPC_MARKER\"" ]]; then
+        return 0
+      fi
+    done <<<"$out"
+    out="$(printf '%s\n' "$out" | sed 's/^[[:space:]]*//; s/^string "//; s/"$//')"
+    echo "themectl: Awesome refused the change: ${out:-no reply}" >&2
+    return 1
+  fi
+  if [[ "$status" == 124 || "$status" == 137 ]]; then
+    echo "themectl: talking to Awesome timed out" >&2
+  else
+    echo "themectl: awesome-client exited $status${out:+: $out}" >&2
+  fi
+  return 1
+}
+
+# Evaluate against the on-disk theme-layout.lua: a long-running Awesome may
+# still have an older module cached in package.loaded that predates validate.
+# Callers must pass a name already sanitized as a lowercase slug.
+layout_chunk() {
+  printf 'local layout = dofile(require("gears.filesystem").get_configuration_dir() .. "theme-layout.lua"); %s; return "%s"\n' \
+    "$1" "$IPC_MARKER"
+}
+
+layout_validate() { awesome_ipc "$(layout_chunk "layout.validate('$1')")"; }
+
+layout_set() { awesome_ipc "$(layout_chunk "layout.set('$1')")"; }
+
+select_layout() {
+  local name="$1"
+  # A lost or failed reply proves nothing: M.set may already have saved the
+  # name before the restart raised. Report the doubt, never a rollback.
+  layout_set "$name" \
+    || die "could not confirm the layout change to '$name'; the restart may not have run and the saved layout may have changed - check 'themectl current'"
+  echo "theme: $name"
 }
 
 # Read targets.conf, calling: fn template dest reload
@@ -75,8 +217,8 @@ each_target() {
 
 render_all() {
   local name="$1"
-  [[ "$name" =~ ^[a-z0-9][a-z0-9-]*$ ]] || die "invalid theme name '$name'"
-  [[ -r "$THEME_DIR/palettes/$name.lua" ]] || die "unknown theme '$name' (try: themectl list)"
+  [[ "$name" =~ ^[a-z0-9][a-z0-9-]*$ ]] || die "invalid palette name '$name'"
+  [[ -r "$THEME_DIR/palettes/$name.lua" ]] || die "unknown palette '$name' (try: themectl list --colors)"
   # Generate from current plugin state without changing plugin wiring or apps.
   "$THEME_DIR/../plugins/pluginctl" template-waybar >"$staged/.waybar.tpl"
   local fn
@@ -116,6 +258,11 @@ link_target() {
 reload_target() {
   local reload="$3"
   [[ -n "$reload" ]] || return 0
+  # A combined switch restarts Awesome exactly once through layout.set, which
+  # picks up the new colors; the palette's own restart would be the second.
+  if [[ "$SUPPRESS_AWESOME_RELOAD" == 1 && "$1" == "awesome-colors.lua" ]]; then
+    return 0
+  fi
   run_bounded "reload $1" bash -c "$reload"
 }
 
@@ -153,8 +300,9 @@ run_hooks() {
   done
 }
 
-apply() {
+apply_palette() {
   local name="$1"
+  validate_palette_name "$name"
   mkdir -p "$THEME_DIR/.generations"
   staged="$(mktemp -d "$THEME_DIR/.generations/generation.XXXXXX")"
   render_all "$name"
@@ -178,38 +326,158 @@ apply() {
   mv -Tf "$STATE_DIR/current.new" "$STATE_DIR/current"
   run_hooks
   each_target reload_target
-  echo "theme: $name"
+  echo "palette: $name"
+}
+
+# Switch both under one lock: preflight the live layout first so a refused
+# selection leaves the palette untouched, then apply the palette without its
+# own Awesome restart and let layout.set restart the desktop exactly once.
+set_layout_and_palette() {
+  local theme="$1" palette="$2"
+  layout_validate "$theme" || die "the layout '$theme' cannot be selected; nothing was changed"
+  SUPPRESS_AWESOME_RELOAD=1
+  apply_palette "$palette"
+  SUPPRESS_AWESOME_RELOAD=0
+  layout_set "$theme" \
+    || die "the palette '$palette' was applied, but the layout change to '$theme' could not be confirmed; the restart may not have run and the saved layout may have changed - check 'themectl current', rerun 'themectl set $theme' if needed"
+  echo "theme: $theme"
+}
+
+next_layout() {
+  local all cur nxt i
+  mapfile -t all < <(layouts)
+  ((${#all[@]})) || die "no AwesomeWM layouts found under $(layout_root)"
+  cur="$(current_layout)"
+  nxt="${all[0]}"
+  for i in "${!all[@]}"; do
+    if [[ "${all[$i]}" == "$cur" ]]; then
+      nxt="${all[$(((i + 1) % ${#all[@]}))]}"
+    fi
+  done
+  select_layout "$nxt"
+}
+
+next_palette() {
+  local all cur nxt i
+  mapfile -t all < <(palettes)
+  ((${#all[@]})) || die "no palettes found"
+  cur="$(current_palette)"
+  nxt="${all[0]}"
+  for i in "${!all[@]}"; do
+    if [[ "${all[$i]}" == "$cur" ]]; then
+      nxt="${all[$(((i + 1) % ${#all[@]}))]}"
+    fi
+  done
+  apply_palette "$nxt"
 }
 
 cmd="${1:-}"
+if (($#)); then shift; fi
+
+case "$cmd" in
+  "" | -h | --help | help)
+    usage
+    exit 0
+    ;;
+  list | current | set | next | apply | render) ;;
+  *)
+    usage >&2
+    exit 2
+    ;;
+esac
+
+# Parse and validate everything before locking or creating generations.
+theme_arg="" palette_arg="" colors_seen=0
+while (($#)); do
+  case "$1" in
+    --colors)
+      [[ "$colors_seen" == 0 ]] || die "--colors may be given only once"
+      colors_seen=1
+      if [[ "$cmd" == set || "$cmd" == render ]]; then
+        (($# >= 2)) || die "--colors needs a palette name (try: themectl list --colors)"
+        palette_arg="$2"
+        [[ -n "$palette_arg" ]] || die "--colors needs a palette name (try: themectl list --colors)"
+        shift 2
+      else
+        shift
+      fi
+      ;;
+    --colors=*)
+      [[ "$colors_seen" == 0 ]] || die "--colors may be given only once"
+      colors_seen=1
+      if [[ "$cmd" == set || "$cmd" == render ]]; then
+        palette_arg="${1#--colors=}"
+        [[ -n "$palette_arg" ]] || die "--colors needs a palette name (try: themectl list --colors)"
+      else
+        die "--colors takes no value here (usage: themectl $cmd --colors)"
+      fi
+      shift
+      ;;
+    -*)
+      die "unknown option '$1' (see: themectl help)"
+      ;;
+    *)
+      case "$cmd" in
+        set)
+          [[ -z "$theme_arg" ]] || die "unexpected argument '$1' (themectl set takes one theme)"
+          [[ -n "$1" ]] || die "theme name must not be empty (try: themectl list)"
+          theme_arg="$1"
+          ;;
+        render)
+          if [[ -r "$THEME_DIR/palettes/$1.lua" ]]; then
+            die "'$1' is a palette; previews use: themectl render --colors $1"
+          fi
+          die "render previews palettes only: themectl render --colors <palette> (try: themectl list --colors)"
+          ;;
+        *)
+          die "unexpected argument '$1' (usage: themectl $cmd [--colors])"
+          ;;
+      esac
+      shift
+      ;;
+  esac
+done
+
 # Lock before reading current, including next/apply. Output is shared by
 # every user of this checkout, so the lock belongs beside it.
 case "$cmd" in
-  set|apply|next)
+  list)
+    if [[ "$colors_seen" == 1 ]]; then palettes; else layouts; fi
+    ;;
+  current)
+    if [[ "$colors_seen" == 1 ]]; then current_palette; else current_layout; fi
+    ;;
+  set)
+    [[ -n "$theme_arg" || -n "$palette_arg" ]] || die "usage: themectl set [THEME] [--colors PALETTE]"
+    [[ -z "$theme_arg" ]] || validate_layout_name "$theme_arg"
+    [[ -z "$palette_arg" ]] || validate_palette_name "$palette_arg"
     exec 9>"$THEME_DIR/.apply.lock"
     flock -x 9
+    if [[ -n "$theme_arg" && -n "$palette_arg" ]]; then
+      set_layout_and_palette "$theme_arg" "$palette_arg"
+    elif [[ -n "$palette_arg" ]]; then
+      apply_palette "$palette_arg"
+    else
+      select_layout "$theme_arg"
+    fi
     ;;
-esac
-case "$cmd" in
-  list) themes ;;
-  current) current ;;
-  set) [[ -n "${2:-}" ]] || die "usage: themectl set <name>"; apply "$2" ;;
-  apply) apply "$(current)" ;;
   next)
-    mapfile -t all < <(themes)
-    cur="$(current)"; nxt="${all[0]}"
-    for i in "${!all[@]}"; do
-      [[ "${all[$i]}" == "$cur" ]] && nxt="${all[$(((i + 1) % ${#all[@]}))]}"
-    done
-    apply "$nxt"
+    exec 9>"$THEME_DIR/.apply.lock"
+    flock -x 9
+    if [[ "$colors_seen" == 1 ]]; then next_palette; else next_layout; fi
+    ;;
+  apply)
+    [[ "$colors_seen" == 0 ]] || die "usage: themectl apply"
+    exec 9>"$THEME_DIR/.apply.lock"
+    flock -x 9
+    apply_palette "$(current_palette)"
     ;;
   render)
-    [[ -n "${2:-}" ]] || die "usage: themectl render <name>"
+    [[ "$colors_seen" == 1 ]] || die "usage: themectl render --colors <palette> (try: themectl list --colors)"
+    validate_palette_name "$palette_arg"
     staged="$(mktemp -d "${TMPDIR:-/tmp}/themectl-preview.XXXXXX")"
-    render_all "$2"
-    echo "rendered $2 -> $staged"
+    render_all "$palette_arg"
+    echo "rendered $palette_arg -> $staged"
     staged="" # Keep the preview for inspection.
     ;;
-  ""|-h|--help|help) usage ;;
-  *) usage >&2; exit 2 ;;
 esac

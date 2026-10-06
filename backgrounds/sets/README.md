@@ -17,9 +17,9 @@ and then the same two in `default/`. `<ext>` is png, jpg, jpeg or webp. A
 set only needs the images it has something special for.
 
 The active set is, in order: `$WALLPAPER_SET`, the one saved with
-`display-detect set <name>`, a set named after the current theme
-(`themectl current`) if one exists, then `default`. So a theme gets its own
-wallpapers just by adding `sets/<theme>/`.
+`display-detect set <name>`, a set named after the current palette
+(`themectl current --colors`) if one exists, then `default`. So a palette gets
+its own wallpapers just by adding `sets/<palette>/`.
 
     display-detect sets          # list sets, * marks the active one
     display-detect set nord      # switch and re-apply

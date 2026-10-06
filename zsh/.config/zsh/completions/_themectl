@@ -1,18 +1,23 @@
 #compdef themectl
 # Completion for themectl (see ~/.dotfiles/themes).
 #
-# The first word is a subcommand; `set` and `render` take a theme name, which
-# themectl itself can list, so the names never have to be remembered.
+# Layouts (themes) and palettes are independent: after `set`, plain words
+# complete layout names (read-only `themectl list`) while the value of
+# --colors completes palette names (read-only `themectl list --colors`).
+# `render` previews palettes only, and list/current/next take --colors as a
+# bare mode flag with no value. Nothing here mutates state.
 
-local -a subcommands themes
+local -a subcommands themes palettes flags
+local cmd cur prev word
+local colors_count=0 operands=0 index
 
 subcommands=(
-  'list:list the available themes'
-  'current:print the active theme'
-  'set:render, link and reload a theme'
-  'next:switch to the next theme'
-  'apply:re-render and reload the active theme'
-  'render:render a theme into an isolated temporary preview directory'
+  'list:list layouts, or palettes with --colors'
+  'current:print the active layout, or the active palette with --colors'
+  'set:switch the layout, the palette with --colors, or both'
+  'next:switch to the next layout, or the next palette with --colors'
+  'apply:re-render and reload the active palette'
+  'render:render a palette with --colors into an isolated preview directory'
   'help:show usage'
 )
 
@@ -21,11 +26,60 @@ if (( CURRENT == 2 )); then
   return
 fi
 
-if (( CURRENT == 3 )); then
-  case $words[2] in
-    set|render)
-      themes=(${(f)"$(themectl list 2>/dev/null)"})
-      _describe -t themes 'theme' themes
+cmd=${words[2]}
+cur=${words[CURRENT]}
+prev=${words[CURRENT - 1]}
+
+# Walk the words already typed to know whether a theme was supplied and how
+# many --colors flags (with palette values) already appeared.
+for (( index = 3; index < CURRENT; index++ )); do
+  word=${words[index]}
+  case $word in
+    --colors)
+      colors_count=$(( colors_count + 1 ))
+      if [[ $cmd == (set|render) ]] && (( index + 1 < CURRENT )); then
+        (( index += 1 )) # The next word is the palette, not an operand.
+      fi
       ;;
+    --colors=*) colors_count=$(( colors_count + 1 )) ;;
+    -*) ;; # Unknown flags get no candidates.
+    *) operands=$(( operands + 1 )) ;;
   esac
+done
+
+# Completing the value of --colors=PALETTE; a second --colors gets nothing.
+if [[ $cur == --colors=* ]]; then
+  if [[ $cmd == (set|render) ]] && (( colors_count == 0 )); then
+    palettes=()
+    for word in ${(f)"$(themectl list --colors 2>/dev/null)"}; do
+      palettes+=("--colors=$word")
+    done
+    _describe -t palettes 'palette' palettes
+  fi
+  return
 fi
+
+# Completing the value after --colors; only the first flag takes one.
+if [[ $prev == --colors ]]; then
+  if [[ $cmd == (set|render) ]] && (( colors_count == 1 )); then
+    palettes=(${(f)"$(themectl list --colors 2>/dev/null)"})
+    _describe -t palettes 'palette' palettes
+  fi
+  return
+fi
+
+case $cmd in
+  set)
+    # One theme and one --colors at most; the other slot stays open.
+    (( colors_count )) || flags=(--colors)
+    (( operands == 0 )) && themes=(${(f)"$(themectl list 2>/dev/null)"})
+    ;;
+  render|list|current|next)
+    # --colors is the only thing left: a palette for render, a bare mode
+    # flag for list/current/next. Never layout names.
+    (( colors_count )) || flags=(--colors)
+    ;;
+esac
+
+(( ${#flags} )) && _describe -t flags 'option' flags
+(( ${#themes} )) && _describe -t themes 'layout' themes
