@@ -335,6 +335,12 @@ local globalkeys = my_table.join(
 		awful.spawn("screenshot_2")
 	end, { description = "take a screenshot::fullhd", group = "hotkeys" }),
 
+	-- Switch picom to an opaque, effect-free profile so screen shares and
+	-- recordings don't capture translucent windows
+	awful.key({ modkey, "Shift" }, "p", function()
+		awful.spawn("picom-capture")
+	end, { description = "toggle picom capture mode (screenshare/recording)", group = "hotkeys" }),
+
 	-- X screen locker
 	awful.key({ altkey, "Control" }, "@", function()
 		awful.spawn(scrlocker)

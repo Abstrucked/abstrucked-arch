@@ -1,0 +1,99 @@
+#!/bin/bash
+# picom-capture - restart picom with a capture-safe profile (opaque windows, no
+# fading, shadows or rounded corners) while screen sharing or recording, and
+# back to the normal look afterwards. Picom stays running either way, because
+# Peek's transparent recording frame needs a compositor.
+#
+# Usage: picom-capture [on|off|toggle|status]    (default: toggle)
+#   status prints capture, normal (picom without capture mode) or off.
+#
+# Normal mode starts exactly `picom -b`, so awesome's autostart guard
+# (pgrep -fx 'picom -b') does not launch a duplicate after an awesome restart.
+# Like awesome, it only runs picom when detect-gpu finds a GPU.
+set -euo pipefail
+
+declare -r CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/picom"
+declare -r CAPTURE_CONFIG="$CONFIG_DIR/picom-capture.conf"
+declare -r CAPTURE_CMDLINE="picom -b --config $CAPTURE_CONFIG"
+
+die() {
+  echo "picom-capture: $*" >&2
+  exit 1
+}
+
+usage() {
+  echo "usage: ${0##*/} [on|off|toggle|status]" >&2
+  exit 2
+}
+
+capture_running() {
+  pgrep -u "$UID" -fx -- "$CAPTURE_CMDLINE" >/dev/null
+}
+
+picom_running() {
+  pgrep -u "$UID" -x picom >/dev/null
+}
+
+has_gpu() {
+  detect-gpu >/dev/null
+}
+
+notify() {
+  if command -v notify-send >/dev/null; then
+    notify-send "Picom" "$1" || true
+  fi
+}
+
+# A new picom fails while the old one still owns the compositor selection, so
+# wait for the old one to be gone.
+stop_picom() {
+  local _
+  pkill -u "$UID" -x picom || true
+  for _ in {1..30}; do
+    picom_running || return 0
+    sleep 0.1
+  done
+  die "picom did not exit"
+}
+
+capture_on() {
+  capture_running && return 0
+  has_gpu || die "no GPU found, not starting picom"
+  [[ -f "$CAPTURE_CONFIG" ]] || die "missing $CAPTURE_CONFIG"
+  if picom_running; then
+    stop_picom
+  fi
+  picom -b --config "$CAPTURE_CONFIG"
+  notify "Capture mode on"
+}
+
+capture_off() {
+  capture_running || return 0
+  stop_picom
+  if has_gpu; then
+    picom -b
+  fi
+  notify "Capture mode off"
+}
+
+status() {
+  if capture_running; then
+    echo capture
+  elif picom_running; then
+    echo normal
+  else
+    echo off
+  fi
+}
+
+main() {
+  case "${1:-toggle}" in
+    on) capture_on ;;
+    off) capture_off ;;
+    toggle) if capture_running; then capture_off; else capture_on; fi ;;
+    status) status ;;
+    *) usage ;;
+  esac
+}
+
+main "$@"
