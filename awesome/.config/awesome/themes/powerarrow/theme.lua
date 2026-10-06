@@ -14,8 +14,11 @@ local naughty = require("naughty")
 local wibox = require("wibox")
 local dpi = require("beautiful.xresources").apply_dpi
 local logout = require("awesome-wm-widgets.logout-widget.logout")
+-- The logout control shares the layout segment, so its icon takes
+-- that segment's icon color.
 local logout_icon = gears.color.recolor_image(
-	gfs.get_configuration_dir() .. "awesome-wm-widgets/logout-widget/power.svg", c.fg
+	gfs.get_configuration_dir() .. "awesome-wm-widgets/logout-widget/power.svg",
+	c.seg.layout.icon
 )
 local power_mode = require("awesome-wm-widgets.power-mode-widget.power-mode")
 local string, os, screen = string, os, screen
@@ -250,10 +253,53 @@ local function battery_seg(perc, ac)
 	return c.seg.bat_low
 end
 
+-- Bar geometry and spacing in one place, so the composition can be
+-- retuned without touching every widget below.
+local bar = {
+	height = 24,          -- wibar height
+	arrow_depth = 9,      -- powerline chevron depth cap
+	segment_padding = 10, -- pl() padding on both sides of a segment
+	icon = 14,            -- standard icon size inside a segment
+	group_spacing = 4,    -- gap between an icon and its text
+	group_gap = 6,        -- gap between logical groups of segments
+	tag_padding = 9,      -- taglist padding around each tag
+	tasklist_margin = 12, -- tasklist distance from the bar's ends
+	volume_width = 80,    -- volume bar width
+	volume_margins = 4,   -- volume bar vertical margins
+	logout_margin = 4,    -- the logout widget's internal icon margin
+	-- Fixed slots keep changing values from resizing the bar. Each is
+	-- sized for the 8-point mono widget font: "100%", "AC", "128.0G",
+	-- "↓1023M ↑1023G" and "23:59" all fit their slot.
+	slots = {
+		cpu = 28,
+		bat = 28,
+		net = 80,
+		clock = 36,
+		text = 40, -- memory and filesystem
+	},
+}
+
+-- Center a widget in a fixed-width slot, so a changing value never
+-- resizes the bar and the text stays in place while it changes.
+local function fixed_slot(widget, width)
+	widget.forced_width = dpi(width)
+	widget.align = "center"
+end
+
+-- Segment icons keep a fixed size instead of stretching to the bar
+-- height.
+local function segment_icon(path, color)
+	local image = wibox.widget.imagebox(icon(path, color))
+	image.forced_width = dpi(bar.icon)
+	image.forced_height = dpi(bar.icon)
+	return image
+end
+
 local function build_screen_widgets(s)
 	local widgets = {}
 
-	widgets.clock = wibox.widget.textclock("<span font='Misc Tamsyn 5'> </span>%H:%M ")
+	widgets.clock = wibox.widget.textclock("%H:%M")
+	fixed_slot(widgets.clock, bar.slots.clock)
 
 	widgets.cal = lain.widget.cal({
 		attach_to = { widgets.clock },
@@ -266,21 +312,23 @@ local function build_screen_widgets(s)
 		},
 	})
 
-	local memicon = wibox.widget.imagebox(icon(theme.widget_mem, c.seg.mem.icon))
+	local memicon = segment_icon(theme.widget_mem, c.seg.mem.icon)
 	widgets.mem = lain.widget.mem({
 		settings = function()
-			widget:set_text(" " .. compact_value(mem_now.used, "M", "G") .. " ")
+			widget:set_text(compact_value(mem_now.used, "M", "G"))
 		end,
 	})
+	fixed_slot(widgets.mem.widget, bar.slots.text)
 
-	local cpuicon = wibox.widget.imagebox(icon(theme.widget_cpu, c.seg.cpu.icon))
+	local cpuicon = segment_icon(theme.widget_cpu, c.seg.cpu.icon)
 	widgets.cpu = lain.widget.cpu({
 		settings = function()
-			widget:set_text(" " .. cpu_now.usage .. "% ")
+			widget:set_text(cpu_now.usage .. "%")
 		end,
 	})
+	fixed_slot(widgets.cpu.widget, bar.slots.cpu)
 
-	local fsicon = wibox.widget.imagebox(icon(theme.widget_hdd, c.seg.fs.icon))
+	local fsicon = segment_icon(theme.widget_hdd, c.seg.fs.icon)
 	widgets.fs = lain.widget.fs({
 		followtag = true,
 		notification_preset = {
@@ -298,8 +346,9 @@ local function build_screen_widgets(s)
 			end
 		end,
 	})
+	fixed_slot(widgets.fs.widget, bar.slots.text)
 
-	local baticon = wibox.widget.imagebox(icon(theme.widget_battery, c.seg.bat.icon))
+	local baticon = segment_icon(theme.widget_battery, c.seg.bat.icon)
 	widgets.bat = lain.widget.bat({
 		-- Refresh promptly on power changes instead of Lain's 30-second default.
 		timeout = 2,
@@ -314,7 +363,7 @@ local function build_screen_widgets(s)
 			end
 			if bat_now.status and bat_now.status ~= "N/A" then
 				if bat_now.ac_status == 1 then
-					widget:set_text(" AC ")
+					widget:set_text("AC")
 					baticon:set_image(icon(theme.widget_ac, seg.icon))
 					return
 				elseif bat_now.perc and tonumber(bat_now.perc) <= 5 then
@@ -324,15 +373,16 @@ local function build_screen_widgets(s)
 				else
 					baticon:set_image(icon(theme.widget_battery, seg.icon))
 				end
-				widget:set_text(" " .. bat_now.perc .. "% ")
+				widget:set_text(bat_now.perc .. "%")
 			else
 				widget:set_markup()
 				baticon:set_image(icon(theme.widget_ac, seg.icon))
 			end
 		end,
 	})
+	fixed_slot(widgets.bat.widget, bar.slots.bat)
 
-	local neticon = wibox.widget.imagebox(icon(theme.widget_net, c.seg.net.icon))
+	local neticon = segment_icon(theme.widget_net, c.seg.net.icon)
 	widgets.net = lain.widget.net({
 		screen = s,
 		notification_preset = { fg = theme.fg_normal, bg = theme.popup_bg, font = "Monospace 10" },
@@ -341,8 +391,7 @@ local function build_screen_widgets(s)
 		end,
 	})
 	-- Keep throughput updates from resizing the bar, without a wide empty slot.
-	widgets.net.widget.forced_width = dpi(80)
-	widgets.net.widget.align = "center"
+	fixed_slot(widgets.net.widget, bar.slots.net)
 	widgets.net.widget:connect_signal("mouse::enter", function()
 		widgets.net_notification = naughty.notify({
 			title = "Network",
@@ -361,9 +410,9 @@ local function build_screen_widgets(s)
 	widgets.volume = volumebar_widget({
 		main_color = c.seg.volume.icon,
 		mute_color = "#777E7655",
-		width = 80,
+		width = dpi(bar.volume_width),
 		shape = "rounded_bar",
-		margins = 4,
+		margins = dpi(bar.volume_margins),
 		timeout = 2,
 	})
 	widgets.memicon = memicon
@@ -376,7 +425,13 @@ local function build_screen_widgets(s)
 end
 
 function theme.powerline_rl(cr, width, height)
-	local arrow_depth, offset = height / 2, 0
+	-- Cap the chevron depth: the bar is taller than the chevron is
+	-- wide, and a tiny segment keeps the arrow within its bounds.
+	local arrow_depth = math.min(height / 2, dpi(bar.arrow_depth))
+	if width > 0 then
+		arrow_depth = math.min(arrow_depth, width / 2)
+	end
+	local offset = 0
 	if arrow_depth < 0 then
 		width = width + 2 * arrow_depth
 		offset = -arrow_depth
@@ -394,12 +449,18 @@ end
 -- seg is a { bg, fg, icon } entry of c.seg. A plain color string is still
 -- accepted as the background, for plugin snippets written before c.seg.
 local function pl(widget, seg, padding)
-	local horizontal_padding = dpi(padding or 10)
+	local horizontal_padding = dpi(padding or bar.segment_padding)
 	if type(seg) ~= "table" then
 		seg = { bg = seg }
 	end
+	-- place centers the contents in the segment; a fixed layout has
+	-- no valign, so icons and text would otherwise sit at the top.
 	local container = wibox.container.background(
-		wibox.container.margin(widget, horizontal_padding, horizontal_padding), seg.bg, theme.powerline_rl
+		wibox.container.place(
+			wibox.container.margin(widget, horizontal_padding, horizontal_padding),
+			nil, "center"
+		),
+		seg.bg, theme.powerline_rl
 	)
 	container.fg = seg.fg
 	for _, child in ipairs(container:get_all_children()) do
@@ -408,6 +469,22 @@ local function pl(widget, seg, padding)
 		end
 	end
 	return container
+end
+
+-- The vendored logout widget draws its icon at the SVG's natural
+-- 24px inside a fixed 4px margin; bring both in line with the other
+-- segment icons, keeping the widget's own buttons and popup.
+local function segment_logout()
+	local widget = logout.widget({ icon = logout_icon })
+	for _, child in ipairs(widget:get_all_children()) do
+		if child.set_margins then
+			child:set_margins(dpi(bar.logout_margin))
+		elseif child.set_image then
+			child.forced_width = dpi(bar.icon)
+			child.forced_height = dpi(bar.icon)
+		end
+	end
+	return widget
 end
 
 -- Occupied tags get the accent underline. On the active tag, use its text
@@ -440,6 +517,11 @@ function theme.at_screen_connect(s)
 	-- Create an imagebox widget which will contains an icon indicating which layout we're using.
 	-- We need one layoutbox per screen.
 	s.mylayoutbox = awful.widget.layoutbox(s)
+	-- The layoutbox icon matches the other segment icons.
+	for _, imagebox in ipairs(s.mylayoutbox:get_children_by_id("imagebox")) do
+		imagebox.forced_width = dpi(bar.icon)
+		imagebox.forced_height = dpi(bar.icon)
+	end
 	s.mylayoutbox:buttons(my_table.join(
 		awful.button({}, 1, function()
 			awful.layout.inc(1)
@@ -468,8 +550,8 @@ function theme.at_screen_connect(s)
 				nil,
 				{
 					{ id = "text_role", widget = wibox.widget.textbox },
-					left = dpi(7),
-					right = dpi(7),
+					left = dpi(bar.tag_padding),
+					right = dpi(bar.tag_padding),
 					widget = wibox.container.margin,
 				},
 				-- background containers skip drawing without a child, so give it
@@ -491,10 +573,14 @@ function theme.at_screen_connect(s)
 
 	-- Create a tasklist widget
 	s.mytasklist = awful.widget.tasklist(s, awful.widget.tasklist.filter.currenttags, awful.util.tasklist_buttons)
+	-- Keep window titles clear of the tags and the right-hand segments.
+	local tasklist = wibox.container.margin(
+		s.mytasklist, dpi(bar.tasklist_margin), dpi(bar.tasklist_margin)
+	)
 
 	-- Create the wibox
 	s.mywibox =
-		awful.wibar({ position = "top", screen = s, height = dpi(18), bg = theme.bg_normal, fg = theme.fg_normal })
+		awful.wibar({ position = "top", screen = s, height = dpi(bar.height), bg = theme.bg_normal, fg = theme.fg_normal })
 
 	local left_widgets = {
 		layout = wibox.layout.fixed.horizontal,
@@ -508,19 +594,50 @@ function theme.at_screen_connect(s)
 		layout = wibox.layout.fixed.horizontal,
 	}
 	if s == screen.primary then
-		-- A little space before the first segment, like the gaps between segments.
-		table.insert(right_widgets, wibox.container.margin(wibox.widget.systray(), 0, dpi(6)))
+		-- A little space before the first segment, like the gaps
+		-- between segments.
+		table.insert(right_widgets, wibox.container.margin(wibox.widget.systray(), 0, dpi(bar.group_gap)))
 	end
 
 	-- generated by plugins/pluginctl; always exists, may be a no-op
 	require("plugins")(left_widgets, right_widgets, pl, c, s)
 
-	local function group(...)
-		return wibox.widget({ layout = wibox.layout.align.horizontal, ... })
+	-- Icon and text sit side by side at their natural
+	-- sizes: a fixed layout keeps every widget from
+	-- stretching the way an align layout would.
+	local function group(icon, text)
+		return wibox.widget({
+			icon,
+			text,
+			spacing = dpi(bar.group_spacing),
+			layout = wibox.layout.fixed.horizontal,
+		})
+	end
+	-- The only gaps on the right are between logical groups of
+	-- segments -- the tray and plugins, the built-in metrics and the
+	-- clock with the controls -- never between two segments. A base
+	-- widget without children claims space without drawing anything.
+	local function group_gap()
+		return wibox.widget {
+			widget = wibox.widget.base.make_widget(),
+			forced_width = dpi(bar.group_gap),
+			forced_height = 1,
+		}
+	end
+	-- Separate the tray/plugins group from the metrics, but only when
+	-- something actually landed on the right side.
+	if #right_widgets > 0 then
+		table.insert(right_widgets, group_gap())
 	end
 	-- The power mode sits inside the battery segment, after the charge.
 	widgets.bat_segment = pl(
-		wibox.widget({ widgets.baticon, widgets.bat.widget, power_mode.widget({ icon_font = theme.widget_font }), layout = wibox.layout.fixed.horizontal }),
+		wibox.widget({
+			widgets.baticon,
+			widgets.bat.widget,
+			power_mode.widget({ icon_font = theme.widget_font }),
+			spacing = dpi(bar.group_spacing),
+			layout = wibox.layout.fixed.horizontal,
+		}),
 		battery_seg(nil, true)
 	)
 	widgets.bat.update()
@@ -531,15 +648,17 @@ function theme.at_screen_connect(s)
 	table.insert(right_widgets, pl(group(widgets.fsicon, widgets.fs.widget), c.seg.fs))
 	table.insert(right_widgets, widgets.bat_segment)
 	table.insert(right_widgets, pl(group(widgets.neticon, widgets.net.widget), c.seg.net))
+	-- Separate the metrics from the clock and the controls after it.
+	table.insert(right_widgets, group_gap())
 	table.insert(right_widgets, pl(widgets.clock, c.seg.clock))
-	table.insert(right_widgets, logout.widget({ icon = logout_icon }))
+	table.insert(right_widgets, pl(segment_logout(), c.seg.layout))
 	table.insert(right_widgets, pl(s.mylayoutbox, c.seg.layout))
 
 	-- Add widgets to the wibox
 	s.mywibox:setup({
 		layout = wibox.layout.align.horizontal,
 		left_widgets,
-		s.mytasklist, -- Middle widget
+		tasklist, -- Middle widget
 		right_widgets,
 	})
 end
