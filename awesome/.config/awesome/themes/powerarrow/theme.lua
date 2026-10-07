@@ -96,7 +96,9 @@ naughty.config.padding = dpi(8)
 naughty.config.spacing = dpi(4)
 naughty.config.defaults.position = "top_right"
 naughty.config.defaults.margin = theme.notification_margin
-naughty.config.presets.critical = {
+-- naughty.dbus captured the original critical preset table at load time, so
+-- update it in place; replacing it would leave D-Bus notifications bright red.
+gears.table.crush(naughty.config.presets.critical, {
 	bg = theme.popup_bg,
 	fg = theme.popup_fg,
 	border_width = 0,
@@ -104,7 +106,25 @@ naughty.config.presets.critical = {
 	margin = theme.notification_margin,
 	position = "top_right",
 	timeout = 0,
+})
+-- tmux-agent alerts (critical urgency, "\2") get the palette's red; the plugin
+-- closes them once the agent is viewed. Replace any earlier entry on reload.
+local agent_alert = {
+	bg = c.red,
+	fg = c.bg,
+	border_width = 0,
+	shape = theme.popup_shape,
+	margin = theme.notification_margin,
+	position = "top_right",
+	timeout = 30,
 }
+local dbus_mapping = require("naughty.dbus").config.mapping
+for i = #dbus_mapping, 1, -1 do
+	if dbus_mapping[i][1].appname == "tmux-agent" then
+		table.remove(dbus_mapping, i)
+	end
+end
+table.insert(dbus_mapping, { { appname = "tmux-agent", urgency = "\2" }, agent_alert })
 naughty.config.notify_callback = function(args)
 	args.border_width = 0
 	args.border_color = "#00000000"
