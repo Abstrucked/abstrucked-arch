@@ -23,8 +23,9 @@ class ShortcutPortabilityTests(unittest.TestCase):
             raise RuntimeError(f"required shell runtime(s) unavailable: {', '.join(missing)}")
 
     def setUp(self):
+        temp_root = "/tmp/opencode" if Path("/tmp/opencode").is_dir() else None
         self.temp = tempfile.TemporaryDirectory(prefix="shortcut-portability-",
-                                                dir="/tmp/opencode")
+                                                dir=temp_root)
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
         self.home = self.root / "home with & [glob]"

@@ -14,7 +14,8 @@ class TmuxProjectBindingsTests(unittest.TestCase):
     def test_configured_paths_survive_real_tmux_parsing(self):
         tmux = shutil.which("tmux")
         self.assertIsNotNone(tmux, "tmux is required")
-        with tempfile.TemporaryDirectory(prefix="tmux-project-", dir="/tmp/opencode") as directory:
+        temp_root = "/tmp/opencode" if Path("/tmp/opencode").is_dir() else None
+        with tempfile.TemporaryDirectory(prefix="tmux-project-", dir=temp_root) as directory:
             root = Path(directory)
             home = root / "home with spaces"
             helpers = home / ".local/bin"

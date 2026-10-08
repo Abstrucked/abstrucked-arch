@@ -53,7 +53,8 @@ sys.exit(93)
 
 class PowerModeTests(unittest.TestCase):
     def setUp(self):
-        self.temp = tempfile.TemporaryDirectory(prefix="power-mode-", dir="/tmp/opencode")
+        temp_root = "/tmp/opencode" if Path("/tmp/opencode").is_dir() else None
+        self.temp = tempfile.TemporaryDirectory(prefix="power-mode-", dir=temp_root)
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
         self.home = self.root / "home with spaces"
