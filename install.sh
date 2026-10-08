@@ -74,8 +74,17 @@ show_summary
 confirm_installation
 validate_component_privileges || exit 1
 
+# Keep package-manager confirmations and sudo prompts aligned with the
+# installer's mode. yay forwards sudoflags to all of its sudo invocations.
+yay_install_args=(-S --needed)
+sudo_args=()
+if [[ "$NON_INTERACTIVE" == "true" ]]; then
+    yay_install_args+=(--noconfirm --sudoflags=-n)
+    sudo_args+=(-n)
+fi
+
 # Count selected components for progress
-progress_init ${#SELECTED_COMPONENTS[@]}
+progress_init "${#SELECTED_COMPONENTS[@]}"
 
 # ═══════════════════════════════════════════════════════════════
 # INSTALLATION STEPS
@@ -84,7 +93,6 @@ progress_init ${#SELECTED_COMPONENTS[@]}
 # Install yay if selected and not present
 for component in "${SELECTED_COMPONENTS[@]}"; do
     name=$(get_component_name "$component")
-    step=$(get_component_step "$component")
     
     if [[ "$name" == "yay" ]]; then
         if ! command_exists yay; then
@@ -109,7 +117,6 @@ done
 # Install packages if selected
 for component in "${SELECTED_COMPONENTS[@]}"; do
     name=$(get_component_name "$component")
-    step=$(get_component_step "$component")
     
     if [[ "$name" == "packages" ]]; then
         progress_step "Installing system packages"
@@ -142,7 +149,7 @@ for component in "${SELECTED_COMPONENTS[@]}"; do
             for pkg in "${packages[@]}"; do
                 log_info "Installing: $pkg"
             done
-            execute yay -S --needed --noconfirm -- "${packages[@]}" || die "Failed to install packages"
+            execute yay "${yay_install_args[@]}" -- "${packages[@]}" || die "Failed to install packages"
         fi
         
         progress_complete "done"
@@ -153,7 +160,6 @@ done
 # Install Node.js version manager if selected
 for component in "${SELECTED_COMPONENTS[@]}"; do
     name=$(get_component_name "$component")
-    step=$(get_component_step "$component")
     
     if [[ "$name" == "node" ]]; then
         progress_step "Installing Node.js version manager"
@@ -178,12 +184,11 @@ done
 # Install YubiKey tools if selected
 for component in "${SELECTED_COMPONENTS[@]}"; do
     name=$(get_component_name "$component")
-    step=$(get_component_step "$component")
     
     if [[ "$name" == "yubikey" ]]; then
         progress_step "Installing YubiKey tools"
-        execute yay -S --needed --noconfirm yubikey-manager yubico-authenticator-bin pcsclite ccid || die "Failed to install YubiKey packages"
-        execute sudo systemctl enable pcscd.service || die "Failed to enable pcscd service"
+        execute yay "${yay_install_args[@]}" -- yubikey-manager yubico-authenticator-bin pcsclite ccid || die "Failed to install YubiKey packages"
+        execute sudo "${sudo_args[@]}" systemctl enable pcscd.service || die "Failed to enable pcscd service"
         progress_complete "done"
         break
     fi
@@ -203,7 +208,6 @@ fi
 # Setup symlinks with GNU Stow
 for component in "${SELECTED_COMPONENTS[@]}"; do
     name=$(get_component_name "$component")
-    step=$(get_component_step "$component")
     
     if [[ "$name" == "stow" ]]; then
         progress_step "Setting up symlinks with GNU Stow"
@@ -276,7 +280,6 @@ done
 # Setup theme if selected
 for component in "${SELECTED_COMPONENTS[@]}"; do
     name=$(get_component_name "$component")
-    step=$(get_component_step "$component")
 
     if [[ "$name" == "theme" ]]; then
         progress_step "Applying system theme"
@@ -291,7 +294,6 @@ done
 # Setup backgrounds if selected
 for component in "${SELECTED_COMPONENTS[@]}"; do
     name=$(get_component_name "$component")
-    step=$(get_component_step "$component")
     
     if [[ "$name" == "backgrounds" ]]; then
         progress_step "Setting up desktop backgrounds"
@@ -309,7 +311,6 @@ done
 # Setup tmux if selected
 for component in "${SELECTED_COMPONENTS[@]}"; do
     name=$(get_component_name "$component")
-    step=$(get_component_step "$component")
     
     if [[ "$name" == "tmux" ]]; then
         progress_step "Setting up Tmux configuration"
@@ -426,7 +427,6 @@ fi
 # Install LazyVim if selected
 for component in "${SELECTED_COMPONENTS[@]}"; do
     name=$(get_component_name "$component")
-    step=$(get_component_step "$component")
     
     if [[ "$name" == "lazyvim" ]]; then
         progress_step "Installing LazyVim Neovim distribution"

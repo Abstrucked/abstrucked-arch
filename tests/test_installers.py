@@ -36,13 +36,15 @@ if name == os.environ.get("FAIL_COMMAND"):
 if name == "sudo" and len(sys.argv) > 1:
     args = sys.argv[1:]
     if args in (["-n", "-v"], ["-v"]):
+        if os.environ.get("FAIL_SUDO_VALIDATION") == "1":
+            sys.exit(1)
         sys.exit(0)
     if args[0] == "-n":
         args = args[1:]
     if args[0] == "-v":
         sys.exit(0)
     os.execvp(args[0], args)
-if name not in ("git", "yay", "stow", "nvim", "chsh", "zsh"):
+if name not in ("git", "yay", "stow", "nvim", "chsh", "zsh", "systemctl"):
     sys.exit("Unexpected external command: " + name)
 '''
 
@@ -163,7 +165,7 @@ class InstallerTests(unittest.TestCase):
         result = self.run_script(args=("--dry-run", "-y"), code=0)
         packages = [pkg for pkg in (self.repo / "packages.list").read_text().splitlines()
                     if pkg and not pkg.startswith("#")]
-        self.assertIn(f"[DRY RUN] yay -S --needed --noconfirm -- {' '.join(packages)}", result.stdout)
+        self.assertIn(f"[DRY RUN] yay -S --needed --noconfirm --sudoflags=-n -- {' '.join(packages)}", result.stdout)
         self.assertIn(f"[DRY RUN] stow --no-folding -d {self.repo} -t {self.home} zsh", result.stdout)
         self.assertIn("Would link tmux config and theme", result.stdout)
         self.assertEqual(snapshot(self.home), before)
@@ -227,7 +229,7 @@ class InstallerTests(unittest.TestCase):
                                     if line and not line.startswith("#") and line not in expected)
                 self.assertEqual(
                     [call for call in self.calls() if call[0] == "yay"],
-                    [["yay", "-S", "--needed", "--noconfirm", "--", *expected]],
+                    [["yay", "-S", "--needed", "--noconfirm", "--sudoflags=-n", "--", *expected]],
                 )
 
     def test_package_manifests_are_batched_and_deduplicated(self):
@@ -235,8 +237,46 @@ class InstallerTests(unittest.TestCase):
         self.write(self.repo / "packages-awesome.list", "shared\nbeta\n")
         self.run_script(args=("-y", "--only", "packages", "--wm", "awesome"), code=0)
         self.assertEqual([call for call in self.calls() if call[0] == "yay"], [
-            ["yay", "-S", "--needed", "--noconfirm", "--", "alpha", "shared", "beta"],
+            ["yay", "-S", "--needed", "--noconfirm", "--sudoflags=-n", "--", "alpha", "shared", "beta"],
         ])
+
+    def test_interactive_package_install_keeps_yay_confirmation(self):
+        self.run_script(args=("--only", "packages", "--wm", "awesome"), input="d\n\n", code=0)
+        self.assertEqual([call for call in self.calls() if call[0] == "yay"], [
+            ["yay", "-S", "--needed", "--", *[
+                line for line in (self.repo / "packages.list").read_text().splitlines()
+                if line and not line.startswith("#")
+            ], *[
+                line for line in (self.repo / "packages-awesome.list").read_text().splitlines()
+                if line and not line.startswith("#")
+            ]],
+        ])
+
+    def test_yubikey_unattended_flags_and_systemctl_sudo_are_noninteractive_only(self):
+        self.run_script(args=("-y", "--only", "yubikey"), code=0)
+        self.assertEqual(self.calls(), [
+            ["sudo", "-n", "-v"],
+            ["yay", "-S", "--needed", "--noconfirm", "--sudoflags=-n", "--",
+             "yubikey-manager", "yubico-authenticator-bin", "pcsclite", "ccid"],
+            ["sudo", "-n", "systemctl", "enable", "pcscd.service"],
+            ["systemctl", "enable", "pcscd.service"],
+        ])
+
+    def test_interactive_yubikey_keeps_confirmation_and_sudo_prompt(self):
+        self.run_script(args=("--only", "yubikey"), input="10\n\n", code=0)
+        self.assertEqual(self.calls(), [
+            ["sudo", "-v"],
+            ["yay", "-S", "--needed", "--", "yubikey-manager", "yubico-authenticator-bin",
+             "pcsclite", "ccid"],
+            ["sudo", "systemctl", "enable", "pcscd.service"],
+            ["systemctl", "enable", "pcscd.service"],
+        ])
+
+    def test_sudo_preflight_failure_stops_before_package_or_stow_actions(self):
+        self.env["FAIL_SUDO_VALIDATION"] = "1"
+        result = self.run_script(args=("-y", "--only", "packages", "--only", "stow"))
+        self.assert_failed(result)
+        self.assertEqual(self.calls(), [["sudo", "-n", "-v"]])
 
     def test_invalid_later_package_manifest_prevents_any_yay_call(self):
         self.write(self.repo / "packages.list", "valid-first\n")
@@ -508,7 +548,7 @@ set_login_shell "${1:-bash}"
                             if line and not line.startswith("#") and line not in packages)
         self.assertEqual(self.calls(), [
             ["sudo", "-n", "-v"],
-            ["yay", "-S", "--needed", "--noconfirm", "--", *packages],
+            ["yay", "-S", "--needed", "--noconfirm", "--sudoflags=-n", "--", *packages],
         ])
         self.assertEqual(snapshot(self.home), {})
 
