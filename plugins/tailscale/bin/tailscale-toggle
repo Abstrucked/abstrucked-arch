@@ -4,7 +4,20 @@
 # TTY for a sudo password prompt.
 set -euo pipefail
 
-state="$(tailscale status --json 2>/dev/null | jq -r '.BackendState' 2>/dev/null || echo Stopped)"
+if ! status="$(tailscale status --json 2>/dev/null)"; then
+  notify-send "Tailscale" "Could not read Tailscale status" 2>/dev/null || true
+  exit 1
+fi
+if ! state="$(jq -ers '
+  if length == 1 and (.[0] | type) == "object" then
+    .[0].BackendState | select(type == "string" and length > 0)
+  else error("invalid status")
+  end
+' <<<"$status" 2>/dev/null)"; then
+  notify-send "Tailscale" "Could not read Tailscale status" 2>/dev/null || true
+  exit 1
+fi
+
 if [[ "$state" == "Running" ]]; then
   tailscale down || notify-send "Tailscale" "Failed to turn off" 2>/dev/null || true
 else

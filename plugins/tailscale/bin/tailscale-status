@@ -8,24 +8,52 @@ set -euo pipefail
 icon_up=$'\U000F0928'
 icon_down=$'\U000F092D'
 
-status="$(tailscale status --json 2>/dev/null)" || status=""
+status=""
+state=""
+read_error=0
+if ! status="$(tailscale status --json 2>/dev/null)"; then
+  read_error=1
+elif ! state="$(jq -ers '
+  if length == 1 and (.[0] | type) == "object" then
+    .[0].BackendState | select(type == "string" and length > 0)
+  else error("invalid status")
+  end
+' <<<"$status" 2>/dev/null)"; then
+  read_error=1
+fi
 
-if [[ -z "$status" ]]; then
-  text="$icon_down off"
-  tooltip="tailscale: not running"
-  class="disconnected"
-else
-  backend_state="$(jq -r '.BackendState' <<<"$status")"
-  self_ip="$(jq -r '.Self.TailscaleIPs[0] // ""' <<<"$status")"
-  if [[ "$backend_state" == "Running" && -n "$self_ip" ]]; then
+if (( read_error )); then
+  text="$icon_down error"
+  tooltip="tailscale: could not read status"
+  class="error"
+elif [[ "$state" == "Running" ]]; then
+  # Missing Self/IP is a valid connected state; malformed optional fields are not.
+  if ! self_ip="$(jq -er '
+    if .Self == null then ""
+    elif (.Self | type) != "object" then error("invalid Self")
+    elif .Self.TailscaleIPs == null then ""
+    elif (.Self.TailscaleIPs | type) != "array" then error("invalid TailscaleIPs")
+    else
+      .Self.TailscaleIPs[0] |
+      if . == null then "" elif type == "string" then . else error("invalid IP") end
+    end
+  ' <<<"$status" 2>/dev/null)"; then
+    text="$icon_down error"
+    tooltip="tailscale: could not read status"
+    class="error"
+  elif [[ -n "$self_ip" ]]; then
     text="$icon_up $self_ip"
     tooltip="tailscale: connected as $self_ip"
     class="connected"
   else
-    text="$icon_down off"
-    tooltip="tailscale: $backend_state"
-    class="disconnected"
+    text="$icon_up on"
+    tooltip="tailscale: connected (IP unavailable)"
+    class="connected"
   fi
+else
+  text="$icon_down off"
+  tooltip="tailscale: $state"
+  class="disconnected"
 fi
 
 if [[ "${1:-}" == "--plain" ]]; then

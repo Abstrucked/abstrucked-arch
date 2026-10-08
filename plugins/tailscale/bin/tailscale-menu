@@ -7,12 +7,32 @@
 set -euo pipefail
 
 status="$(tailscale status --json 2>/dev/null)" || {
-  notify-send "Tailscale" "tailscale is not running" 2>/dev/null || true
+  notify-send "Tailscale" "Could not read Tailscale status" 2>/dev/null || true
   exit 1
 }
 
-backend_state="$(jq -r '.BackendState' <<<"$status")"
-self_ip="$(jq -r '.Self.TailscaleIPs[0] // "-"' <<<"$status")"
+backend_state="$(jq -ers '
+  if length == 1 and (.[0] | type) == "object" then
+    .[0].BackendState | select(type == "string" and length > 0)
+  else error("invalid status")
+  end
+' <<<"$status" 2>/dev/null)" || {
+  notify-send "Tailscale" "Could not read Tailscale status" 2>/dev/null || true
+  exit 1
+}
+self_ip="$(jq -er '
+  if .Self == null then "-"
+  elif (.Self | type) != "object" then error("invalid Self")
+  elif .Self.TailscaleIPs == null then "-"
+  elif (.Self.TailscaleIPs | type) != "array" then error("invalid TailscaleIPs")
+  else
+    .Self.TailscaleIPs[0] |
+    if . == null then "-" elif type == "string" and length > 0 then . elif type == "string" then "-" else error("invalid IP") end
+  end
+' <<<"$status" 2>/dev/null)" || {
+  notify-send "Tailscale" "Could not read Tailscale status" 2>/dev/null || true
+  exit 1
+}
 
 if [[ "$backend_state" == "Running" ]]; then
   toggle_label="Turn off Tailscale"
@@ -22,12 +42,17 @@ fi
 copy_self_label="Copy this device's IP ($self_ip)"
 
 peers="$(jq -r '
-  (.Peer // {}) | to_entries
-  | map(.value)
-  | sort_by(.Online == false, .HostName)
-  | .[]
-  | "\(.HostName)\t\(.TailscaleIPs[0] // "-")\t\(if .Online then "online" else "offline" end)"
-' <<<"$status")"
+  if has("Peer") and .Peer != null and (.Peer | type) != "object" then error("invalid Peer") else
+    (.Peer // {}) | to_entries
+    | map(.value)
+    | sort_by(.Online == false, .HostName)
+    | .[]
+    | "\(.HostName)\t\(.TailscaleIPs[0] // "-")\t\(if .Online then "online" else "offline" end)"
+  end
+' <<<"$status" 2>/dev/null)" || {
+  notify-send "Tailscale" "Could not read Tailscale status" 2>/dev/null || true
+  exit 1
+}
 
 peer_lines=""
 if [[ -n "$peers" ]]; then
