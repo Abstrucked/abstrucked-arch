@@ -1,15 +1,14 @@
-# Global theme setting
-export THEME=catppuccin-mocha
-export THEME_BG_DIR="$HOME/.backgrounds"
-
-export XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
+# shellcheck shell=bash
+# Shared environment defaults
+# shellcheck source=../../../scripts/.config/shell/env.sh
+source "${XDG_CONFIG_HOME:-$HOME/.config}/shell/env.sh"
 
 # Starship prompt
 eval "$(starship init bash)"
 
 # Source custom aliases
 # shellcheck source=aliases.sh
-source "${XDG_CONFIG_HOME}/bash/aliases.sh"
+source "${XDG_CONFIG_HOME:-$HOME/.config}/bash/aliases.sh"
 
 # Keybindings
 
@@ -32,14 +31,6 @@ HISTFILE=~/.bash_history
 HISTSIZE=10000
 HISTFILESIZE=10000
 shopt -s histappend
-
-export EDITOR='nvim'
-export VISUAL='gedit'
-
-export N_PREFIX="${N_PREFIX:-$HOME/n}"
-
-export ASDF_DATA_DIR="${ASDF_DATA_DIR:-$HOME/.asdf}"
-export PATH="$HOME/.local/bin:$N_PREFIX/bin:${ASDF_DATA_DIR}/shims:$PATH"
 
 ###-begin-pm2-completion-###
 ### credits to npm for the completion file model

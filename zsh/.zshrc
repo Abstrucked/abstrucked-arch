@@ -7,29 +7,10 @@ if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]
 fi
 
 # ═══════════════════════════════════════════════════════════════
-# Environment Variables
+# Shared Environment and PATH Defaults
 # ═══════════════════════════════════════════════════════════════
-export XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
-export THEME=catppuccin-mocha
-export THEME_BG_DIR="$HOME/.backgrounds"
-export EDITOR='nvim'
-export VISUAL='nvim'
-
-# ═══════════════════════════════════════════════════════════════
-# PATH Management (consolidated)
-# ═══════════════════════════════════════════════════════════════
-export PNPM_HOME="${HOME}/.local/share/pnpm"
-export ASDF_DATA_DIR="${HOME}/.asdf"
-export N_PREFIX="${N_PREFIX:-$HOME/n}"
-
-path=(
-  "$HOME/.local/bin"
-  "$N_PREFIX/bin"
-  "${ASDF_DATA_DIR}/shims"
-  "$PNPM_HOME"
-  $path
-)
-typeset -U path
+# shellcheck source=../scripts/.config/shell/env.sh
+source "${XDG_CONFIG_HOME:-$HOME/.config}/shell/env.sh"
 
 # ═══════════════════════════════════════════════════════════════
 # Plugins
@@ -93,7 +74,7 @@ autoload -Uz compinit && compinit
 # ═══════════════════════════════════════════════════════════════
 # Source Config Files
 # ═══════════════════════════════════════════════════════════════
-source "${XDG_CONFIG_HOME}/zsh/aliases.zsh"
+source "${XDG_CONFIG_HOME:-$HOME/.config}/zsh/aliases.zsh"
 
 # ═══════════════════════════════════════════════════════════════
 # Dart CLI Completion (if installed)

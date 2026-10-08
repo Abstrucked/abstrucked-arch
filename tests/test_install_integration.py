@@ -33,6 +33,10 @@ class InstallIntegrationTests(unittest.TestCase):
                 if name.startswith("scripts/.local/lib/python"):
                     continue
                 source, dest = ROOT / name, repo / name
+                # The Git index also lists unstaged deletions. Copy the current
+                # working tree, but retain tracked symlinks even if dangling.
+                if not source.exists() and not source.is_symlink():
+                    continue
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 if source.is_symlink():
                     dest.symlink_to(os.readlink(source))
