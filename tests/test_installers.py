@@ -1,4 +1,4 @@
-"""Run with: python3 -B -m unittest discover -s tests -v.
+"""Run with: python3 -B -m pytest tests/test_installers.py -q.
 
 Only copied installers execute. All fixture state lives in a private temporary
 directory; PATH is an allowlist, not the host PATH with a few commands prepended.
@@ -239,6 +239,93 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual([call for call in self.calls() if call[0] == "yay"], [
             ["yay", "-S", "--needed", "--noconfirm", "--sudoflags=-n", "--", "alpha", "shared", "beta"],
         ])
+
+    def test_selected_steps_follow_policy_order_not_cli_order(self):
+        result = self.run_script(
+            args=("-y", "--only", "stow", "--only", "packages", "--skip", "shell"),
+            code=0,
+        )
+        calls = self.calls()
+        self.assertEqual(calls[0][0], "sudo")  # privilege preflight
+        self.assertEqual(calls[1][0], "yay")   # packages precede Stow
+        self.assertEqual([call[0] for call in calls[2:]], ["stow"] * len(STOW_PACKAGES))
+        self.assertLess(result.stdout.index("Installing system packages"),
+                        result.stdout.index("Setting up symlinks with GNU Stow"))
+
+    def test_unsafe_backup_root_fails_before_any_install_or_authentication(self):
+        alias = self.base / "checkout-backup-alias"
+        alias.symlink_to(self.repo, target_is_directory=True)
+        for root in ("relative-root", str(self.repo / "backups"), str(alias / "backups")):
+            for dry_run in (False, True):
+                with self.subTest(root=root, dry_run=dry_run):
+                    self.env["DOTFILES_BACKUP_ROOT"] = root
+                    before_home, before_repo = snapshot(self.home), snapshot(self.repo)
+                    args = ("-y", "--only", "packages")
+                    if dry_run:
+                        args += ("--dry-run",)
+                    result = self.run_script(args=args)
+                    self.assert_failed(result)
+                    self.assertIn("backup root", result.stdout)
+                    self.assertEqual(self.calls(), [])
+                    self.assertEqual(snapshot(self.home), before_home)
+                    self.assertEqual(snapshot(self.repo), before_repo)
+
+    def test_all_selected_steps_follow_policy_order_in_dry_run(self):
+        terminal_config = self.home / ".config/alacritty/alacritty.toml"
+        self.write(terminal_config, 'shell = "/old/zsh"\n')
+        before = snapshot(self.home)
+        # Reverse menu and execution order to prove the dispatcher controls it.
+        args = ["--dry-run", "-y"]
+        args.extend(item for step in (
+            "yubikey", "lazyvim", "shell", "tmux", "backgrounds", "theme",
+            "stow", "node", "packages", "yay",
+        ) for item in ("--only", step))
+        result = self.run_script(args=args, code=0)
+        markers = (
+            "yay already installed",
+            "Installing system packages",
+            "Installing Node.js version manager",
+            "Installing YubiKey tools",
+            "Setting up symlinks with GNU Stow",
+            "Applying system theme",
+            "Setting up desktop backgrounds",
+            "Setting up Tmux configuration",
+            "[dry-run] Would update " + str(terminal_config),
+            "[dry-run] Would set the login shell to zsh",
+            "Installing LazyVim Neovim distribution",
+        )
+        positions = [result.stdout.index(marker) for marker in markers]
+        self.assertEqual(positions, sorted(positions), result.stdout)
+        self.assertEqual(snapshot(self.home), before)
+        self.assertEqual(self.calls(), [])
+
+    def test_failed_earlier_phase_stops_later_selected_phase(self):
+        self.env["FAIL_COMMAND"] = "yay"
+        result = self.run_script(
+            args=("-y", "--only", "stow", "--only", "packages", "--skip", "shell"),
+        )
+        self.assert_failed(result)
+        self.assertEqual([call[0] for call in self.calls()], ["sudo", "yay"])
+        self.assertNotIn("Setting up symlinks with GNU Stow", result.stdout)
+
+    def test_step_function_temporaries_do_not_escape_the_function(self):
+        self.write(self.repo / "test-step-locals.sh", '''#!/bin/bash
+set -euo pipefail
+source ./lib/logging.sh
+source ./lib/validation.sh
+source ./lib/args.sh
+source ./lib/components.sh
+source ./lib/install-steps.sh
+DOTFILES_DIR=$PWD
+WINDOW_MANAGER=awesome
+yay_install_args=(-S --needed)
+sudo_args=()
+pkg=sentinel package=sentinel packages_file=sentinel
+install_packages
+[[ "$pkg" == sentinel && "$package" == sentinel && "$packages_file" == sentinel ]]
+[[ ! -v seen_packages && ! -v packages && ! -v package_files ]]
+''')
+        self.run_script("test-step-locals.sh", code=0)
 
     def test_interactive_package_install_keeps_yay_confirmation(self):
         self.run_script(args=("--only", "packages", "--wm", "awesome"), input="d\n\n", code=0)

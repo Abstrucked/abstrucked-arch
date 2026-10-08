@@ -12,21 +12,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/logging.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/args.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/validation.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/ui.sh"
-
-# Component definitions
-# Format: "name|description|default_enabled|step_name"
-declare -a COMPONENTS=(
-    "yay|AUR helper (yay)|true|yay"
-    "packages|System packages|true|packages"
-    "node|Node.js version manager|true|node"
-    "stow|Symlink management (GNU Stow)|true|stow"
-    "shell|Default shell (zsh or bash)|true|shell"
-    "theme|Alacritty color theme|true|theme"
-    "backgrounds|Desktop backgrounds|true|backgrounds"
-    "tmux|Tmux configuration|true|tmux"
-    "lazyvim|LazyVim Neovim distribution|true|lazyvim"
-    "yubikey|YubiKey tools (optional)|false|yubikey"
-)
+source "$(dirname "${BASH_SOURCE[0]}")/component-registry.sh"
 
 # Global shell selection
 SELECTED_SHELL=""
@@ -38,32 +24,6 @@ window_manager_description() {
         hyprland) echo "Hyprland" ;;
         *) echo "Unknown" ;;
     esac
-}
-
-# Get component name
-get_component_name() {
-    local component=$1
-    echo "${component%%|*}"
-}
-
-# Get component description
-get_component_desc() {
-    local component=$1
-    local temp="${component#*|}"
-    echo "${temp%%|*}"
-}
-
-# Get component default
-get_component_default() {
-    local component=$1
-    local temp="${component#*|*|}"
-    echo "${temp%%|*}"
-}
-
-# Get component step name
-get_component_step() {
-    local component=$1
-    echo "${component##*|}"
 }
 
 # Check if component should be installed
