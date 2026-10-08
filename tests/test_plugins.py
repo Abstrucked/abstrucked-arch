@@ -353,8 +353,10 @@ exec ''' + real + ' "$@"')
         rendered = self.generated[0].read_text()
         self.assertIn('"custom/one": ' + module_json, rendered)
         self.assertNotIn("%%PLUGIN_", rendered)
-        document = json.loads(rendered)
-        self.assertEqual(document["custom/one"], {
+        # The full config is JSONC (including its generated-file comments), but
+        # this fixture's module body is strict JSON. Decode that exact body.
+        document, _ = json.JSONDecoder().raw_decode(rendered.split('"custom/one": ', 1)[1])
+        self.assertEqual(document, {
             "format": "left & right && {{accent}}",
             "exec": "printf x & y && z",
         })

@@ -1,5 +1,4 @@
--- Imported from an Omarchy colors.toml by import-omarchy.
--- Everything the templates need beyond these keys comes from _defaults.lua.
+-- Imported from Omarchy; missing roles come from _defaults.lua.
 return {
   name = "everforest",
   variant = "dark",
