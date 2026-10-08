@@ -1,0 +1,86 @@
+#!/bin/bash
+# Use the system power policy unless raw Ryzen controls are explicitly enabled.
+set -euo pipefail
+
+usage() {
+    cat <<'EOF'
+Usage: power-mode battery-save|balanced|performance
+
+POWER_MODE_BACKEND defaults to powerprofilesctl (power-profiles-daemon).
+For an explicitly configured AMD machine, set POWER_MODE_BACKEND=ryzenadj and
+the matching POWER_MODE_RYZEN_BATTERY_SAVE, POWER_MODE_RYZEN_BALANCED, or
+POWER_MODE_RYZEN_PERFORMANCE to four comma-separated positive integers:
+STAPM_mW,FAST_mW,SLOW_mW,TEMP_C. There are no built-in hardware limits.
+Only use values verified safe for your own hardware; validation checks syntax,
+not hardware safety. State follows XDG_STATE_HOME, or ~/.local/state.
+EOF
+}
+
+if [[ "${1:-}" == --help ]]; then
+    usage
+    exit 0
+fi
+[[ $# == 1 ]] || { usage >&2; exit 2; }
+mode=$1
+case "$mode" in
+    battery-save) profile=power-saver; limits_var=POWER_MODE_RYZEN_BATTERY_SAVE ;;
+    balanced) profile=balanced; limits_var=POWER_MODE_RYZEN_BALANCED ;;
+    performance) profile=performance; limits_var=POWER_MODE_RYZEN_PERFORMANCE ;;
+    *) usage >&2; exit 2 ;;
+esac
+
+backend=${POWER_MODE_BACKEND:-powerprofilesctl}
+case "$backend" in
+    powerprofilesctl)
+        command -v powerprofilesctl >/dev/null 2>&1 || {
+            printf '%s\n' 'power-mode: powerprofilesctl is required; install power-profiles-daemon or configure an explicit backend' >&2
+            exit 1
+        }
+        command_args=(powerprofilesctl set "$profile")
+        ;;
+    ryzenadj)
+        limits=${!limits_var-}
+        # Bound digit counts as well as rejecting flags, shell syntax and signs.
+        if [[ ! "$limits" =~ ^([1-9][0-9]{0,8}),([1-9][0-9]{0,8}),([1-9][0-9]{0,8}),([1-9][0-9]{0,8})$ ]]; then
+            printf 'power-mode: %s must specify STAPM_mW,FAST_mW,SLOW_mW,TEMP_C as positive integers (up to 9 digits each)\n' "$limits_var" >&2
+            exit 2
+        fi
+        command_args=(sudo -- ryzenadj
+            "--stapm-limit=${BASH_REMATCH[1]}" "--fast-limit=${BASH_REMATCH[2]}"
+            "--slow-limit=${BASH_REMATCH[3]}" "--tctl-temp=${BASH_REMATCH[4]}")
+        for dependency in sudo ryzenadj; do
+            command -v "$dependency" >/dev/null 2>&1 || {
+                printf 'power-mode: %s is required by the selected backend\n' "$dependency" >&2
+                exit 1
+            }
+        done
+        ;;
+    *) printf '%s\n' 'power-mode: POWER_MODE_BACKEND must be powerprofilesctl or ryzenadj' >&2; exit 2 ;;
+esac
+
+command -v flock >/dev/null 2>&1 || { printf '%s\n' 'power-mode: flock is required' >&2; exit 1; }
+umask 077
+state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/awesome"
+mkdir -p -- "$state_dir"
+[[ ! -d "$state_dir/power-mode" ]] || {
+    printf '%s\n' 'power-mode: widget state path must not be a directory' >&2
+    exit 1
+}
+# Serialize hardware changes with the corresponding state update.
+exec 9>"$state_dir/power-mode.lock"
+flock -w 10 -x 9 || { printf '%s\n' 'power-mode: another power change is still running' >&2; exit 1; }
+state_file_tmp=$(mktemp "$state_dir/power-mode.XXXXXX")
+trap 'rm -f -- "$state_file_tmp"' EXIT
+printf '%s\n' "$mode" > "$state_file_tmp"
+if "${command_args[@]}"; then
+    if ! mv -fT -- "$state_file_tmp" "$state_dir/power-mode"; then
+        printf '%s\n' 'power-mode: the backend changed the profile, but saving widget state failed' >&2
+        exit 1
+    fi
+else
+    status=$?
+    printf '%s\n' 'power-mode: backend failed; previous widget state was preserved' >&2
+    exit "$status"
+fi
+trap - EXIT
+printf '%s enabled (%s)\n' "$mode" "$backend"
