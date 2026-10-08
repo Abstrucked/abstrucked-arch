@@ -6,7 +6,7 @@ set -euo pipefail
 
 state="$(tailscale status --json 2>/dev/null | jq -r '.BackendState' 2>/dev/null || echo Stopped)"
 if [[ "$state" == "Running" ]]; then
-  tailscale down
+  tailscale down || notify-send "Tailscale" "Failed to turn off" 2>/dev/null || true
 else
-  tailscale up
+  tailscale up || notify-send "Tailscale" "Failed to turn on" 2>/dev/null || true
 fi

@@ -269,9 +269,9 @@ reload_target() {
 # Bound the whole process group, including IPC helpers and their children.
 # A stalled app must not prevent later apps (especially the desktop) reloading.
 run_bounded() {
-  local label="$1" status
+  local label="$1" status out
   shift
-  if timeout --kill-after=1s 5s "$@" 9>&- >/dev/null 2>&1; then
+  if out="$(timeout --kill-after=1s 5s "$@" 9>&- 2>&1)"; then
     return 0
   else
     status=$?
@@ -280,6 +280,7 @@ run_bounded() {
     echo "themectl: $label timed out after 5s; continuing" >&2
   else
     echo "themectl: $label failed (exit $status); continuing" >&2
+    [[ -z "$out" ]] || printf '%s\n' "$out" >&2
   fi
 }
 
@@ -288,7 +289,10 @@ run_bounded() {
 run_hooks() {
   local hook
   for hook in "$THEME_DIR"/hooks/*.sh; do
-    [[ -x "$hook" ]] || continue
+    if [[ ! -x "$hook" ]]; then
+      echo "themectl: hook $(basename "$hook") is not executable; skipping" >&2
+      continue
+    fi
     (
       set -a
       # shellcheck disable=SC1091

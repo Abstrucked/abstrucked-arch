@@ -12,8 +12,9 @@ STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/plugins"
 STATE_FILE="$STATE_DIR/enabled"
 BASE_TPL="$DOTFILES_DIR/themes/templates/waybar-config.jsonc.base.tpl"
 GEN_TPL="$DOTFILES_DIR/themes/templates/waybar-config.jsonc.tpl"
-HYPR_PLUGINS_LUA="$HOME/.config/hypr/lua/plugins.lua"
-AWESOME_PLUGINS_LUA="$HOME/.config/awesome/plugins.lua"
+XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
+HYPR_PLUGINS_LUA="$XDG_CONFIG_HOME/hypr/lua/plugins.lua"
+AWESOME_PLUGINS_LUA="$XDG_CONFIG_HOME/awesome/plugins.lua"
 BIN_DIR="$HOME/.local/bin"
 # Readers take one in-memory snapshot and never create locks or staging files.
 ENABLED_IDS=()
@@ -93,10 +94,11 @@ validate_enabled() {
 
 list() {
   local id mark
-  for id in $(plugin_ids); do
+  while IFS= read -r id; do
+    [[ -n "$id" ]] || continue
     if is_enabled "$id"; then mark="[x]"; else mark="[ ]"; fi
     printf '%s %-20s %s\n' "$mark" "$id" "$(manifest_get "$id" NAME)"
-  done
+  done < <(plugin_ids)
 }
 
 # Rebuild the generated waybar template by splicing enabled plugins' module
@@ -110,7 +112,8 @@ sync_waybar() {
   [[ -r "$BASE_TPL" ]] || die "missing $BASE_TPL"
   local tpl defs="" left="" center="" right="" id module section frag
   tpl="$(cat "$BASE_TPL")"
-  for id in $(enabled_ids); do
+  while IFS= read -r id; do
+    [[ -n "$id" ]] || continue
     [[ -f "$PLUGIN_DIR/$id/waybar.jsonc" ]] || continue
     module="$(manifest_get "$id" WAYBAR_MODULE)"
     [[ -n "$module" ]] || die "$id: waybar.jsonc present but WAYBAR_MODULE not set in manifest.conf"
@@ -126,7 +129,7 @@ sync_waybar() {
       right) right+=$',\n        "'"$module"'"' ;;
       *) die "$id: unknown WAYBAR_SECTION '$section' (want left, center or right)" ;;
     esac
-  done
+  done < <(enabled_ids)
   tpl="${tpl//%%PLUGIN_MODULES_LEFT%%/$left}"
   tpl="${tpl//%%PLUGIN_MODULES_CENTER%%/$center}"
   tpl="${tpl//%%PLUGIN_MODULES_RIGHT%%/$right}"
@@ -145,7 +148,8 @@ sync_waybar() {
 sync_hypr() {
   local id
   : >"$WORK/hypr.lua"
-  for id in $(enabled_ids); do
+  while IFS= read -r id; do
+    [[ -n "$id" ]] || continue
     [[ -f "$PLUGIN_DIR/$id/hypr.lua" ]] || continue
     {
       echo "-- plugin: $id"
@@ -161,7 +165,7 @@ sync_hypr() {
       echo "end"
       echo
     } >>"$WORK/hypr.lua"
-  done
+  done < <(enabled_ids)
   check_lua_syntax luac "$WORK/hypr.lua"
 }
 
@@ -188,7 +192,8 @@ sync_awesome() {
     echo
     echo "local plugins = {}"
     echo
-    for id in $(enabled_ids); do
+    while IFS= read -r id; do
+      [[ -n "$id" ]] || continue
       [[ -f "$PLUGIN_DIR/$id/awesome.lua" ]] || continue
       echo "-- plugin: $id"
       echo "plugins[#plugins + 1] = { id = \"$id\", run = function(left_widgets, right_widgets, pl, c, s, once)"
@@ -196,7 +201,7 @@ sync_awesome() {
       echo
       echo "end }"
       echo
-    done
+    done < <(enabled_ids)
     cat <<'LUA'
 local shared, reported = {}, {}
 
@@ -276,7 +281,8 @@ owned_bin_link() {
 sync_bin() {
   local id f base
   local -A incoming=()
-  for id in $(enabled_ids); do
+  while IFS= read -r id; do
+    [[ -n "$id" ]] || continue
     for f in "$PLUGIN_DIR/$id/bin"/*; do
       [[ -f "$f" ]] || continue
       base="$(basename "$f")"
@@ -286,7 +292,7 @@ sync_bin() {
         owned_bin_link "$BIN_DIR/$base" || die "refusing to replace unrelated command $BIN_DIR/$base"
       fi
     done
-  done
+  done < <(enabled_ids)
   for f in "$BIN_DIR"/*; do
     base="$(basename "$f")"
     if owned_bin_link "$f" && [[ -z "${incoming[$base]:-}" ]]; then
@@ -294,7 +300,8 @@ sync_bin() {
       PAYLOADS+=("-")
     fi
   done
-  for id in $(enabled_ids); do
+  while IFS= read -r id; do
+    [[ -n "$id" ]] || continue
     for f in "$PLUGIN_DIR/$id/bin"/*; do
       [[ -f "$f" ]] || continue
       base="$(basename "$f")"
@@ -302,7 +309,7 @@ sync_bin() {
       DESTINATIONS+=("$BIN_DIR/$base")
       PAYLOADS+=("$WORK/bin/$base")
     done
-  done
+  done < <(enabled_ids)
 }
 
 # Stage beside each destination so publication is an atomic rename even when
@@ -357,7 +364,7 @@ begin_mutation() {
   trap 'exit 143' TERM
   # The template is shared by all users of this checkout, not just this home.
   exec 9>"$PLUGIN_DIR/.pluginctl.lock"
-  flock -x 9
+  flock -x -w 60 9 || die "timed out waiting for pluginctl lock"
   load_state
 }
 

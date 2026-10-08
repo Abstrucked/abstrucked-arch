@@ -41,7 +41,7 @@ Open admin console"
 ──────────
 $peer_lines"
 
-choice="$(rofi -dmenu -i -p "Tailscale" <<<"$menu")"
+choice="$(rofi -dmenu -i -p "Tailscale" <<<"$menu")" || exit 0
 [[ -n "$choice" ]] || exit 0
 
 case "$choice" in
