@@ -4,7 +4,7 @@
 # themectl-greeter-sync (install/lightdm-greeter.sh) reads this directory as
 # root when the greeter starts, so a theme switch shows at the next login.
 set -euo pipefail
-stage="$HOME/.local/state/themes/greeter"
+stage="${XDG_STATE_HOME:-$HOME/.local/state}/themes/greeter"
 mkdir -p "$stage"
 printf '%s\n' "$THEME_BG" >"$stage/bg.new"
 mv -f "$stage/bg.new" "$stage/bg"

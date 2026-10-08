@@ -5,7 +5,8 @@ set -euo pipefail
 
 SELF="$(readlink -f "${BASH_SOURCE[0]}")"
 THEME_DIR="$(dirname "$SELF")"
-STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/themes"
+STATE_HOME="${XDG_STATE_HOME:-$HOME/.local/state}"
+STATE_DIR="$STATE_HOME/themes"
 BACKUP_DIR="${DOTFILES_BACKUP_ROOT:-$HOME/.dotfiles-backups}/themes"
 DEFAULT_PALETTE="mocha-peach"
 DEFAULT_LAYOUT="powerarrow"
@@ -206,11 +207,15 @@ each_target() {
   while IFS= read -r line; do
     [[ -z "${line//[[:space:]]/}" || "$line" =~ ^[[:space:]]*# ]] && continue
     IFS='|' read -r template dest reload <<<"$line"
-    template="$(echo "$template" | xargs)"
-    dest="$(echo "$dest" | xargs)"
-    reload="$(echo "$reload" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
-    dest="${dest/#\~/$HOME}"
-    reload="${reload//\~/$HOME}"
+    template="${template#"${template%%[![:space:]]*}"}"
+    template="${template%"${template##*[![:space:]]}"}"
+    dest="${dest#"${dest%%[![:space:]]*}"}"
+    dest="${dest%"${dest##*[![:space:]]}"}"
+    reload="${reload#"${reload%%[![:space:]]*}"}"
+    reload="${reload%"${reload##*[![:space:]]}"}"
+    dest="${dest/#\~/"$HOME"}"
+    dest="${dest//\$\{XDG_STATE_HOME\}/"$STATE_HOME"}"
+    reload="${reload//\~/"$HOME"}"
     "$fn" "$template" "$dest" "$reload"
   done <"$THEME_DIR/targets.conf"
 }

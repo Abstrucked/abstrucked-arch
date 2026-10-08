@@ -124,13 +124,23 @@ class GreeterSyncTests(unittest.TestCase):
         wallpaper = self.tmp / "wall.png"
         picker.write_text(f'#!/bin/sh\n[ "$2" = ultrawide ] && exit 0\necho {wallpaper}\n')
         picker.chmod(0o755)
-        env = dict(os.environ, HOME=str(home), THEME_DIR=str(themes), THEME_BG="#abcdef")
+        state_home = self.tmp / "custom state root"
+        env = dict(os.environ, HOME=str(home), XDG_STATE_HOME=str(state_home),
+                   THEME_DIR=str(themes), THEME_BG="#abcdef")
         subprocess.run([str(HOOK)], env=env, check=True, timeout=10)
-        stage = home / ".local/state/themes/greeter"
+        stage = state_home / "themes/greeter"
         self.assertEqual((stage / "bg").read_text(), "#abcdef\n")
         self.assertEqual(os.readlink(stage / "wide"), str(wallpaper))
         self.assertEqual(os.readlink(stage / "internal"), str(wallpaper))
         self.assertFalse((stage / "ultrawide").exists())
+
+    def test_installer_emits_the_same_selected_state_stage(self):
+        installer = (ROOT / "install/lightdm-greeter.sh").read_text()
+        self.assertIn('STATE_HOME="${XDG_STATE_HOME:-$HOME/.local/state}"', installer)
+        self.assertIn('"$STATE_HOME/themes/greeter"', installer)
+        self.assertIn('[[ "$STATE_HOME" == /* ]]', installer)
+        self.assertIn("$'\\n'", installer)
+        self.assertIn("$'\\r'", installer)
 
 
 if __name__ == "__main__":

@@ -96,6 +96,9 @@ class ThemeTests(unittest.TestCase):
         shutil.copytree(ROOT / "themes", self.themes,
                         ignore=shutil.ignore_patterns("out", ".generations", ".apply.lock", "waybar-config.jsonc.tpl"))
         shutil.copytree(ROOT / "plugins", self.root / "plugins")
+        if (ROOT / "scripts/config_syntax.py").exists():
+            (self.root / "scripts").mkdir()
+            shutil.copy(ROOT / "scripts/config_syntax.py", self.root / "scripts/config_syntax.py")
         self.home = self.root / "home"
         self.home.mkdir()
         commands = self.root / "bin"
@@ -141,6 +144,122 @@ class ThemeTests(unittest.TestCase):
         self.assertEqual(os.readlink(target), link)
         self.assertNotEqual(target.read_text(), previous)
         self.assertEqual(target.resolve(), (self.themes / "out/alacritty.toml").resolve())
+
+    def test_greeter_target_and_hook_share_custom_state_root(self):
+        state_home = self.root / "state root & with spaces"
+        self.env["XDG_STATE_HOME"] = str(state_home)
+        self.run_tool("themectl", "set", "--colors", "nord")
+        css = state_home / "themes/greeter/gtk.css"
+        self.assertTrue(css.is_symlink())
+        self.assertEqual(css.resolve(), (self.themes / "out/lightdm-gtk-greeter.css").resolve())
+        stage = state_home / "themes/greeter"
+        self.assertEqual((stage / "bg").read_text().strip(), "#2e3440")
+
+    def test_target_fields_trim_whitespace_without_unquoting(self):
+        destination = self.home / '"literal destination path"'
+        (self.themes / "targets.conf").write_text(
+            f'alacritty.toml | {destination} |\n')
+        self.run_tool("themectl", "set", "--colors", "nord")
+        self.assertTrue(destination.is_symlink())
+        self.assertEqual(destination.resolve(), (self.themes / "out/alacritty.toml").resolve())
+
+    def test_rnmui_theme_is_safe_toml_string_on_update_and_append(self):
+        hostile = 'quo"te \\ backslash & | /\n$(touch SHOULD_NOT_RUN)'
+        config_home = self.root / "custom config home"
+        config = config_home / "rnmui/config.toml"
+        config.parent.mkdir(parents=True)
+        config.write_text('other = "preserve"\ntheme = "old"\n')
+        config.chmod(0o640)
+        env = dict(self.env, XDG_CONFIG_HOME=str(config_home), THEME_RNMUI=hostile)
+        result = subprocess.run([str(self.themes / "hooks/rnmui.sh")], env=env,
+                                capture_output=True, text=True, timeout=10)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(tomllib.loads(config.read_text()), {"other": "preserve", "theme": hostile})
+        self.assertEqual(config.stat().st_mode & 0o777, 0o640)
+        self.assertFalse((self.home / "SHOULD_NOT_RUN").exists())
+
+        nested = '[other]\ntheme = "nested value"\nvalue = "preserve"\n'
+        config.write_text(nested)
+        subprocess.run([str(self.themes / "hooks/rnmui.sh")], env=env, check=True, timeout=10)
+        self.assertEqual(tomllib.loads(config.read_text()),
+                         {"other": {"theme": "nested value", "value": "preserve"},
+                          "theme": hostile})
+
+    def test_rnmui_follows_config_symlink_and_preserves_target_mode(self):
+        target = self.root / "real-rnmui.toml"
+        target.write_text('"theme" = "old"\n')
+        target.chmod(0o640)
+        config_home = self.root / "symlink config home"
+        conf = config_home / "rnmui/config.toml"
+        conf.parent.mkdir(parents=True)
+        conf.symlink_to(target)
+        env = dict(self.env, XDG_CONFIG_HOME=str(config_home), THEME_RNMUI='new "theme"')
+        subprocess.run([str(self.themes / "hooks/rnmui.sh")], env=env, check=True, timeout=10)
+        self.assertTrue(conf.is_symlink())
+        self.assertEqual(tomllib.loads(target.read_text()), {"theme": 'new "theme"'})
+        self.assertEqual(target.stat().st_mode & 0o777, 0o640)
+
+    def test_rnmui_refuses_invalid_toml_without_truncating_source(self):
+        config = self.home / ".config/rnmui/config.toml"
+        config.parent.mkdir(parents=True)
+        invalid = b'theme = "old"\n[broken\n'
+        config.write_bytes(invalid)
+        env = dict(self.env, THEME_RNMUI="new")
+        result = subprocess.run([str(self.themes / "hooks/rnmui.sh")], env=env,
+                                capture_output=True, text=True, timeout=10)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("invalid TOML", result.stderr)
+        self.assertEqual(config.read_bytes(), invalid)
+
+    def test_rnmui_failed_atomic_replace_keeps_original_and_cleans_stage(self):
+        config = self.home / ".config/rnmui/config.toml"
+        config.parent.mkdir(parents=True)
+        original = b'theme = "old"\n'
+        config.write_bytes(original)
+        blocker = self.root / "replace-blocker"
+        blocker.mkdir()
+        (blocker / "sitecustomize.py").write_text(
+            "import os\ndef fail_replace(*args, **kwargs):\n"
+            "    raise OSError('injected replace failure')\nos.replace = fail_replace\n")
+        env = dict(self.env, THEME_RNMUI="new", PYTHONPATH=str(blocker))
+        result = subprocess.run([str(self.themes / "hooks/rnmui.sh")], env=env,
+                                capture_output=True, text=True, timeout=10)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("could not publish config", result.stderr)
+        self.assertEqual(config.read_bytes(), original)
+        self.assertEqual(list(config.parent.glob(".config.toml.*")), [])
+
+    def test_non_executable_hook_is_reported_and_later_hook_runs(self):
+        self.desktop_stubs("", stall=False)
+        nonexec = self.themes / "hooks/00-nonexec.sh"
+        nonexec.write_text("#!/bin/bash\nexit 0\n")
+        nonexec.chmod(0o644)
+        later = self.themes / "hooks/zz-later.sh"
+        later.write_text('#!/bin/bash\nprintf ran > "$HOME/later-hook"\n')
+        later.chmod(0o755)
+        result = self.run_tool("themectl", "set", "--colors", "nord")
+        self.assertIn("hook 00-nonexec.sh is not executable; skipping", result.stderr)
+        self.assertEqual((self.home / "later-hook").read_text(), "ran")
+
+    def test_failed_reload_output_is_logged_and_later_reload_runs(self):
+        first = self.root / "bin/first-reload"
+        first.write_text('#!/bin/bash\necho deliberate-reload-error >&2\nexit 7\n')
+        first.chmod(0o755)
+        second = self.root / "bin/second-reload"
+        second.write_text('#!/bin/bash\nprintf ran > "$HOME/later-reload"\n')
+        second.chmod(0o755)
+        (self.themes / "targets.conf").write_text(
+            f'alacritty.toml | - | {first}\nstarship.toml | - | {second}\n')
+        result = self.run_tool("themectl", "set", "--colors", "nord")
+        self.assertIn("reload alacritty.toml failed (exit 7); continuing", result.stderr)
+        self.assertIn("deliberate-reload-error", result.stderr)
+        self.assertEqual((self.home / "later-reload").read_text(), "ran")
+
+    def test_reload_process_checks_are_uid_scoped(self):
+        targets = (ROOT / "themes/targets.conf").read_text()
+        for line in targets.splitlines():
+            if "pgrep" in line or "pkill" in line:
+                self.assertIn('-u "$(id -u)"', line, line)
 
     def test_matching_palette_switch_preserves_layout_selection(self):
         state = self.home / ".local/state/awesome/theme-layout"
