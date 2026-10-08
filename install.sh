@@ -72,6 +72,7 @@ done
 # Show summary and confirm
 show_summary
 confirm_installation
+validate_component_privileges || exit 1
 
 # Count selected components for progress
 progress_init ${#SELECTED_COMPONENTS[@]}
@@ -121,16 +122,28 @@ for component in "${SELECTED_COMPONENTS[@]}"; do
             *) die "Invalid window manager: $WINDOW_MANAGER" ;;
         esac
 
+        packages=()
+        declare -A seen_packages=()
         for packages_file in "${package_files[@]}"; do
             validate_file "$packages_file" || die "Package manifest not found: $packages_file"
             validate_packages_file "$packages_file" || die "Invalid packages in $packages_file"
 
+            # Validate all manifests before installing the listed packages.
             while IFS= read -r pkg || [[ -n "$pkg" ]]; do
                 [[ -z "$pkg" || "$pkg" == \#* ]] && continue
-                log_info "Installing: $pkg"
-                execute yay -S --needed --noconfirm -- "$pkg" || die "Failed to install: $pkg"
+                if [[ -z "${seen_packages[$pkg]+x}" ]]; then
+                    seen_packages[$pkg]=1
+                    packages+=("$pkg")
+                fi
             done < "$packages_file"
         done
+
+        if [[ ${#packages[@]} -gt 0 ]]; then
+            for pkg in "${packages[@]}"; do
+                log_info "Installing: $pkg"
+            done
+            execute yay -S --needed --noconfirm -- "${packages[@]}" || die "Failed to install packages"
+        fi
         
         progress_complete "done"
         break
@@ -197,7 +210,7 @@ for component in "${SELECTED_COMPONENTS[@]}"; do
         if [[ "$DRY_RUN" != "true" ]]; then
             require_command stow "stow is required but not installed"
         fi
-        execute git -C "$DOTFILES_DIR" submodule update --init --recursive || die "Failed to update git submodules"
+        # No indexed gitlinks exist in this repository, so no update is needed.
         
         # Select exactly the requested window-manager package(s); shared
         # configuration is stowed for every mode.
@@ -362,18 +375,47 @@ done
 
 # Edit resolved targets so GNU sed does not replace Stow symlinks.
 if [[ -n "$SELECTED_SHELL" ]]; then
+    selected_shell_path=""
+    if selected_shell_path=$(command -v "$SELECTED_SHELL" 2>/dev/null); then
+        selected_shell_path=$(readlink -f -- "$selected_shell_path") || die "Could not resolve selected shell: $SELECTED_SHELL"
+    elif [[ "$DRY_RUN" == "true" ]]; then
+        # Planning only: a dry run must not require the selected shell to exist.
+        selected_shell_path="/usr/bin/$SELECTED_SHELL"
+    else
+        die "Selected shell is not installed: $SELECTED_SHELL"
+    fi
+
+    # Escape sed replacement metacharacters (using | as the delimiter).
+    escaped_shell_path=${selected_shell_path//\\/\\\\}
+    escaped_shell_path=${escaped_shell_path//&/\\&}
+    escaped_shell_path=${escaped_shell_path//|/\\|}
     for terminal_config in "$XDG_CONFIG_HOME/alacritty/alacritty.toml" "$XDG_CONFIG_HOME/tmux/tmux.conf"; do
         if [[ -f "$terminal_config" ]]; then
-            target=$(readlink -f -- "$terminal_config")
+            target=$(readlink -f -- "$terminal_config") || die "Could not resolve $terminal_config"
+            if [[ "$terminal_config" == *.toml ]]; then
+                setting_pattern='^[[:space:]]*shell[[:space:]]*=[[:space:]]*"[^"]*"'
+                current_settings=$(sed -nE 's/^[[:space:]]*shell[[:space:]]*=[[:space:]]*"([^"]*)".*/x\1/p' "$target")
+                replacement="shell = \"$escaped_shell_path\""
+            else
+                setting_pattern='^([[:space:]]*set(-option)?[[:space:]]+-[gs]+([[:space:]]+-[gs]+)*[[:space:]]+default-shell[[:space:]]+")([^"]*)(".*)$'
+                current_settings=$(sed -nE "s|$setting_pattern|x\\4|p" "$target")
+                replacement="\\1$escaped_shell_path\\5"
+            fi
+            [[ -n "$current_settings" ]] || continue
+            has_shell_change=false
+            while IFS= read -r current_setting; do
+                current_setting=${current_setting#x}
+                if [[ "$current_setting" != "$selected_shell_path" ]]; then
+                    has_shell_change=true
+                    break
+                fi
+            done <<< "$current_settings"
+            [[ "$has_shell_change" == "true" ]] || continue
             if [[ "$DRY_RUN" == "true" ]]; then
                 log_info "[dry-run] Would update $terminal_config to use $SELECTED_SHELL"
             else
                 backup_item "$target" || die "Failed to back up $terminal_config"
-                if [[ "$terminal_config" == *.toml ]]; then
-                    sed -i "s|shell = \"/bin/[^\"]*\"|shell = \"/bin/$SELECTED_SHELL\"|" "$target"
-                else
-                    sed -i -E "s|default-shell \"[^\"]*\"|default-shell \"/usr/bin/$SELECTED_SHELL\"|" "$target"
-                fi
+                sed -i -E "s|$setting_pattern|$replacement|" "$target"
             fi
         fi
     done

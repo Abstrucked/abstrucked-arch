@@ -10,6 +10,7 @@ _COMPONENTS_SH_LOADED=1
 # Source logging functions
 source "$(dirname "${BASH_SOURCE[0]}")/logging.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/args.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/validation.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/ui.sh"
 
 # Component definitions
@@ -175,8 +176,14 @@ set_login_shell() {
     fi
 
     log_info "Setting login shell to $shell_path"
-    # sudo avoids a password prompt that would hang a non-interactive run.
-    execute sudo chsh -s "$shell_path" "$user"
+    require_command sudo "sudo is required to change the login shell"
+    local sudo_args=()
+    if [[ "${NON_INTERACTIVE:-false}" == "true" ]]; then
+        validate_sudo_access || return 1
+        # Even if the credential cache expires, automation must not prompt.
+        sudo_args+=(-n)
+    fi
+    execute sudo "${sudo_args[@]}" chsh -s "$shell_path" "$user"
 }
 
 # Interactive shell selection.
@@ -408,6 +415,26 @@ validate_component_dependencies() {
         log_error "shell requires stow selected"
         return 1
     fi
+    return 0
+}
+
+# User-only selections and dry runs do not need sudo at all.
+validate_component_privileges() {
+    [[ "${DRY_RUN:-false}" != "true" ]] || return 0
+    local component step
+    for component in "${SELECTED_COMPONENTS[@]}"; do
+        step=$(get_component_step "$component")
+        case "$step" in
+            packages|yubikey|shell)
+                validate_sudo_access || return 1
+                return 0 ;;
+            yay)
+                if ! command_exists yay; then
+                    validate_sudo_access || return 1
+                    return 0
+                fi ;;
+        esac
+    done
     return 0
 }
 

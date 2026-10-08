@@ -34,8 +34,15 @@ with open(os.environ["COMMAND_LOG"], "a") as log:
 if name == os.environ.get("FAIL_COMMAND"):
     sys.exit(42)
 if name == "sudo" and len(sys.argv) > 1:
-    os.execvp(sys.argv[1], sys.argv[1:])
-if name not in ("git", "yay", "stow", "nvim", "chsh"):
+    args = sys.argv[1:]
+    if args in (["-n", "-v"], ["-v"]):
+        sys.exit(0)
+    if args[0] == "-n":
+        args = args[1:]
+    if args[0] == "-v":
+        sys.exit(0)
+    os.execvp(args[0], args)
+if name not in ("git", "yay", "stow", "nvim", "chsh", "zsh"):
     sys.exit("Unexpected external command: " + name)
 '''
 
@@ -86,7 +93,7 @@ class InstallerTests(unittest.TestCase):
             self.assertIsNotNone(executable, f"Required test utility: {name}")
             (self.bin / name).symlink_to(executable)
         for name in ("git", "yay", "stow", "nvim", "pacman", "curl", "sudo",
-                     "systemctl", "makepkg", "make", "wget", "chsh"):
+                      "systemctl", "makepkg", "make", "wget", "chsh", "zsh"):
             self.write(self.bin / name, f"#!{sys.executable}\n" + MOCK)
             (self.bin / name).chmod(0o755)
         self.write(self.bin / "getent", '#!/bin/bash\n'
@@ -154,9 +161,9 @@ class InstallerTests(unittest.TestCase):
         self.seed_home()
         before = snapshot(self.home)
         result = self.run_script(args=("--dry-run", "-y"), code=0)
-        for pkg in (self.repo / "packages.list").read_text().splitlines():
-            if pkg and not pkg.startswith("#"):
-                self.assertIn(f"[DRY RUN] yay -S --needed --noconfirm -- {pkg}", result.stdout)
+        packages = [pkg for pkg in (self.repo / "packages.list").read_text().splitlines()
+                    if pkg and not pkg.startswith("#")]
+        self.assertIn(f"[DRY RUN] yay -S --needed --noconfirm -- {' '.join(packages)}", result.stdout)
         self.assertIn(f"[DRY RUN] stow --no-folding -d {self.repo} -t {self.home} zsh", result.stdout)
         self.assertIn("Would link tmux config and theme", result.stdout)
         self.assertEqual(snapshot(self.home), before)
@@ -185,7 +192,6 @@ class InstallerTests(unittest.TestCase):
             args.extend(("--skip", component))
         self.run_script(args=args, code=0)
         self.assertEqual(self.calls(), [
-            ["git", "-C", str(self.repo), "submodule", "update", "--init", "--recursive"],
             *[["stow", "--no-folding", "-d", str(self.repo), "-t", str(self.home), pkg]
               for pkg in STOW_PACKAGES],
         ])
@@ -201,7 +207,6 @@ class InstallerTests(unittest.TestCase):
                 )
                 self.assertIn(f"Selected window manager", result.stdout)
                 self.assertEqual(self.calls(), [
-                    ["git", "-C", str(self.repo), "submodule", "update", "--init", "--recursive"],
                     *[["stow", "--no-folding", "-d", str(self.repo), "-t", str(self.home), pkg]
                       for pkg in expected_packages],
                 ])
@@ -218,14 +223,34 @@ class InstallerTests(unittest.TestCase):
                 self.run_script(args=("-y", "--only", "packages", "--wm", mode), code=0)
                 expected = []
                 for filename in files:
-                    expected.extend(
-                        line for line in (self.repo / filename).read_text().splitlines()
-                        if line and not line.startswith("#")
-                    )
+                    expected.extend(line for line in (self.repo / filename).read_text().splitlines()
+                                    if line and not line.startswith("#") and line not in expected)
                 self.assertEqual(
-                    [call[-1] for call in self.calls() if call[0] == "yay"],
-                    expected,
+                    [call for call in self.calls() if call[0] == "yay"],
+                    [["yay", "-S", "--needed", "--noconfirm", "--", *expected]],
                 )
+
+    def test_package_manifests_are_batched_and_deduplicated(self):
+        self.write(self.repo / "packages.list", "alpha\nshared\n")
+        self.write(self.repo / "packages-awesome.list", "shared\nbeta\n")
+        self.run_script(args=("-y", "--only", "packages", "--wm", "awesome"), code=0)
+        self.assertEqual([call for call in self.calls() if call[0] == "yay"], [
+            ["yay", "-S", "--needed", "--noconfirm", "--", "alpha", "shared", "beta"],
+        ])
+
+    def test_invalid_later_package_manifest_prevents_any_yay_call(self):
+        self.write(self.repo / "packages.list", "valid-first\n")
+        self.write(self.repo / "packages-hyprland.list", "--invalid\n")
+        result = self.run_script(args=("-y", "--only", "packages", "--wm", "hyprland"))
+        self.assert_failed(result)
+        self.assertIn("Invalid packages", result.stdout)
+        self.assertEqual([call for call in self.calls() if call[0] == "yay"], [])
+
+    def test_empty_package_manifests_skip_yay(self):
+        self.write(self.repo / "packages.list", "# base packages\n\n")
+        self.write(self.repo / "packages-awesome.list", "# comments only\n")
+        self.run_script(args=("-y", "--only", "packages", "--wm", "awesome"), code=0)
+        self.assertEqual([call for call in self.calls() if call[0] == "yay"], [])
 
     def test_invalid_window_manager_is_rejected_before_work(self):
         result = self.run_script(args=("-y", "--only", "stow", "--wm", "sway"))
@@ -284,6 +309,151 @@ set_login_shell "${1:-bash}"
             ["chsh", "-s", expected, "tester"],
         ])
 
+    def test_terminal_shell_noop_does_not_back_up_or_replace_symlink(self):
+        resolved = str((self.bin / "zsh").resolve())
+        source = self.repo / "terminal config/alacritty.toml"
+        self.write(source, f'shell = "{resolved}"\n# keep this comment\n')
+        target = self.home / ".config/alacritty/alacritty.toml"
+        target.parent.mkdir(parents=True)
+        target.symlink_to(source)
+        tmux_source = self.repo / "terminal config/tmux.conf"
+        self.write(tmux_source,
+                   f'  set -g default-shell "{resolved}" # keep comment\n'
+                   f'    set-option -g default-shell "{resolved}"\n'
+                   '# set -g default-shell "/ignored/zsh"\n')
+        tmux = self.home / ".config/tmux/tmux.conf"
+        tmux.parent.mkdir(parents=True)
+        tmux.symlink_to(tmux_source)
+        tmux_missing = self.home / ".config/tmux/no-shell.conf"
+        self.write(tmux_missing, "set -g status on\n# no shell setting\n")
+        before = snapshot(self.home)
+        self.run_script(args=("-y", "--only", "stow", "--only", "shell"), code=0)
+        self.assertEqual(snapshot(self.home), before)
+        self.assertTrue(target.is_symlink())
+        self.assertTrue(tmux.is_symlink())
+        self.assertFalse((self.home / ".dotfiles-backups").exists())
+
+        tmux_source.write_text("set -g status on\n# no configured shell\n")
+        before_missing_setting = snapshot(self.home)
+        self.run_script(args=("-y", "--only", "stow", "--only", "shell"), code=0)
+        self.assertEqual(snapshot(self.home), before_missing_setting)
+        self.assertFalse((self.home / ".dotfiles-backups").exists())
+
+    def test_terminal_shell_edit_backs_up_and_preserves_symlink_and_content(self):
+        shell_dir = self.home / "shell bins"
+        shell = shell_dir / "zsh"
+        self.write(shell, "#!/bin/sh\nexit 0\n")
+        shell.chmod(0o755)
+        self.env["PATH"] = f"{shell_dir}:{self.bin}"
+        resolved = str(shell.resolve())
+        source = self.repo / "terminal config/alacritty.toml"
+        self.write(source, 'shell = "/old/zsh"\n[window]\nopacity = 0.9\n')
+        target = self.home / ".config/alacritty/alacritty.toml"
+        target.parent.mkdir(parents=True)
+        target.symlink_to(source)
+        target_link = os.readlink(target)
+        target_inode = target.lstat().st_ino
+        tmux_source = self.repo / "terminal config/tmux.conf"
+        self.write(tmux_source,
+                   f'  set-option -g default-shell "{resolved}" # keep first match\n'
+                   '    set -g default-shell "/old/zsh" # preserve this comment\n'
+                   '    set -sg default-shell "/old/bash"\n'
+                   '    set -s -g default-shell "/old/ksh"\n'
+                   '  # set -g default-shell "/commented/out"\n'
+                   'set -g status on\n')
+        tmux = self.home / ".config/tmux/tmux.conf"
+        tmux.parent.mkdir(parents=True)
+        tmux.symlink_to(tmux_source)
+        tmux_link = os.readlink(tmux)
+        tmux_inode = tmux.lstat().st_ino
+
+        self.run_script(args=("-y", "--only", "stow", "--only", "shell"), code=0)
+
+        self.assertTrue(target.is_symlink())
+        self.assertEqual(os.readlink(target), target_link)
+        self.assertEqual(target.lstat().st_ino, target_inode)
+        self.assertEqual(source.read_text(),
+                         f'shell = "{resolved}"\n[window]\nopacity = 0.9\n')
+        self.assertTrue(tmux.is_symlink())
+        self.assertEqual(os.readlink(tmux), tmux_link)
+        self.assertEqual(tmux.lstat().st_ino, tmux_inode)
+        self.assertEqual(tmux_source.read_text(),
+                         f'  set-option -g default-shell "{resolved}" # keep first match\n'
+                         f'    set -g default-shell "{resolved}" # preserve this comment\n'
+                         f'    set -sg default-shell "{resolved}"\n'
+                         f'    set -s -g default-shell "{resolved}"\n'
+                         '  # set -g default-shell "/commented/out"\n'
+                         'set -g status on\n')
+        backups = list((self.home / ".dotfiles-backups").rglob("alacritty.toml"))
+        self.assertEqual(len(backups), 1)
+        self.assertEqual(backups[0].read_text(), 'shell = "/old/zsh"\n[window]\nopacity = 0.9\n')
+        tmux_backups = list((self.home / ".dotfiles-backups").rglob("tmux.conf"))
+        self.assertEqual(len(tmux_backups), 1)
+        self.assertIn('set -g default-shell "/old/zsh" # preserve this comment',
+                      tmux_backups[0].read_text())
+
+    def test_terminal_shell_backup_failure_prevents_symlink_target_edits(self):
+        shell_dir = self.home / "shell bins"
+        shell = shell_dir / "zsh"
+        self.write(shell, "#!/bin/sh\nexit 0\n")
+        shell.chmod(0o755)
+        self.env["PATH"] = f"{shell_dir}:{self.bin}"
+        self.env["FAIL_COMMAND"] = "cp"
+        (self.bin / "cp").unlink()
+        self.write(self.bin / "cp", f"#!{sys.executable}\n" + MOCK)
+        (self.bin / "cp").chmod(0o755)
+        resolved = str(shell.resolve())
+
+        source = self.repo / "terminal config/alacritty.toml"
+        original = f'shell = "/old/zsh"\n# preserve\n'
+        self.write(source, original)
+        target = self.home / ".config/alacritty/alacritty.toml"
+        target.parent.mkdir(parents=True)
+        target.symlink_to(source)
+        link_text = os.readlink(target)
+        link_inode = target.lstat().st_ino
+        source_inode = source.stat().st_ino
+
+        result = self.run_script(args=("-y", "--only", "stow", "--only", "shell"))
+
+        self.assert_failed(result)
+        self.assertIn("Failed to back up", result.stdout)
+        self.assertEqual(os.readlink(target), link_text)
+        self.assertEqual(target.lstat().st_ino, link_inode)
+        self.assertEqual(source.stat().st_ino, source_inode)
+        self.assertEqual(source.read_text(), original)
+
+    def test_empty_terminal_shell_settings_are_updated(self):
+        shell_dir = self.home / "shell bins"
+        shell = shell_dir / "zsh"
+        self.write(shell, "#!/bin/sh\nexit 0\n")
+        shell.chmod(0o755)
+        self.env["PATH"] = f"{shell_dir}:{self.bin}"
+        resolved = str(shell.resolve())
+
+        alacritty = self.home / ".config/alacritty/alacritty.toml"
+        self.write(alacritty, 'shell = ""\n')
+        tmux = self.home / ".config/tmux/tmux.conf"
+        self.write(tmux, f'set -g default-shell "{resolved}"\n'
+                   '  set-option -g default-shell "" # trailing empty value\n')
+
+        self.run_script(args=("-y", "--only", "stow", "--only", "shell"), code=0)
+
+        self.assertEqual(alacritty.read_text(), f'shell = "{resolved}"\n')
+        self.assertEqual(tmux.read_text(),
+                         f'set -g default-shell "{resolved}"\n'
+                         f'  set-option -g default-shell "{resolved}" # trailing empty value\n')
+
+    def test_terminal_shell_dry_run_does_not_require_selected_shell(self):
+        config = self.home / ".config/alacritty/alacritty.toml"
+        self.write(config, 'shell = "/old/zsh"\n')
+        before = snapshot(self.home)
+        (self.bin / "zsh").unlink()
+        result = self.run_script(args=("--dry-run", "-y", "--only", "stow", "--only", "shell"), code=0)
+        self.assertIn("Would update", result.stdout)
+        self.assertEqual(snapshot(self.home), before)
+        self.assertEqual(self.calls(), [])
+
     def test_login_shell_is_left_alone_when_already_current(self):
         self.env["ACCOUNT_SHELL"] = str((self.bin / "bash").resolve())
         self.env["SHELL"] = "/usr/bin/zsh"
@@ -324,15 +494,22 @@ set_login_shell "${1:-bash}"
         result = self.run_script(args=("-y", "--only", "stow", "--skip", "shell"))
         self.assert_failed(result)
         self.assertIn("Failed to stow awesome", result.stdout)
-        self.assertEqual([call[0] for call in self.calls()], ["git", "stow"])
+        self.assertEqual([call[0] for call in self.calls()], ["stow"])
         self.assertEqual(snapshot(self.home), before)
 
     def test_package_failure_is_fatal(self):
         self.env["FAIL_COMMAND"] = "yay"
         result = self.run_script(args=("-y", "--only", "packages", "--only", "stow"))
         self.assert_failed(result)
-        self.assertIn("Failed to install: stow", result.stdout)
-        self.assertEqual(self.calls(), [["yay", "-S", "--needed", "--noconfirm", "--", "stow"]])
+        self.assertIn("Failed to install packages", result.stdout)
+        packages = []
+        for filename in ("packages.list", "packages-awesome.list"):
+            packages.extend(line for line in (self.repo / filename).read_text().splitlines()
+                            if line and not line.startswith("#") and line not in packages)
+        self.assertEqual(self.calls(), [
+            ["sudo", "-n", "-v"],
+            ["yay", "-S", "--needed", "--noconfirm", "--", *packages],
+        ])
         self.assertEqual(snapshot(self.home), {})
 
     def test_invalid_package_without_final_newline_is_rejected(self):
@@ -340,7 +517,7 @@ set_login_shell "${1:-bash}"
         result = self.run_script(args=("-y", "--only", "packages"))
         self.assert_failed(result)
         self.assertIn("Invalid packages", result.stdout)
-        self.assertEqual(self.calls(), [])
+        self.assertEqual(self.calls(), [["sudo", "-n", "-v"]])
 
     def test_base_stow_failure_preserves_selected_shell_rc(self):
         self.env["FAIL_COMMAND"] = "stow"
