@@ -77,7 +77,7 @@ print_usage() {
   echo "  $0 --force-sensitive     # Copy everything including sensitive files"
 }
 
-parse_args() {
+bootstrap_parse_args() {
   while [[ $# -gt 0 ]]; do
     case $1 in
     --dry-run)
@@ -595,7 +595,7 @@ main() {
   print_header
 
   if [[ $# -gt 0 ]]; then
-    parse_args "$@"
+    bootstrap_parse_args "$@"
   fi
 
   if [[ "$DRY_RUN" == "true" ]]; then
