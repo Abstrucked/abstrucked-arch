@@ -18,6 +18,8 @@ VENDORED = (
     "scripts/.local/lib/python",
     "scripts/.local/bin/git-filter-repo",
 )
+# Inner suffix -> shell dialect for templates such as env.sh.tpl.
+TEMPLATE_DIALECTS = {".sh": "sh", ".bash": "bash", ".zsh": "zsh"}
 
 
 def main():
@@ -37,9 +39,10 @@ def main():
         if name.startswith(VENDORED) or path.is_symlink() or not path.is_file():
             continue
         with path.open("rb") as stream:
-            first = stream.readline(4096).decode(errors="replace").strip()
+            head = stream.read(4096).decode(errors="replace").splitlines()
+        first = head[0].strip() if head else ""
         command = None
-        if path.suffix == ".py":
+        if path.suffix == ".py" or (first.startswith("#!") and "python" in first):
             counts["python"] += 1
             try:
                 ast.parse(path.read_text(), filename=name)
@@ -49,7 +52,21 @@ def main():
         elif path.suffix == ".lua":
             counts["lua"] += 1
             command = ["luac", "-p", name]
-        elif (first.startswith("#!") and "zsh" in first) or path.suffix == ".zsh":
+        elif path.suffix == ".tpl":
+            # Shell templates declare their dialect in a shebang (possibly after
+            # template header comments) or in the suffix before .tpl (env.sh.tpl).
+            shebang = next((line.strip() for line in head[:8] if line.strip().startswith("#!")), "")
+            dialect = ("zsh" if "zsh" in shebang
+                       else "sh" if shebang.endswith(("/sh", " sh"))
+                       else "bash" if "bash" in shebang
+                       else TEMPLATE_DIALECTS.get(Path(path.stem).suffix))
+            if dialect:
+                counts["zsh" if dialect == "zsh" else "shell"] += 1
+                # Syntax-check only: {{...}} template values make shellcheck
+                # unreliable (e.g. SC2034 on variables consumed when sourced).
+                command = [dialect, "-n", name]
+        elif ((first.startswith("#!") and "zsh" in first) or path.suffix == ".zsh"
+              or (path.parent.name == "completions" and path.name.startswith("_"))):
             counts["zsh"] += 1
             command = ["zsh", "-n", name]
         elif first.startswith("#!") and (first.endswith("/sh") or first.endswith(" sh")):
