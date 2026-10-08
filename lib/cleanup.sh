@@ -9,6 +9,7 @@ _CLEANUP_SH_LOADED=1
 
 # Source logging functions
 source "$(dirname "${BASH_SOURCE[0]}")/logging.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/backup-paths.sh"
 
 # Array to track created temp directories
 TEMP_DIRS=()
@@ -72,7 +73,18 @@ cleanup_temp_dirs() {
 # Backup a file or directory before modification
 backup_item() {
     local item=$1
-    local backup_dir=${2:-"$HOME/.dotfiles-backups"}
+    local backup_dir lexical_path source_path backup_root backup_path
+    backup_dir=$(dotfiles_resolve_backup_root "${2:-${DOTFILES_BACKUP_ROOT:-$HOME/.dotfiles-backups}}") || return 1
+
+    # cp -a copies the link itself, not its referent. Only a real directory can
+    # recursively include a new backup directory and grow without bound.
+    if [[ -d "$item" && ! -L "$item" ]]; then
+        source_path=$(realpath -e -- "$item") || return 1
+        if [[ "$backup_dir" == "$source_path" || "$backup_dir/" == "$source_path/"* ]]; then
+            log_error "Backup root must be outside the directory being backed up: $item"
+            return 1
+        fi
+    fi
 
     if [[ "${DRY_RUN:-false}" == "true" ]]; then
         log_info "[dry-run] Would back up $item"
@@ -90,9 +102,8 @@ backup_item() {
     }
 
     # Normalize dot segments without following symlinks, preserving the source name.
-    local lexical_path backup_root backup_path
     lexical_path=$(realpath -ms -- "$item") || return 1
-    backup_root=$(mktemp -d "$backup_dir/backup.XXXXXXXX") || {
+    backup_root=$(mktemp -d -- "$backup_dir/backup.XXXXXXXX") || {
         log_error "Failed to create unique backup directory: $backup_dir"
         return 1
     }

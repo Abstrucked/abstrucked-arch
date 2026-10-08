@@ -9,14 +9,9 @@ set -euo pipefail
 BOOTSTRAP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BOOTSTRAP_BACKUP_ROOT="${DOTFILES_BACKUP_ROOT:-$HOME/.dotfiles-backups}"
 
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-PURPLE='\033[0;35m'
-CYAN='\033[0;36m'
-NC='\033[0m' # No Color
+# Shared color constants and read-only path validation.
+source "$BOOTSTRAP_DIR/lib/logging.sh"
+source "$BOOTSTRAP_DIR/lib/backup-paths.sh"
 
 # Configuration mappings
 declare -A CONFIG_MAPPINGS=(
@@ -114,6 +109,8 @@ check_requirements() {
     exit 1
   fi
 
+  # Validate even in a dry run, before creating staging directories or changing
+  # imported items. Each replacement rechecks the root as well.
   validate_backup_root || exit 1
 
   # Check if ~/.config exists
@@ -214,22 +211,7 @@ validate_paths() {
 }
 
 validate_backup_root() {
-  local backup_root repository_root
-
-  if [[ "$BOOTSTRAP_BACKUP_ROOT" != /* ]]; then
-    echo "Error: DOTFILES_BACKUP_ROOT must be an absolute path" >&2
-    return 1
-  fi
-  if ! backup_root=$(realpath -m -- "$BOOTSTRAP_BACKUP_ROOT") ||
-    ! repository_root=$(realpath -e -- "$BOOTSTRAP_DIR"); then
-    echo "Error: cannot resolve backup or repository path" >&2
-    return 1
-  fi
-  if [[ "$backup_root" == "$repository_root" || "$backup_root/" == "$repository_root/"* ]]; then
-    echo "Error: backup root must be outside the dotfiles repository: $backup_root" >&2
-    return 1
-  fi
-  BOOTSTRAP_BACKUP_ROOT="$backup_root"
+  BOOTSTRAP_BACKUP_ROOT=$(dotfiles_resolve_backup_root "$BOOTSTRAP_BACKUP_ROOT")
 }
 
 reject_directory_symlinks() {
