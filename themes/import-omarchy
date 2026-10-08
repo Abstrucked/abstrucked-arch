@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Import a flat Omarchy colors.toml, validating before publishing a palette."""
 import argparse
-import json
 import os
 from pathlib import Path
 import re
@@ -9,6 +8,50 @@ import subprocess
 import sys
 import tempfile
 import tomllib
+
+
+LUA_KEYWORDS = {
+    "and", "break", "do", "else", "elseif", "end", "false", "for", "function", "if",
+    "in", "local", "nil", "not", "or", "repeat", "return", "then", "true", "until", "while",
+}
+
+
+def lua_string(value):
+    """Quote a Python string as a Lua string without changing its contents."""
+    escaped = []
+    named = {"\\": "\\\\", '"': '\\"', "\n": "\\n", "\r": "\\r", "\t": "\\t",
+             "\a": "\\a", "\b": "\\b", "\f": "\\f", "\v": "\\v"}
+    for character in value:
+        if character in named:
+            escaped.append(named[character])
+        elif ord(character) < 32 or ord(character) == 127:
+            escaped.append(f"\\{ord(character):03d}")
+        else:
+            escaped.append(character)
+    return '"' + "".join(escaped) + '"'
+
+
+def lua(value, depth=0):
+    """Serialize ordered dictionaries and strings using two-space Lua tables."""
+    if isinstance(value, dict):
+        lines = []
+        for key, item in value.items():
+            if not isinstance(key, str) or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", key) or key in LUA_KEYWORDS:
+                raise ValueError("invalid Lua table key")
+            lines.append("  " * (depth + 1) + f"{key} = {lua(item, depth + 1)},")
+        return "{\n" + "\n".join(lines) + "\n" + "  " * depth + "}"
+    if isinstance(value, str):
+        return lua_string(value)
+    raise ValueError("unsupported value for Lua serialization")
+
+
+def color(colors, key, fallback=None):
+    actual = key if key in colors or fallback is None else fallback
+    value = colors.get(actual)
+    if not isinstance(value, str) or not re.fullmatch(r"#[0-9a-fA-F]{6}", value):
+        relationship = f" (requested {key}; fallback {fallback})" if fallback else ""
+        raise ValueError(f"{actual} must be a #rrggbb color{relationship}")
+    return value
 
 
 def main():
@@ -30,12 +73,6 @@ def main():
     if mode not in ("dark", "light"):
         raise ValueError("mode must be dark or light")
 
-    def color(key, fallback=None):
-        value = colors.get(key, colors.get(fallback))
-        if not isinstance(value, str) or not re.fullmatch(r"#[0-9a-fA-F]{6}", value):
-            raise ValueError(f"{key} must be a #rrggbb color")
-        return value
-
     palette = {"name": name, "variant": mode}
     for role, key in {
         "bg": "background", "bg_alt": "dark_background", "bg_dark": "darker_background",
@@ -43,31 +80,29 @@ def main():
         "fg_subtle": "light_foreground", "muted": "muted", "accent": "accent",
         "selection": "selection",
     }.items():
-        palette[role] = color(key)
+        palette[role] = color(colors, key)
     hues = ("red", "yellow", "green", "cyan", "blue", "magenta")
-    palette.update({hue: color(hue) for hue in hues})
-    palette["orange"] = color("orange", "red")
+    palette.update({hue: color(colors, hue) for hue in hues})
+    palette["orange"] = color(colors, "orange", "red")
     palette["ansi"] = {
-        "normal": {"black": color("selection"), **{h: color(h) for h in hues},
-                   "white": color("light_foreground")},
-        "bright": {"black": color("muted"), **{h: color("bright_" + h, h) for h in hues},
-                   "white": color("bright_foreground")},
+        "normal": {"black": color(colors, "selection"), **{h: color(colors, h) for h in hues},
+                   "white": color(colors, "light_foreground")},
+        "bright": {"black": color(colors, "muted"), **{h: color(colors, "bright_" + h, h) for h in hues},
+                   "white": color(colors, "bright_foreground")},
     }
-
-    def lua(value):
-        if isinstance(value, dict):
-            return "{\n" + "\n".join(f"  {k} = {lua(v)}," for k, v in value.items()) + "\n}"
-        return json.dumps(value)  # Validated ASCII strings are valid Lua strings.
 
     # Stage beside the destination. Hard-link creation enforces no-clobber even
     # when two imports race for the same name.
     fd, temporary = tempfile.mkstemp(prefix=".import-", suffix=".lua", dir=output.parent)
     try:
-        with os.fdopen(fd, "w") as stream:
+        with os.fdopen(fd, "w", encoding="utf-8") as stream:
             stream.write("-- Imported from Omarchy; missing roles come from _defaults.lua.\nreturn " + lua(palette) + "\n")
-        for template in (theme_dir / "templates").glob("*.tpl"):
+        templates = sorted((theme_dir / "templates").glob("*.tpl"))
+        if not templates:
+            raise ValueError("no templates found to validate imported palette")
+        for template in templates:
             subprocess.run(["lua", str(theme_dir / "render.lua"), temporary, str(template)],
-                           check=True, stdout=subprocess.DEVNULL)
+                           check=True, stdout=subprocess.DEVNULL, timeout=20)
         os.chmod(temporary, 0o644)
         if args.force:
             os.replace(temporary, output)
@@ -81,6 +116,6 @@ def main():
 if __name__ == "__main__":
     try:
         main()
-    except (OSError, ValueError, subprocess.CalledProcessError) as error:
+    except (OSError, ValueError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
         print(f"import-omarchy: {error}", file=sys.stderr)
         sys.exit(1)
