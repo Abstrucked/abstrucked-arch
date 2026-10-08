@@ -1,5 +1,6 @@
 ^/\.local/share(/|$)
 ^/\.local/state(/|$)
 ^/\.local/lib(/|$)
-# The repository lint script (python3 -B scripts/check-syntax.py), not a dotfile.
+# Repository syntax tools, not dotfiles.
 ^/check-syntax\.py$
+^/config_syntax\.py$

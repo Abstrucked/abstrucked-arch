@@ -9,6 +9,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 CHECKER = ROOT / "scripts/check-syntax.py"
+CONFIG_SYNTAX = ROOT / "scripts/config_syntax.py"
 
 FAKE_TOOL = r"""#!/bin/sh
 tool=${0##*/}
@@ -41,6 +42,7 @@ class CheckSyntaxTests(unittest.TestCase):
         scripts = self.root / "scripts"
         scripts.mkdir()
         shutil.copy2(CHECKER, scripts / "check-syntax.py")
+        shutil.copy2(CONFIG_SYNTAX, scripts / "config_syntax.py")
         self.log = self.root / "calls.log"
         self.env = dict(os.environ, PATH=f"{self.bin}{os.pathsep}{os.environ['PATH']}",
                         CALL_LOG=str(self.log), FAIL_TOOLS="")
@@ -104,6 +106,38 @@ class CheckSyntaxTests(unittest.TestCase):
         self.assertNotIn("templates/env.sh.tpl", shellcheck[0])
         self.assertNotIn("templates/env.zsh.tpl", shellcheck[0])
         self.assertNotIn("templates/override.sh.tpl", shellcheck[0])
+
+    def test_first_party_data_syntax_and_waybar_fragments(self):
+        self.add_file("config/valid.json", '{"value": true}\n')
+        self.add_file("config/valid.yaml", "on: true\n")
+        self.add_file("config/valid.toml", "[section]\nvalue = 1\n")
+        self.add_file("plugins/sample/waybar-defs.jsonc", '"clock": {"format": "{{time}}"},\n')
+        result = self.run_checker()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("1 json", result.stdout)
+        self.assertIn("1 jsonc", result.stdout)
+        self.assertIn("1 toml", result.stdout)
+        self.assertIn("1 yaml", result.stdout)
+
+    def test_invalid_first_party_data_fails_and_skipped_inputs_stay_skipped(self):
+        self.add_file("config/bad.json", '{"value": }\n')
+        self.add_file("config/bad.yaml", "value: [\n")
+        self.add_file("config/bad.toml", "value = [\n")
+        self.add_file("scripts/.local/lib/python/config.json", "not json\n")
+        self.add_file("config/vendor-copy.toml", "bad = [\n")
+        (self.root / "config/.gitignore").write_text("vendor-copy.toml\n")
+        target = self.add_file("config/target.yml", "value: ok\n")
+        (self.root / "config/link.yml").symlink_to(target)
+        self.add_file("awesome/.config/awesome/lain/bad.json", "not json\n")
+        subprocess.run(["git", "-C", str(self.root), "add", "."], check=True)
+        result = self.run_checker()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("config/bad.json", result.stderr)
+        self.assertIn("config/bad.yaml", result.stderr)
+        self.assertIn("config/bad.toml", result.stderr)
+        self.assertNotIn("vendor-copy.toml", result.stderr)
+        self.assertNotIn("link.yml", result.stderr)
+        self.assertNotIn("lain/bad.json", result.stderr)
 
 
 if __name__ == "__main__":

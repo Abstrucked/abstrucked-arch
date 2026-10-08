@@ -5,6 +5,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+from config_syntax import ConfigSyntaxError, validate_file
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -31,7 +32,8 @@ def main():
     names = subprocess.check_output(
         ["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z"], cwd=ROOT,
     ).decode().split("\0")
-    counts = {"shell": 0, "zsh": 0, "lua": 0, "python": 0}
+    counts = {"shell": 0, "zsh": 0, "lua": 0, "python": 0,
+              "json": 0, "jsonc": 0, "toml": 0, "yaml": 0}
     shell_files = {"bash": [], "sh": []}
     failed = False
     for name in sorted(set(filter(None, names))):
@@ -42,7 +44,20 @@ def main():
             head = stream.read(4096).decode(errors="replace").splitlines()
         first = head[0].strip() if head else ""
         command = None
-        if path.suffix == ".py" or (first.startswith("#!") and "python" in first):
+        suffix = path.suffix.lower()
+        config_format = {".json": "json", ".jsonc": "jsonc", ".toml": "toml",
+                         ".yaml": "yaml", ".yml": "yaml"}.get(suffix)
+        if config_format:
+            counts[config_format] += 1
+            fragment = (path.name == "waybar-defs.jsonc" and
+                        len(path.relative_to(ROOT).parts) == 3 and
+                        path.relative_to(ROOT).parts[0] == "plugins")
+            try:
+                validate_file(path, format=config_format, fragment=fragment)
+            except ConfigSyntaxError as error:
+                print(error, file=sys.stderr)
+                failed = True
+        elif path.suffix == ".py" or (first.startswith("#!") and "python" in first):
             counts["python"] += 1
             try:
                 ast.parse(path.read_text(), filename=name)

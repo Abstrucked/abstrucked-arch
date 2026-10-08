@@ -73,9 +73,10 @@ class InstallIntegrationTests(unittest.TestCase):
                 self.assertEqual((home / ".config/gtk-3.0/bookmarks").read_text(),
                                  (home / "Downloads").as_uri() + "\n")
                 # The scripts package puts the API-key loader in ~, but its
-                # repository lint script must stay out of the home directory.
+                # repository syntax tools must stay out of the home directory.
                 self.assertTrue((home / "load-api-keys.sh").is_symlink())
                 self.assertFalse(os.path.lexists(home / "check-syntax.py"))
+                self.assertFalse(os.path.lexists(home / "config_syntax.py"))
                 self.assertEqual((repo / "themes/out/.theme-name").read_text(), "mocha-peach\n")
                 for path in ("alacritty/theme.toml", "hypr/lua/theme.lua", "waybar/config.jsonc",
                              "awesome/themes/powerarrow/colors.lua", "btop/themes/themectl.theme"):

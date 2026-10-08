@@ -30,6 +30,13 @@ Thumbs.db
 # Python bytecode from the test suite
 __pycache__/
 *.pyc
+.pytest_cache/
+
+# Local-only configuration and credentials
+.claude/settings.local.json
+secrets.json
+credentials.json
+*.token
 
 # Rendered by themes/themectl from templates/ and palettes/. These land inside
 # stowed package directories, so git would otherwise track a compositor's or a
@@ -55,6 +62,11 @@ plugins/.transaction.*
 
 # Written by display-detect from the connected outputs and wallpaper set.
 hyprland/.config/hypr/lock-backgrounds.conf
+
+# Generated theme output and synchronization state.
+themes/out
+themes/.generations/
+themes/.apply.lock
 
 # Stow links ~/.config/autostart to this folder when it did not exist, so apps
 # that add their own autostart entries write them here; keep only ours.
