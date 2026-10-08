@@ -34,7 +34,18 @@ case "${1:-}" in
 --icon)
     # Reads the active vendor from local settings, so it costs no request
     # against the rate-limited usage endpoints.
-    color="${2:?usage: ai-usage-text --icon '#rrggbb'}"
+    if [ "$#" -lt 2 ]; then
+        printf '%s\n' "usage: ai-usage-text --icon '#rrggbb'" >&2
+        exit 2
+    fi
+    color=$2
+    case "$color" in
+    \#[0123456789abcdefABCDEF][0123456789abcdefABCDEF][0123456789abcdefABCDEF][0123456789abcdefABCDEF][0123456789abcdefABCDEF][0123456789abcdefABCDEF]) ;;
+    *)
+        printf '%s\n' "usage: ai-usage-text --icon '#rrggbb'" >&2
+        exit 2
+        ;;
+    esac
     vendor="$(ai-usagebar settings show 2>/dev/null | jq -r '.primary // empty')" || vendor=''
     case "$vendor" in
     anthropic) logo=claude ;;
@@ -44,14 +55,16 @@ case "${1:-}" in
     esac
     cache="${XDG_CACHE_HOME:-$HOME/.cache}/ai-usagebar"
     out="$cache/$logo-${color#\#}.svg"
-    if [ ! -s "$out" ]; then
-        mkdir -p "$cache"
-        tmp="$(mktemp "$cache/.tmp.XXXXXXXX")"
-        trap 'rm -f "$tmp"' EXIT
-        sed -e "s/fill=\"black\"/fill=\"$color\"/g" -e "s/stroke=\"black\"/stroke=\"$color\"/g" "$ICONS/$logo.svg" >"$tmp"
+    mkdir -p "$cache"
+    tmp="$(mktemp "$cache/.tmp.XXXXXXXX")"
+    trap 'rm -f "$tmp"' 0
+    sed -e "s/fill=\"black\"/fill=\"$color\"/g" -e "s/stroke=\"black\"/stroke=\"$color\"/g" "$ICONS/$logo.svg" >"$tmp"
+    if cmp -s "$tmp" "$out"; then
+        rm -f "$tmp"
+    else
         mv -f "$tmp" "$out"
-        trap - EXIT
     fi
+    trap - 0
     printf '%s\n' "$out"
     exit 0
     ;;
