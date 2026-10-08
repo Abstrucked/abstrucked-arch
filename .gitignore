@@ -44,6 +44,7 @@ credentials.json
 alacritty/.config/alacritty/theme.toml
 awesome/.config/awesome/themes/powerarrow/colors.lua
 btop/.config/btop/themes/themectl.theme
+ghostty/.config/ghostty/theme
 ghossty/.config/ghostty/theme
 hyprland/.config/hypr/lua/theme.lua
 hyprland/.config/hypr/theme.conf

@@ -21,7 +21,7 @@ class InstallIntegrationTests(unittest.TestCase):
                 path.mkdir()
             prefixes = ("lib/", "themes/", "plugins/", "awesome/", "hyprland/",
                         "ssh/", "alacritty/", "btop/", "nvim/", "pcmanfm/", "scripts/",
-                        "ghossty/", "gnupg/", "xsession/", "picom/")
+                        "ghostty/", "gnupg/", "xsession/", "picom/")
             # Include new first-party inputs before staging, but no ignored
             # theme output, caches or state.
             names = subprocess.check_output(
@@ -42,6 +42,10 @@ class InstallIntegrationTests(unittest.TestCase):
                     dest.symlink_to(os.readlink(source))
                 else:
                     shutil.copy2(source, dest)
+
+            # Compatibility package alias keeps installs made from the old
+            # checkout valid while the canonical package is now ghostty.
+            (repo / "ghossty").symlink_to("ghostty", target_is_directory=True)
 
             for name in ("awk", "bash", "basename", "cat", "cp", "date", "dirname", "echo", "flock", "grep", "id",
                          "ln", "lua", "luac", "mkdir", "mktemp", "mv", "python3", "readlink", "realpath",

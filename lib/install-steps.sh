@@ -12,7 +12,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/validation.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/cleanup.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/args.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/components.sh"
-declare -agr COMMON_STOW_PACKAGES=(ssh alacritty btop nvim pcmanfm scripts ghossty gnupg xsession)
+declare -agr COMMON_STOW_PACKAGES=(ssh alacritty btop nvim pcmanfm scripts ghostty gnupg xsession)
 declare -gr P10K_THEME_PATH=/usr/share/zsh-theme-powerlevel10k/powerlevel10k.zsh-theme
 declare -gr DRY_RUN_SHELL_PATH_PREFIX=/usr/bin
 
@@ -107,6 +107,40 @@ validate_selected_shell_ready() {
     fi
 }
 
+# Recognize only links whose lexical destination names the old package. The
+# no-symlink-resolution mode matters because ghossty is now an alias to ghostty.
+ghostty_legacy_link_matches() {
+    local link=$1 expected=$2 target normalized
+    [[ -L "$link" ]] || return 1
+    target=$(readlink -- "$link") || return 1
+    # GNU Stow does not own absolute links, even when they name this checkout.
+    # Leave those intact for manual reconciliation instead of treating them as
+    # a legacy package installation we can automatically unstow.
+    [[ "$target" != /* ]] || return 1
+    target="$(dirname -- "$link")/$target"
+    normalized=$(realpath -ms -- "$target") || return 1
+    [[ "$normalized" == "$DOTFILES_DIR/ghossty/$expected" ]]
+}
+
+ghostty_legacy_links_exist() {
+    ghostty_legacy_link_matches "$HOME/.config" .config ||
+        ghostty_legacy_link_matches "$HOME/.config/ghostty" .config/ghostty ||
+        ghostty_legacy_link_matches "$HOME/.config/ghostty/config" .config/ghostty/config ||
+        ghostty_legacy_link_matches "$HOME/.config/ghostty/theme" .config/ghostty/theme
+}
+
+stow_config_package() {
+    local package=$1
+    if [[ "$package" == ghostty ]] && ghostty_legacy_links_exist; then
+        # One Stow invocation plans both actions and checks all conflicts before
+        # executing either. Separate invocations could strand the old links.
+        log_info "Migrating Stow-owned legacy ghossty links to ghostty..."
+        execute stow --no-folding -d "$DOTFILES_DIR" -t "$HOME" -D ghossty -S ghostty
+    else
+        execute stow --no-folding -d "$DOTFILES_DIR" -t "$HOME" "$package"
+    fi
+}
+
 install_stow() {
     progress_step "Setting up symlinks with GNU Stow"
     if [[ "$DRY_RUN" != true ]]; then require_command stow "stow is required but not installed"; fi
@@ -134,7 +168,7 @@ install_stow() {
                 fi
             fi
             # Never fold ~/.local into the checkout: apps write state there.
-            if ! execute stow --no-folding -d "$DOTFILES_DIR" -t "$HOME" "$package"; then
+            if ! stow_config_package "$package"; then
                 if [[ -n "$shell_backup" ]]; then
                     restore_backup "$shell_backup" "$target" || log_error "Restore failed; original config is at $shell_backup"
                 fi

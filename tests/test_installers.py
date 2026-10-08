@@ -17,7 +17,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 COMMON_STOW_PACKAGES = (
-    "ssh", "alacritty", "btop", "nvim", "pcmanfm", "scripts", "ghossty", "gnupg",
+    "ssh", "alacritty", "btop", "nvim", "pcmanfm", "scripts", "ghostty", "gnupg",
     "xsession",
 )
 STOW_PACKAGES = ("awesome", "picom", *COMMON_STOW_PACKAGES)
