@@ -1,0 +1,270 @@
+#!/usr/bin/env python3
+"""Capture one active display output without guessing from its resolution."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import re
+import secrets
+import shutil
+import subprocess
+import sys
+import tempfile
+from dataclasses import dataclass
+from datetime import datetime
+from pathlib import Path
+
+TIMEOUT = 10
+GEOMETRY_RE = re.compile(r"(?P<w>\d+)x(?P<h>\d+)(?P<x>[+-]\d+)(?P<y>[+-]\d+)")
+
+
+class ScreenshotError(Exception):
+    pass
+
+
+@dataclass(frozen=True)
+class Output:
+    name: str
+    x: int
+    y: int
+    width: int
+    height: int
+
+    @property
+    def geometry(self) -> str:
+        return f"{self.x},{self.y} {self.width}x{self.height}"
+
+
+def run(command: list[str]) -> subprocess.CompletedProcess[str]:
+    try:
+        result = subprocess.run(
+            command,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=TIMEOUT,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise ScreenshotError(f"{command[0]} timed out") from exc
+    except UnicodeError as exc:
+        raise ScreenshotError(f"{command[0]} returned non-text output") from exc
+    except OSError as exc:
+        raise ScreenshotError(f"cannot run {command[0]}: {exc.strerror or 'execution failed'}") from exc
+    if result.returncode:
+        raise ScreenshotError(f"{command[0]} failed")
+    return result
+
+
+def valid_int(value: object) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def parse_hyprland(raw: str) -> list[Output]:
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise ScreenshotError("hyprctl returned malformed JSON") from exc
+    if not isinstance(data, list):
+        raise ScreenshotError("hyprctl metadata must be a JSON array")
+    outputs = []
+    names = set()
+    for item in data:
+        if not isinstance(item, dict):
+            raise ScreenshotError("hyprctl metadata contains an invalid output")
+        name = item.get("name")
+        if not isinstance(name, str) or not name:
+            raise ScreenshotError("hyprctl metadata contains an output with an invalid name")
+        if name in names:
+            raise ScreenshotError("hyprctl metadata contains duplicate output names")
+        names.add(name)
+        if "disabled" in item and not isinstance(item["disabled"], bool):
+            raise ScreenshotError("hyprctl metadata contains an invalid disabled flag")
+        if item.get("disabled") is True:
+            continue
+        x, y, width, height = (item.get(key) for key in ("x", "y", "width", "height"))
+        if not all(valid_int(v) for v in (x, y, width, height)):
+            raise ScreenshotError("hyprctl metadata contains an output with invalid geometry")
+        if width <= 0 or height <= 0:
+            raise ScreenshotError("hyprctl metadata contains non-positive output dimensions")
+        outputs.append(Output(name, x, y, width, height))
+    return outputs
+
+
+def parse_wlr(raw: str) -> list[Output]:
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise ScreenshotError("wlr-randr returned malformed JSON") from exc
+    if not isinstance(data, list):
+        raise ScreenshotError("wlr-randr metadata must be a JSON array")
+    outputs = []
+    names = set()
+    for item in data:
+        if not isinstance(item, dict):
+            raise ScreenshotError("wlr-randr metadata contains an invalid output")
+        name = item.get("name")
+        enabled = item.get("enabled")
+        if not isinstance(name, str) or not name:
+            raise ScreenshotError("wlr-randr metadata contains an output with an invalid name")
+        if name in names:
+            raise ScreenshotError("wlr-randr metadata contains duplicate output names")
+        names.add(name)
+        if not isinstance(enabled, bool):
+            raise ScreenshotError("wlr-randr metadata contains an invalid enabled flag")
+        if not enabled:
+            continue
+        pos = item.get("position")
+        if not isinstance(pos, dict):
+            raise ScreenshotError("wlr-randr metadata contains invalid output position")
+        x, y = pos.get("x"), pos.get("y")
+        modes = item.get("modes")
+        if not isinstance(modes, list):
+            raise ScreenshotError("wlr-randr metadata contains invalid output modes")
+        current_modes = []
+        for mode in modes:
+            if not isinstance(mode, dict):
+                raise ScreenshotError("wlr-randr metadata contains an invalid mode")
+            if (
+                not valid_int(mode.get("width"))
+                or not valid_int(mode.get("height"))
+                or not isinstance(mode.get("preferred"), bool)
+                or not isinstance(mode.get("current"), bool)
+            ):
+                raise ScreenshotError("wlr-randr metadata contains an invalid mode or mode flag")
+            if mode["width"] <= 0 or mode["height"] <= 0:
+                raise ScreenshotError("wlr-randr metadata contains non-positive mode dimensions")
+            if mode["current"]:
+                current_modes.append(mode)
+        if len(current_modes) != 1:
+            raise ScreenshotError("wlr-randr metadata must contain exactly one current mode per enabled output")
+        width, height = current_modes[0]["width"], current_modes[0]["height"]
+        if not all(valid_int(v) for v in (x, y, width, height)):
+            raise ScreenshotError("wlr-randr metadata contains an output with invalid geometry")
+        if width <= 0 or height <= 0:
+            raise ScreenshotError("wlr-randr metadata contains non-positive output dimensions")
+        outputs.append(Output(name, x, y, width, height))
+    return outputs
+
+
+def active_outputs(wayland: bool) -> tuple[str, list[Output]]:
+    if wayland:
+        hyprctl = shutil.which("hyprctl")
+        wlr_randr = shutil.which("wlr-randr")
+        current_desktop = os.environ.get("XDG_CURRENT_DESKTOP", "")
+        is_hyprland = bool(os.environ.get("HYPRLAND_INSTANCE_SIGNATURE")) or any(
+            desktop.strip().lower() == "hyprland" for desktop in current_desktop.split(":")
+        )
+        if is_hyprland and hyprctl:
+            return "hyprland", parse_hyprland(run(["hyprctl", "monitors", "-j"]).stdout)
+        if wlr_randr:
+            return "wlr", parse_wlr(run(["wlr-randr", "--json"]).stdout)
+        if hyprctl:
+            return "hyprland", parse_hyprland(run(["hyprctl", "monitors", "-j"]).stdout)
+        raise ScreenshotError("Wayland output discovery requires hyprctl or wlr-randr")
+
+    if not shutil.which("xrandr"):
+        raise ScreenshotError("X11 output discovery requires xrandr")
+    raw = run(["xrandr", "--current"]).stdout
+    outputs = []
+    for line in raw.splitlines():
+        fields = line.split()
+        if len(fields) < 2 or fields[1] != "connected":
+            continue
+        geometry = next((GEOMETRY_RE.search(field) for field in fields[2:] if GEOMETRY_RE.fullmatch(field)), None)
+        if geometry:
+            width, height = int(geometry["w"]), int(geometry["h"])
+            if width <= 0 or height <= 0:
+                raise ScreenshotError("xrandr metadata contains non-positive output dimensions")
+            outputs.append(Output(fields[0], int(geometry["x"]), int(geometry["y"]), width, height))
+    return "x11", outputs
+
+
+def parse_override_geometry(value: str) -> Output:
+    match = re.fullmatch(r"([+-]?\d+),([+-]?\d+)\s+(\d+)x(\d+)", value)
+    if not match:
+        raise ScreenshotError("SCREENSHOT_GEOMETRY must be 'x,y WIDTHxHEIGHT'")
+    x, y, width, height = map(int, match.groups())
+    if width <= 0 or height <= 0:
+        raise ScreenshotError("SCREENSHOT_GEOMETRY width and height must be positive")
+    return Output("override", x, y, width, height)
+
+
+def select_output(slot: str, outputs: list[Output], override: str | None) -> Output:
+    if override is not None:
+        matches = [output for output in outputs if output.name == override]
+        if not matches:
+            raise ScreenshotError(f"requested output not found: {override}")
+        return matches[0]
+    ordered = sorted(outputs, key=lambda output: (output.x, output.y, output.name))
+    if not ordered:
+        raise ScreenshotError("no active outputs with usable geometry were found")
+    index = int(slot) - 1
+    return ordered[min(index, len(ordered) - 1)]
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        description="Capture a selected active output. Default ordering is left-to-right, then top-to-bottom.",
+        epilog=("Wayland uses grim with output-name selection; Hyprland is discovered with hyprctl, while "
+                "wlroots uses wlr-randr --json. X11 uses xrandr geometry and scrot. GNOME-specific output "
+                "discovery is not supported. SCREENSHOT_OUTPUT_N selects an output name; "
+                "SCREENSHOT_GEOMETRY_N overrides with 'x,y WIDTHxHEIGHT'; SCREENSHOT_DIR sets the destination."),
+    )
+    parser.add_argument("slot", choices=("1", "2"))
+    args = parser.parse_args()
+    slot = args.slot
+    try:
+        geometry_env = os.environ.get(f"SCREENSHOT_GEOMETRY_{slot}")
+        selection_env = os.environ.get(f"SCREENSHOT_OUTPUT_{slot}")
+        geometry_override = parse_override_geometry(geometry_env) if geometry_env is not None else None
+        wayland = os.environ.get("XDG_SESSION_TYPE") == "wayland" or bool(os.environ.get("WAYLAND_DISPLAY"))
+        backend = "wayland" if wayland else "x11"
+
+        output = None
+        discovery = None
+        if geometry_override is None:
+            discovery, outputs = active_outputs(wayland)
+            output = select_output(slot, outputs, selection_env)
+
+        capture_utility = "grim" if wayland else "scrot"
+        if not shutil.which(capture_utility):
+            raise ScreenshotError(f"{capture_utility} is required for {backend} screenshots")
+
+        directory_setting = os.environ.get("SCREENSHOT_DIR", str(Path.home() / "screenshots"))
+        if not directory_setting:
+            raise ScreenshotError("SCREENSHOT_DIR must not be empty")
+        screenshot_dir = Path(directory_setting).expanduser()
+        screenshot_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+        if not screenshot_dir.is_dir():
+            raise ScreenshotError("screenshot destination is not a directory")
+
+        with tempfile.TemporaryDirectory(prefix=".screenshot-", dir=screenshot_dir) as staging:
+            staged_file = Path(staging) / "capture.png"
+            if wayland:
+                if geometry_override is not None:
+                    command = ["grim", "-g", geometry_override.geometry, str(staged_file)]
+                else:
+                    assert output is not None and discovery is not None
+                    command = ["grim", "-o", output.name, str(staged_file)]
+            else:
+                selected = geometry_override or output
+                assert selected is not None
+                command = ["scrot", "-a", f"{selected.x},{selected.y},{selected.width},{selected.height}", str(staged_file)]
+            run(command)
+            if not staged_file.is_file() or staged_file.stat().st_size == 0:
+                raise ScreenshotError(f"{capture_utility} succeeded without creating a non-empty image")
+            staged_file.chmod(0o600)
+            timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+            published = screenshot_dir / f"{timestamp}-slot{slot}-{secrets.token_hex(6)}.png"
+            os.link(staged_file, published)
+        print(published)
+        return 0
+    except (ScreenshotError, OSError) as exc:
+        print(f"screenshot: {exc}", file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
