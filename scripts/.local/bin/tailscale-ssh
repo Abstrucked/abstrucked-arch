@@ -1,7 +1,27 @@
 #!/bin/bash
-# Customize these for your setup
-HOSTNAME="${1:-your-hostname}"
-tailscale ssh "$HOSTNAME" \
+set -euo pipefail
+
+if [[ $# -eq 1 && "${1:-}" == "--help" ]]; then
+  printf 'Usage: %s HOST\n       TAILSCALE_SSH_HOST may provide HOST when omitted.\n' "${0##*/}"
+  exit 0
+fi
+
+if [[ $# -gt 1 ]]; then
+  printf 'Usage: %s HOST (or set TAILSCALE_SSH_HOST)\n' "${0##*/}" >&2
+  exit 2
+fi
+
+if [[ $# -eq 1 ]]; then
+  HOST=$1
+else
+  HOST=${TAILSCALE_SSH_HOST:-}
+fi
+if [[ -z "$HOST" || "$HOST" == -* ]]; then
+  printf 'Usage: %s HOST (or set TAILSCALE_SSH_HOST)\n' "${0##*/}" >&2
+  exit 2
+fi
+
+exec tailscale ssh "$HOST" \
   -L 3000:localhost:3000 \
   -L 3001:localhost:3001 \
   -L 5900:localhost:5900 \
