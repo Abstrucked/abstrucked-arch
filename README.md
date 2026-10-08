@@ -102,12 +102,13 @@ Shared packages are in `packages.list`; WM-specific packages are in `packages-aw
 
 Dry runs do not install packages, download installers, copy configurations, create backups, or sync plugins. They are previews, not proof that a real installation will succeed. Unattended yay installation requires usable cached sudo credentials (`sudo -v` beforehand).
 
-Backups use unique directories so repeated operations do not overwrite earlier backups. Shared installer, bootstrap, and LazyVim backups live outside the repository under `~/.dotfiles-backups/`. Stow conflicts stop installation for manual reconciliation without deleting unrelated configurations. Earlier successful steps are not automatically rolled back.
+Backups use unique temporary directories so repeated operations do not overwrite earlier backups. Shared installer and bootstrap backups use `~/.dotfiles-backups/`; LazyVim uses an external temporary backup directory. A failed LazyVim replacement attempts to restore the previous configuration; if recovery fails, the helper reports the retained backup or quarantine path. Stow conflicts stop installation for manual reconciliation without deleting unrelated configurations. Earlier successful steps are not automatically rolled back.
 
-Run the isolated regression suite with `python3 -B -m unittest discover -s tests -v`. It uses temporary homes and copied scripts with mocked install commands, not your real home or package manager.
+Run the regression suite with `python3 -B -m pytest tests`. It uses temporary homes and mocked install commands, not your real home or package manager.
 
-Run `python3 -B scripts/check-syntax.py` for first-party ShellCheck and shell,
-Zsh, Lua and Python syntax validation (requires ShellCheck, Bash, Zsh and Lua).
+Run `python3 -B scripts/check-syntax.py` for first-party shell, Zsh, Lua,
+Python, and supported config syntax validation (requires ShellCheck, Bash, Zsh,
+Lua, Python 3.11+, and PyYAML for YAML files).
 CI runs both checks, including a real Stow/theme/plugin integration test in a
 temporary home. Validate Stow manually with `--simulate --verbose`, never
 `--adopt`: adoption moves existing user files into the repository.
@@ -305,7 +306,7 @@ host lacks `tmux-256color` terminfo, install it there before using nested tmux.
 
 ## 🚀 App Launchers
 
-Generate custom app launchers that automatically load API keys and run programs. Launchers are created in `~/.local/bin/` with corresponding aliases in `zsh/aliases.zsh`.
+Generate custom app launchers that automatically load API keys and run programs. Launchers are created in `~/.local/bin/` with corresponding aliases in the shell-specific files `zsh/.config/zsh/aliases.zsh` or `bash/.config/bash/aliases.sh`.
 
 ### Creating a Launcher
 Run the interactive script:
@@ -315,8 +316,8 @@ create-app-launcher
 - Enter the program name (e.g., `code` for VS Code).
 - Enter a category (e.g., `ai` for AI tools).
 - The script generates:
-  - A launcher script (e.g., `code-launcher`) that sources `~/load-api-keys.sh` and runs the program.
-  - An alias (e.g., `code-ai`) in `zsh/aliases.zsh`.
+  - A launcher script (e.g., `code-launcher`) that sources `$HOME/.local/bin/load-api-keys.sh` and runs the program.
+  - An alias (e.g., `code-ai`) in the selected shell's aliases file.
 
 ### Using Launchers
 - After creation, reload your shell: `source ~/.zshrc`
@@ -326,9 +327,9 @@ create-app-launcher
 - OpenCode uses `--standalone` so its server inherits the loaded keys. Neovim's Sidekick OpenCode tool uses the same launcher.
 
 ### Managing Launchers
-- Edit `zsh/aliases.zsh` to modify or remove aliases.
+- Edit the selected shell's aliases file to modify or remove aliases.
 - Delete launcher scripts from `~/.local/bin/` as needed.
-- For security, ensure `~/load-api-keys.sh` is properly configured (see below).
+- For security, ensure `$HOME/.local/bin/load-api-keys.sh` is properly configured (see below).
 
 ## 🏷️ Aliases Management
 
@@ -376,8 +377,8 @@ pass-insert-utility
 - Choose to copy to clipboard or insert into an active app (e.g., via xdotool).
 
 ### Integration with Launchers
-- Launchers source `~/load-api-keys.sh`, which can load pass-stored API keys.
-- Example: In `load-api-keys.sh`, add `export API_KEY=$(pass show api/key)`.
+- Launchers source `$HOME/.local/bin/load-api-keys.sh`, which can load pass-stored API keys.
+- Example: In `$HOME/.local/bin/load-api-keys.sh`, add `export API_KEY=$(pass show api/key)`.
 
 ### Tips
 - Password input is hidden, and generated passwords are stored without being printed.
@@ -387,62 +388,21 @@ pass-insert-utility
 
 ## 🏗️ Project Structure
 
-```
-dotfiles/
-├── themes/                  # Global theme system
-│   ├── theme.sh             # Theme selector and mappings
-│   ├── catppuccin-mocha.sh  # Mocha color definitions
-│   ├── catppuccin-latte.sh  # Latte color definitions
-│   ├── catppuccin-frappe.sh # Frappe color definitions
-│   └── catppuccin-macchiato.sh # Macchiato color definitions
-│   └── [future-theme].sh    # Add new theme files here
-├── backgrounds/             # Wallpaper collection
-├── tmux/                    # Tmux configuration
-├── awesome/                 # AwesomeWM configuration
-│   └── .config/awesome/
-│       ├── rc.lua
-│       ├── themes/
-│       ├── plugins/
-│       └── backgrounds/
-├── hyprland/                # Hyprland/Wayland configuration
-│   ├── .config/hypr/        # Lua config for 0.55+ and legacy fallback
-│   ├── .config/waybar/      # Status bar
-│   ├── .config/swaync/      # Notifications and control center
-│   └── .local/bin/          # Session and workflow helpers
-├── ssh/                     # SSH configuration
-├── alacritty/               # Alacritty terminal config
-├── btop/                    # System monitor config
-├── nvim/                    # Neovim config (LazyVim ready)
-├── picom/                   # Compositor config
-├── zsh/                     # Zsh shell config (Powerlevel10k)
-│   ├── .zshrc               # Main Zsh config (sources aliases.zsh)
-│   ├── .config/zsh/
-│   │   ├── .zshrc           # Zsh configuration
-│   │   ├── aliases.zsh      # Centralized aliases
-│   │   └── zsh-autocomplete/ # zsh-autocomplete plugin
-├── bash/                    # Bash shell config (Starship)
-│   ├── .bashrc              # Main Bash config entry point
-│   └── .config/bash/
-│       ├── bashrc           # Bash configuration
-│       └── aliases.sh       # Centralized aliases
-├── pcmanfm/                 # File manager config
-├── scripts/                 # Custom bash scripts
-│   └── .local/bin/
-│       ├── create-app-launcher  # Launcher generator
-│       ├── nvim-launcher        # Neovim launcher
-│       └── pass-insert-utility  # Pass helper
-├── ghossty/                 # Ghostty configuration
-│   └── .config/ghostty/
-│       └── config              # Ghostty configuration
-├── packages.list            # Shared package list
-├── packages-awesome.list    # AwesomeWM/X11 package list
-├── packages-hyprland.list   # Hyprland/Wayland package list
-├── install.sh               # Main installation script
-├── install-yay.sh           # Yay AUR helper installer
-├── install-lazyvim.sh       # LazyVim installer
-├── install-node-manager.sh  # Node.js version manager installer
-└── README.md
-```
+First-party configuration packages are organized for GNU Stow: `alacritty/`,
+`awesome/`, `bash/`, `btop/`, `ghossty/` (Ghostty; spelling retained for the
+existing package), `hyprland/`, `nvim/`, `pcmanfm/`, `picom/`, `ssh/`, and
+`zsh/`. Other main areas are:
+
+- `install.sh`, `install/`, `lib/`, and the root `install-*.sh` helpers —
+  installer, component helpers, and supporting libraries.
+- `config/tmux/` — tmux configuration (not a Stow package).
+- `scripts/.local/bin/` — user commands, including `themectl` and `pluginctl`.
+- `themes/` — palette/layout theme engine, templates, hooks, and previews;
+  see [themes/README.md](themes/README.md).
+- `plugins/` — optional AwesomeWM/Waybar/Hyprland integrations; see
+  [plugins/README.md](plugins/README.md).
+- `backgrounds/` — wallpapers and sets; `packages*.list` — package manifests;
+  `tests/` — isolated regression tests.
 
 ## 🔧 Configuration Files
 
@@ -489,7 +449,7 @@ special workspaces.
 - Add your scripts here and they'll be available in `~/.local/bin`
 
 ### Ghostty
-- `ghossty/.config/ghostty/config` - Ghostty configuration
+- `ghossty/.config/ghostty/config` - Ghostty configuration (the repository's existing package spelling)
 
 ## 📋 Manual Installation
 
@@ -554,10 +514,13 @@ If you prefer to install manually:
 Add executable scripts to `scripts/.local/bin/` and they'll be available system-wide.
 
 ### Themes and Wallpapers
-- **Theme files**: Shared Alacritty color definitions and AwesomeWM themes
-- Alacritty theme selector: `btop/.config/btop/themes/theme.sh`
-- AwesomeWM themes: `awesome/.config/awesome/themes/`
-- Hyprland configuration: `hyprland/.config/hypr/`
+- `themectl` selects an AwesomeWM desktop layout independently from a color
+  palette rendered to supported application configs. For example,
+  `themectl set mono --colors nord` selects the Mono layout with the Nord
+  palette; `themectl set --colors nord` changes only the palette. See
+  [themes/README.md](themes/README.md) for commands and supported targets.
+- Optional widgets and bindings are managed separately by `pluginctl`; see
+  [plugins/README.md](plugins/README.md).
 - Wallpapers: `backgrounds/` (linked to `~/.backgrounds`)
 - Monitors: `display-detect` lays out whatever is connected (ultrawide
   first, 16:9 to its right, a laptop panel alone or below) and picks each
@@ -566,39 +529,6 @@ Add executable scripts to `scripts/.local/bin/` and they'll be available system-
   unplugging a monitor re-applies it (Hyprland's monitor events; under
   Awesome, `display-detect watch` following udev), and `Super+P` does it by
   hand. See `backgrounds/sets/README.md`.
-
-#### Switching Themes
-The dotfiles include support for Catppuccin themes (Mocha, Latte, Frappe, Macchiato). The Alacritty installer uses `btop/.config/btop/themes/theme.sh` and the selected `THEME` value to generate `~/.config/alacritty/theme.toml`.
-
-1. Set the `THEME` environment variable (edit your shell config or export in shell):
-    ```bash
-    export THEME=catppuccin-latte  # Options: catppuccin-mocha, catppuccin-latte, catppuccin-frappe, catppuccin-macchiato, tokyo-night, [add more]
-    ```
-
-2. Re-run the installation script:
-    ```bash
-    ./install.sh
-    ```
-
-3. Restart your applications or reload your shell:
-    ```bash
-    # For zsh:
-    source ~/.zshrc
-    # For bash:
-    source ~/.bashrc
-
-    tmux source ~/.tmux.conf
-     # For Ghostty: Restart the application after changing its static config
-    ```
-
-This updates:
-- Alacritty colors (via generated `theme.toml`)
-- Tmux status bar colors when the tmux component is selected
-
-#### Adding New Themes
-1. Create a theme file under `btop/.config/btop/themes/`, following the existing `catppuccin-*.sh` variable definitions.
-2. Update `btop/.config/btop/themes/theme.sh` if the new theme needs selector mapping.
-3. Set `THEME=tokyo-night` and rerun `./install.sh --only theme` after adding the required color variables.
 
 ## 🔄 Updating
 
@@ -635,8 +565,8 @@ git pull
     # For bash:
     source ~/.bashrc
     # Check the aliases file for syntax errors:
-    # zsh: zsh/aliases.zsh
-    # bash: bash/aliases.sh
+    # zsh: zsh/.config/zsh/aliases.zsh
+    # bash: bash/.config/bash/aliases.sh
     ```
 
 5. **Pass issues**: If passwords don't insert:
@@ -645,7 +575,7 @@ git pull
     pass  # Test basic functionality
     ```
 
-6. **Theme not applying**: Check `THEME` and the selector at `btop/.config/btop/themes/theme.sh`, then rerun `./install.sh --only theme`.
+6. **Theme not applying**: Check `themectl current --colors` and `themectl current`, then run `themectl apply`. See [themes/README.md](themes/README.md) for theme troubleshooting.
 
 ### Getting Help
 
