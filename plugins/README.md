@@ -39,6 +39,12 @@ subcommands, and `enable` and `disable` complete the plugins each can act on.
   without taking the other plugins or the bar down with it.
 - `<id>/bin/*` - helper scripts, symlinked into `~/.local/bin/` when enabled.
 
+The ai-usagebar click helper opens its TUI with `${TERMINAL:-alacritty}` and
+passes `-e` followed by the TUI command and its arguments. `TERMINAL` is one
+executable name or path (quote paths containing spaces); it must support the
+common `-e` execute flag. Set a wrapper executable if terminal options are
+needed; inline option strings are not split or evaluated.
+
 A pure-waybar plugin is a no-op under Awesome (it has its own wibox bar, not
 waybar); a pure-`hypr.lua` plugin is a no-op under Awesome and vice versa. A
 widget meant to show up in both sessions needs both a `waybar.jsonc` and an
