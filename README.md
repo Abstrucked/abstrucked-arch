@@ -401,8 +401,8 @@ pass-insert-utility
 ## 🏗️ Project Structure
 
 First-party configuration packages are organized for GNU Stow: `alacritty/`,
-`awesome/`, `bash/`, `btop/`, `ghossty/` (Ghostty; spelling retained for the
-existing package), `hyprland/`, `nvim/`, `pcmanfm/`, `picom/`, `ssh/`, and
+`awesome/`, `bash/`, `btop/`, `ghostty/`, `hyprland/`, `nvim/`, `pcmanfm/`,
+`picom/`, `ssh/`, and
 `zsh/`. Other main areas are:
 
 - `install.sh`, `install/`, `lib/`, and the root `install-*.sh` helpers —
@@ -461,8 +461,65 @@ special workspaces.
 - `scripts/.local/bin/` - Custom executable scripts
 - Add your scripts here and they'll be available in `~/.local/bin`
 
+### Portable Helper Settings
+
+Stow `scripts` before using these helpers or reloading shells. Shared defaults
+preserve exported overrides; shell-specific alias files can still override
+the shared aliases.
+
+| Setting | Default / behavior |
+|---------|--------------------|
+| `DOTFILES_DEV_DIR` | `$HOME/_dev`; used by `dev`, the sessionizer, and tmux prefix-D. |
+| `DOTFILES_CONFIG_DIR` | `$XDG_CONFIG_HOME` (normally `$HOME/.config`); used by the sessionizer and tmux prefix-C. |
+| `BALENA_ETCHER` | `balenaEtcher.appImage` on `PATH`; one executable name or path, not an inline option string. |
+| `TAILSCALE_SSH_HOST` | No default; `tailscale-ssh HOST` or `_omen HOST` takes precedence. |
+| `SCREENSHOT_DIR` | `$HOME/screenshots`; images are uniquely named and private (mode `0600`). |
+| `SCREENSHOT_OUTPUT_1`, `SCREENSHOT_OUTPUT_2` | Select connected output names for `screenshot_1` / `screenshot_2` (`scrot1` / `scrot2`). |
+| `SCREENSHOT_GEOMETRY_1`, `SCREENSHOT_GEOMETRY_2` | Explicit `x,y WIDTHxHEIGHT` rectangles, taking precedence over output discovery. |
+
+Without screenshot overrides, active outputs are ordered left-to-right, then
+top-to-bottom; both shortcuts use the same output on a single-monitor machine.
+X11 uses `xrandr --current` and `scrot`. Wayland uses `grim -o` so output scaling
+and rotation are handled by the capture tool, with discovery via `hyprctl` in
+Hyprland or `wlr-randr --json` on compatible wlroots compositors. GNOME-specific
+discovery is not supported. Discovery failures stop rather than capturing the
+whole desktop. Project selection needs `fzf`; passing a directory directly to
+`tmux-sessionizer` does not.
+Export custom project paths before starting tmux, or update the environment of
+an already running tmux session before using the shortcuts.
+
+`batt`, `balanced`, and `perf` retain their command names but delegate to
+`power-mode`, which defaults to `powerprofilesctl` (`power-profiles-daemon`, now
+in the shared package list). A working service and the requested profile are
+required; unsupported profiles fail without recording a successful switch.
+The helper does not enable services or replace another power-policy manager.
+Use only one such manager at a time. Widget state follows `XDG_STATE_HOME` and
+is updated only after the backend succeeds.
+
+Raw Ryzen controls are no longer applied implicitly. To opt in, install
+`ryzenadj`, set `POWER_MODE_BACKEND=ryzenadj`, and provide the corresponding
+`POWER_MODE_RYZEN_BATTERY_SAVE`, `POWER_MODE_RYZEN_BALANCED`, or
+`POWER_MODE_RYZEN_PERFORMANCE` as `STAPM_mW,FAST_mW,SLOW_mW,TEMP_C`. There are no
+built-in limits; positive-integer validation is **not** a hardware-safety check.
+Use only settings verified for your machine. Run `power-mode --help` for details.
+
 ### Ghostty
-- `ghossty/.config/ghostty/config` - Ghostty configuration (the repository's existing package spelling)
+- `ghostty/.config/ghostty/config` - Ghostty configuration.
+- `ghossty -> ghostty` is a compatibility alias, not a second package to install.
+  Existing folded or file-level Stow links keep working after the rename.
+  The installer's Stow step migrates recognized legacy links with one combined
+  Stow transaction, so a reported conflict leaves the old links intact.
+  Absolute or unrelated user-created links are not automatically replaced;
+  reconcile any reported conflicts manually.
+
+To preview migration of Ghostty alone from the checkout root:
+
+```bash
+stow --simulate --verbose --no-folding -d "$PWD" -t "$HOME" -D ghossty -S ghostty
+```
+
+Resolve conflicts first; remove `--simulate` only when ready to apply. Never use
+`--adopt` for this migration.
 
 ## 📋 Manual Installation
 
