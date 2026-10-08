@@ -63,7 +63,7 @@ These flags belong to `install.sh`; standalone helpers support only their own op
 | `--quiet`, `-q` | Suppress non-error logging. |
 | `--help`, `-h` | Show usage. |
 
-Supported steps: `yay`, `packages`, `node`, `yubikey`, `stow`, `shell`, `theme`, `backgrounds`, `tmux`, and `lazyvim`. Unknown steps and a step listed in both `--only` and `--skip` are rejected. Filters also apply to interactive selections.
+Run `./install.sh --help` for the available steps and descriptions, generated from `lib/component-registry.sh`. Unknown steps and a step listed in both `--only` and `--skip` are rejected. Filters also apply to interactive selections. Selected steps run in the registry's execution order, not the order of your `--only` arguments.
 
 ```bash
 # Preview selected components without prompts
@@ -102,7 +102,7 @@ Shared packages are in `packages.list`; WM-specific packages are in `packages-aw
 
 Dry runs do not install packages, download installers, copy configurations, create backups, or sync plugins. They are previews, not proof that a real installation will succeed. Unattended yay installation requires usable cached sudo credentials (`sudo -v` beforehand).
 
-Backups use unique temporary directories so repeated operations do not overwrite earlier backups. Shared installer and bootstrap backups use `~/.dotfiles-backups/`; LazyVim uses an external temporary backup directory. A failed LazyVim replacement attempts to restore the previous configuration; if recovery fails, the helper reports the retained backup or quarantine path. Stow conflicts stop installation for manual reconciliation without deleting unrelated configurations. Earlier successful steps are not automatically rolled back.
+Backups use unique temporary directories so repeated operations do not overwrite earlier backups. Shared installer and bootstrap backups use `${DOTFILES_BACKUP_ROOT:-$HOME/.dotfiles-backups}`. The root must be absolute and outside the checkout, including symlinked paths; a directory backup cannot store its backup inside itself. Validation also applies to dry runs. LazyVim uses a separate external temporary backup directory. A failed LazyVim replacement attempts to restore the previous configuration; if recovery fails, the helper reports the retained backup or quarantine path. Stow conflicts stop installation for manual reconciliation without deleting unrelated configurations. Earlier successful steps are not automatically rolled back.
 
 Run the regression suite with `python3 -B -m pytest tests`. It uses temporary homes and mocked install commands, not your real home or package manager.
 
@@ -131,6 +131,15 @@ You can switch shells at any time by re-running the installer:
 ```
 
 Select both "stow" and "shell", then choose your shell (GNU Stow must already be installed for this command). The installer stows the selected shell configuration and updates existing Alacritty and tmux shell settings through their resolved targets, preserving symlinks. It then sets your account's login shell with `sudo chsh`, skipping that when the shell is already current. It does not unstow the old shell. Stow also processes the base configuration packages, not just the shell.
+
+### Shared Environment Defaults
+
+Bash, Zsh, and Xsession source `scripts/.config/shell/env.sh`, installed as
+`~/.config/shell/env.sh` by the `scripts` Stow package. Stow `scripts` alongside
+shell or Xsession packages when installing them manually. The helper defaults
+`EDITOR` and `VISUAL` to Neovim and shares the Node, asdf, pnpm, and background
+paths, while preserving existing nonempty environment overrides. Managed PATH
+entries are prepended once, so reloading a shell does not accumulate duplicates.
 
 ### Customizing Starship (Bash)
 
@@ -333,10 +342,13 @@ create-app-launcher
 
 ## 🏷️ Aliases Management
 
-Aliases are centralized in the shell-specific aliases file for easy management and organization.
+Common aliases live in `scripts/.config/shell/aliases.sh`, installed under
+`~/.config/shell/`. The shell-specific alias files source it, then apply local
+additions and overrides. Generated launcher aliases remain shell-specific.
 
 ### Adding Aliases
-- Edit the aliases file directly:
+- Edit `scripts/.config/shell/aliases.sh` for aliases shared by both shells.
+- Add shell-specific aliases or overrides to:
   - **zsh**: `zsh/.config/zsh/aliases.zsh`
   - **bash**: `bash/.config/bash/aliases.sh`
 - Use `create-app-launcher` to auto-generate aliases for apps.
@@ -394,9 +406,10 @@ existing package), `hyprland/`, `nvim/`, `pcmanfm/`, `picom/`, `ssh/`, and
 `zsh/`. Other main areas are:
 
 - `install.sh`, `install/`, `lib/`, and the root `install-*.sh` helpers —
-  installer, component helpers, and supporting libraries.
+  installer, component registry, phase functions, and supporting libraries.
 - `config/tmux/` — tmux configuration (not a Stow package).
 - `scripts/.local/bin/` — user commands, including `themectl` and `pluginctl`.
+- `scripts/.config/shell/` — shared shell environment and aliases.
 - `themes/` — palette/layout theme engine, templates, hooks, and previews;
   see [themes/README.md](themes/README.md).
 - `plugins/` — optional AwesomeWM/Waybar/Hyprland integrations; see
