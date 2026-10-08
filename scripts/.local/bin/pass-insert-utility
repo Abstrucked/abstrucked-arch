@@ -170,6 +170,35 @@ transform_to_export_var() {
     echo "$1" | tr '[:lower:]' '[:upper:]' | tr ' ' '_'
 }
 
+# Keep generated shell identifiers and pass arguments inert when sourced later.
+validate_export_var() {
+    local export_var="$1"
+    if [[ ! "$export_var" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+        print_error "Invalid export variable name: $export_var"
+        return 1
+    fi
+}
+
+validate_pass_path() {
+    local pass_path="$1"
+    local component
+    local -a components
+
+    # A narrow allowlist prevents shell syntax, controls, and unsafe quoting.
+    if [[ ! "$pass_path" =~ ^[A-Za-z0-9_./\ -]+$ || "$pass_path" == /* || "$pass_path" == */ || "$pass_path" == *//* ]]; then
+        print_error "Invalid pass path: $pass_path"
+        return 1
+    fi
+
+    IFS='/' read -r -a components <<< "$pass_path"
+    for component in "${components[@]}"; do
+        if [[ -z "$component" || "$component" == . || "$component" == .. ]]; then
+            print_error "Invalid pass path component in: $pass_path"
+            return 1
+        fi
+    done
+}
+
 # Generate secure password
 generate_password() {
     if command_exists pwgen; then
@@ -195,6 +224,10 @@ append_export() {
     local export_var="$1"
     local pass_path="$2"
     local load_file="$HOME/load-api-keys.sh"
+    local quoted_path="'$pass_path'"
+
+    validate_export_var "$export_var"
+    validate_pass_path "$pass_path"
 
     # Create file if it doesn't exist
     if [[ ! -f "$load_file" ]]; then
@@ -204,14 +237,21 @@ append_export() {
         chmod +x "$load_file"
     fi
 
-    # Check if export already exists
-    if grep -q "export $export_var=" "$load_file"; then
+    # Match both the generated lookup and export, not merely another export
+    # with the same name. Keep the literal export form for loader detection.
+    if grep -Fq "pass show $quoted_path" "$load_file" && grep -Fq "export $export_var=\"\$value\"" "$load_file"; then
         print_warning "Export for $export_var already exists in $load_file"
         return
     fi
 
-    # Append export
-    echo "export $export_var=\$(pass $pass_path)" >> "$load_file"
+    # The quoted path has passed a restrictive allowlist and is a shell literal.
+    cat >> "$load_file" <<EOF
+if value="\$(pass show $quoted_path 2>/dev/null)" && [[ -n "\$value" ]]; then
+  export $export_var="\$value"
+else
+  echo "Warning: could not load $pass_path from pass; $export_var is unset." >&2
+fi
+EOF
     print_success "Added export to $load_file"
 }
 
@@ -249,6 +289,10 @@ do_insert() {
     # Create export variable name
     local export_var
     export_var=$(transform_to_export_var "$name")
+
+    # Reject unsafe inputs before storing anything in pass.
+    validate_export_var "$export_var"
+    validate_pass_path "$pass_path"
 
     print_info "Will create: $pass_path"
     print_info "Export var: $export_var"

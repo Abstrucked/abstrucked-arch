@@ -3,12 +3,14 @@
 # shellcheck source=../../../scripts/.config/shell/env.sh
 source "${XDG_CONFIG_HOME:-$HOME/.config}/shell/env.sh"
 
-# Starship prompt
-eval "$(starship init bash)"
-
 # Source custom aliases
 # shellcheck source=aliases.sh
 source "${XDG_CONFIG_HOME:-$HOME/.config}/bash/aliases.sh"
+
+# Prompt, keybindings, history, and completion are interactive-only.
+if [[ $- == *i* ]]; then
+  # Starship prompt
+  eval "$(starship init bash)"
 
 # Keybindings
 
@@ -70,3 +72,4 @@ for _completion in "${XDG_CONFIG_HOME:-$HOME/.config}"/bash/completions/*.bash; 
   [[ -r "$_completion" ]] && source "$_completion"
 done
 unset _completion
+fi

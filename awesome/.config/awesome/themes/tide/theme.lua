@@ -17,6 +17,32 @@ local run_shell = require("awesome-wm-widgets.run-shell-3.run-shell")
 local logout = require("awesome-wm-widgets.logout-widget.logout")
 local tag = tag
 local theme = {}
+
+-- Bound a stalled PipeWire query and allow a later refresh to retry.
+local function make_volume_poller(on_read)
+    local in_flight = false
+    local request_id = 0
+    return function()
+        if in_flight then return end
+        in_flight = true
+        request_id = request_id + 1
+        local current_request = request_id
+        local pid
+        local timeout = gears.timer({ timeout = 5, single_shot = true, callback = function()
+            if not in_flight or request_id ~= current_request then return end
+            if pid then awful.spawn({ "kill", "-KILL", tostring(pid) }) end
+            in_flight = false
+        end })
+        pid = awful.spawn.easy_async({ "wpctl", "get-volume", "@DEFAULT_AUDIO_SINK@" }, function(...)
+            if not in_flight or request_id ~= current_request then return end
+            in_flight = false
+            timeout:stop()
+            on_read(...)
+        end)
+        timeout:start()
+    end
+end
+-- End volume polling helper.
 local transparent = "#00000000"
 local line = style.mix(c.bg, c.fg, 0.12)
 local raised = style.mix(c.surface, c.fg, 0.06)
@@ -190,6 +216,12 @@ local function build_panel(s, on_toggle)
     local system = text("—")
     local disk = text("—")
     local battery = text("", theme.muted, theme.widget_font)
+    local poll_volume = make_volume_poller(function(stdout, _, _, code)
+        local value = code == 0 and tonumber(stdout:match("Volume:%s*([%d%.]+)"))
+        volume.value = value and value * 100 or 0
+        level.text = not value and "—" or stdout:find("[MUTED]", 1, true) and "off"
+            or string.format("%.0f%%", value * 100)
+    end)
 
     local content = wibox.widget({
         {
@@ -250,12 +282,7 @@ local function build_panel(s, on_toggle)
             battery.markup = string.format("<span foreground='%s'>Battery %d%% · %s</span>",
                 theme.muted, percent, gears.string.xml_escape(bat_now.status or ""))
         end
-        awful.spawn.easy_async({ "wpctl", "get-volume", "@DEFAULT_AUDIO_SINK@" }, function(stdout, _, _, code)
-            local value = code == 0 and tonumber(stdout:match("Volume:%s*([%d%.]+)"))
-            volume.value = value and value * 100 or 0
-            level.text = not value and "—" or stdout:find("[MUTED]", 1, true) and "off"
-                or string.format("%.0f%%", value * 100)
-        end)
+        poll_volume()
     end
     local timer = gears.timer({ timeout = 2, callback = refresh })
 

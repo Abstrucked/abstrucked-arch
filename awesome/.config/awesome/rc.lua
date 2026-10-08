@@ -93,14 +93,14 @@ awful.spawn.with_shell([=[
 	if xrdb -query | grep -q '^awesome\.started:[[:space:]]*true$'; then
 		exit 0
 	fi
-	printf 'awesome.started:true\n' | xrdb -merge
 	if command -v dex >/dev/null 2>&1; then
 		# dex's default search order is $XDG_CONFIG_HOME first, then XDG_CONFIG_DIRS,
 		# so user entries override or hide (Hidden=true) system ones.
-		dex --environment Awesome --autostart
+		dex --environment Awesome --autostart || exit $?
 	else
 		logger -t awesome 'dex is not installed; skipping XDG autostart entries'
 	fi
+	printf 'awesome.started:true\n' | xrdb -merge
 ]=])
 
 -- }}}

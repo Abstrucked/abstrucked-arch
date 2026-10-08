@@ -35,7 +35,7 @@ _p10k_theme_sync() {
   [[ -n $first ]] && (( $+functions[p10k] )) && p10k reload
 }
 _p10k_theme_sync
-precmd_functions+=(_p10k_theme_sync)
+(( ${precmd_functions[(Ie)_p10k_theme_sync]} )) || precmd_functions+=(_p10k_theme_sync)
 typeset -g POWERLEVEL9K_INSTANT_PROMPT=quiet
 
 # ═══════════════════════════════════════════════════════════════
@@ -69,7 +69,6 @@ setopt appendhistory
 # Completions
 # ═══════════════════════════════════════════════════════════════
 fpath=("${XDG_CONFIG_HOME}/zsh/completions" ${ASDF_DATA_DIR}/completions $fpath)
-autoload -Uz compinit && compinit
 
 # ═══════════════════════════════════════════════════════════════
 # Source Config Files

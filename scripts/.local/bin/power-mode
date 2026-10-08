@@ -13,6 +13,9 @@ POWER_MODE_RYZEN_PERFORMANCE to four comma-separated positive integers:
 STAPM_mW,FAST_mW,SLOW_mW,TEMP_C. There are no built-in hardware limits.
 Only use values verified safe for your own hardware; validation checks syntax,
 not hardware safety. State follows XDG_STATE_HOME, or ~/.local/state.
+When setup-ryzenadj-sudoers has installed its wrapper, the ryzenadj backend
+runs that wrapper instead of the raw binary; override the location with
+RYZENADJ_WRAPPER.
 EOF
 }
 
@@ -45,9 +48,19 @@ case "$backend" in
             printf 'power-mode: %s must specify STAPM_mW,FAST_mW,SLOW_mW,TEMP_C as positive integers (up to 9 digits each)\n' "$limits_var" >&2
             exit 2
         fi
-        command_args=(sudo -- ryzenadj
-            "--stapm-limit=${BASH_REMATCH[1]}" "--fast-limit=${BASH_REMATCH[2]}"
-            "--slow-limit=${BASH_REMATCH[3]}" "--tctl-temp=${BASH_REMATCH[4]}")
+        # setup-ryzenadj-sudoers installs a root-owned wrapper that accepts only
+        # these four options; sudoers grants a passwordless rule for that path, so
+        # calling it explicitly is what keeps raw ryzenadj subcommands unreachable.
+        ryzenadj_wrapper=${RYZENADJ_WRAPPER:-/usr/local/lib/ryzenadj-power-profile}
+        if [[ -x "$ryzenadj_wrapper" ]]; then
+            command_args=(sudo -- "$ryzenadj_wrapper"
+                "--stapm-limit=${BASH_REMATCH[1]}" "--fast-limit=${BASH_REMATCH[2]}"
+                "--slow-limit=${BASH_REMATCH[3]}" "--tctl-temp=${BASH_REMATCH[4]}")
+        else
+            command_args=(sudo -- ryzenadj
+                "--stapm-limit=${BASH_REMATCH[1]}" "--fast-limit=${BASH_REMATCH[2]}"
+                "--slow-limit=${BASH_REMATCH[3]}" "--tctl-temp=${BASH_REMATCH[4]}")
+        fi
         for dependency in sudo ryzenadj; do
             command -v "$dependency" >/dev/null 2>&1 || {
                 printf 'power-mode: %s is required by the selected backend\n' "$dependency" >&2

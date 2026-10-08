@@ -1,39 +1,85 @@
 #!/bin/bash
-# Setup passwordless sudo for ryzenadj
-# This allows the power mode widget to change CPU settings without prompting for password
+# Enable the power-mode widget to switch CPU power profiles without a password prompt.
 
 set -euo pipefail
 
-SUDOERS_FILE="/etc/sudoers.d/ryzenadj"
+readonly SUDOERS_FILE="/etc/sudoers.d/ryzenadj"
+# Kept off PATH: a wrapper in /usr/local/bin would shadow the real ryzenadj for
+# every user and could clobber a locally installed build.
+readonly WRAPPER_FILE="/usr/local/lib/ryzenadj-power-profile"
 USERNAME=$(whoami)
+readonly USERNAME
 
-echo "Setting up passwordless sudo for ryzenadj..."
-
-# Check if ryzenadj is installed
-if ! command -v ryzenadj &>/dev/null; then
-    echo "Error: ryzenadj is not installed"
-    echo "Install with: sudo pacman -S ryzenadj"
+if [[ -z "$USERNAME" || ! "$USERNAME" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+    printf '%s\n' 'Error: username is empty or contains sudoers-special characters' >&2
     exit 1
 fi
 
-# Create sudoers file
-echo "Creating $SUDOERS_FILE..."
-echo "$USERNAME ALL=(ALL) NOPASSWD: /usr/bin/ryzenadj" | sudo tee "$SUDOERS_FILE" > /dev/null
+if ! command -v ryzenadj >/dev/null 2>&1; then
+    printf '%s\n' 'Error: ryzenadj is not installed' >&2
+    printf '%s\n' 'Install with: sudo pacman -S ryzenadj' >&2
+    exit 1
+fi
 
-# Set proper permissions
-sudo chmod 440 "$SUDOERS_FILE"
-
-# Verify the syntax
-if sudo visudo -c -f "$SUDOERS_FILE"; then
-    echo "Sudoers file created successfully"
-    echo "Testing ryzenadj access..."
-    if sudo -n ryzenadj --info 2>/dev/null; then
-        echo "Success! ryzenadj can now be run without password"
-    else
-        echo "Warning: ryzenadj test failed, but sudoers file is valid"
+wrapper_tmp=$(mktemp)
+candidate_tmp=''
+cleanup() {
+    rm -f -- "$wrapper_tmp"
+    if [[ -n "$candidate_tmp" ]]; then
+        rm -f -- "$candidate_tmp"
     fi
-else
-    echo "Error: Invalid sudoers file"
-    sudo rm -f "$SUDOERS_FILE"
+}
+trap cleanup EXIT
+
+cat >"$wrapper_tmp" <<'WRAPPER'
+#!/bin/bash
+set -euo pipefail
+
+if [[ "$#" -ne 4 ]]; then
+    printf '%s\n' 'ryzenadj: expected four power-profile limits' >&2
+    exit 2
+fi
+
+for index in 1 2 3 4; do
+    case "$index" in
+        1) prefix='--stapm-limit=' ;;
+        2) prefix='--fast-limit=' ;;
+        3) prefix='--slow-limit=' ;;
+        4) prefix='--tctl-temp=' ;;
+    esac
+    argument=${!index}
+    value=${argument#"$prefix"}
+    if [[ "$argument" != "$prefix"* || ! "$value" =~ ^[1-9][0-9]{0,8}$ ]]; then
+        printf '%s\n' 'ryzenadj: invalid power-profile limit' >&2
+        exit 2
+    fi
+done
+
+exec /usr/bin/ryzenadj "$@"
+WRAPPER
+
+printf '%s\n' 'Installing restricted ryzenadj wrapper...'
+sudo install -m 0755 -o root -g root "$wrapper_tmp" "$WRAPPER_FILE"
+
+candidate_tmp=$(mktemp)
+printf '%s ALL=(ALL) NOPASSWD: %s\n' "$USERNAME" "$WRAPPER_FILE" >"$candidate_tmp"
+
+# Keep the candidate to a single literal policy line with a final newline.
+if grep -qE '[\$`]' "$candidate_tmp"; then
+    printf '%s\n' 'Error: generated sudoers content contains shell-expansion characters' >&2
     exit 1
 fi
+last_byte=$(tail -c 1 "$candidate_tmp" | od -An -t x1 | tr -d ' \n')
+if [[ "$last_byte" != '0a' ]]; then
+    printf '%s\n' 'Error: generated sudoers content has no trailing newline' >&2
+    exit 1
+fi
+
+printf '%s\n' 'Validating candidate sudoers file...'
+if ! sudo visudo -c -f "$candidate_tmp"; then
+    printf '%s\n' 'Error: Invalid sudoers file; existing policy was left unchanged' >&2
+    exit 1
+fi
+
+sudo install -m 0440 -o root -g root "$candidate_tmp" "$SUDOERS_FILE"
+printf '%s\n' 'Sudoers file created successfully'

@@ -145,7 +145,7 @@ install_stow() {
     progress_step "Setting up symlinks with GNU Stow"
     if [[ "$DRY_RUN" != true ]]; then require_command stow "stow is required but not installed"; fi
     local -a stow_packages=()
-    local package shell_backup target
+    local package shell_backup target restore_shell_backup="" restore_shell_target=""
     case "$WINDOW_MANAGER" in
         awesome) stow_packages+=(awesome picom) ;;
         both) stow_packages+=(awesome hyprland picom) ;;
@@ -163,7 +163,11 @@ install_stow() {
                 target="$HOME/.${SELECTED_SHELL}rc"
                 if [[ -f "$target" && ! -L "$target" ]]; then
                     backup_item "$target" || die "Could not back up $target"
-                    if [[ "$DRY_RUN" != true ]]; then shell_backup="${BACKUPS[-1]}"; fi
+                    if [[ "$DRY_RUN" != true ]]; then
+                        shell_backup="${BACKUPS[-1]}"
+                        restore_shell_backup="$shell_backup"
+                        restore_shell_target="$target"
+                    fi
                     execute rm -f -- "$target" || die "Could not remove $target"
                 fi
             fi
@@ -179,8 +183,18 @@ install_stow() {
         fi
     done
     # Generate plugin wiring first, then render colors so Stow links are usable.
-    execute "$DOTFILES_DIR/plugins/pluginctl" refresh || log_warn "pluginctl refresh failed; run it manually"
-    execute "$DOTFILES_DIR/themes/themectl" apply || log_warn "themectl apply failed; run it manually"
+    if ! execute "$DOTFILES_DIR/plugins/pluginctl" refresh; then
+        if [[ -n "$restore_shell_backup" ]]; then
+            restore_backup "$restore_shell_backup" "$restore_shell_target" || log_error "Restore failed; original config is at $restore_shell_backup"
+        fi
+        die "Failed to generate plugin wiring (pluginctl refresh); rerun the installer"
+    fi
+    if ! execute "$DOTFILES_DIR/themes/themectl" apply; then
+        if [[ -n "$restore_shell_backup" ]]; then
+            restore_backup "$restore_shell_backup" "$restore_shell_target" || log_error "Restore failed; original config is at $restore_shell_backup"
+        fi
+        die "Failed to generate theme colors (themectl apply); rerun the installer"
+    fi
     execute "$DOTFILES_DIR/scripts/.local/bin/gtk-bookmarks" || log_warn "gtk-bookmarks failed; run it manually"
     progress_complete "done"
 }

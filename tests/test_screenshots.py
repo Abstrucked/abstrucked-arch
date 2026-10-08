@@ -118,7 +118,9 @@ def test_hyprland_fractional_scale_rotated_output_uses_grim_name(rig):
     assert result.returncode == 0, result.stderr
     call = read_calls(rig)[0]
     assert "-o DP-1" in call
-    assert "-g" not in call
+    # Match the argument itself, not the output path, which lives in a random
+    # temporary directory whose name can contain "-g".
+    assert "-g" not in call.split()
 
 
 def test_wlr_randr_is_fallback_and_ignores_disabled_outputs(rig):

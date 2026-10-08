@@ -31,9 +31,15 @@ with log.open("a") as stream:
 
 if name == "sudo":
     # Never delegate to host sudo. Simulate sudo's exec using only this fixture.
-    if args[:1] != ["--"] or len(args) < 2 or args[1] != "ryzenadj":
+    if args[:1] != ["--"] or len(args) < 2:
         sys.exit(91)
-    target = str(Path(os.environ["FIXTURE_BIN"]) / "ryzenadj")
+    # Accept the raw binary and the restricted wrapper installed by
+    # setup-ryzenadj-sudoers, which re-execs ryzenadj.
+    target = args[1]
+    if target not in ("ryzenadj", os.environ.get("RYZENADJ_WRAPPER")):
+        sys.exit(91)
+    if target == "ryzenadj":
+        target = str(Path(os.environ["FIXTURE_BIN"]) / "ryzenadj")
     os.execv(target, [target, *args[2:]])
 elif name == "powerprofilesctl":
     if len(args) == 2 and args[0] == "set":
@@ -175,6 +181,51 @@ class PowerModeTests(unittest.TestCase):
                      "--slow-limit=32000", "--tctl-temp=85"],
                 ])
                 self.assertEqual(self.state_file.read_text(), mode + "\n")
+
+    def test_installed_wrapper_is_invoked_instead_of_raw_ryzenadj(self):
+        # A wrapper that rejects anything but the four bounded limits, mirroring
+        # what setup-ryzenadj-sudoers installs.
+        wrapper = self.bin / "ryzenadj-power-profile"
+        wrapper.write_text(
+            "#!/bin/bash\nset -eu\n"
+            '[ "$#" -ne 4 ] && exit 2\n'
+            'for argument in "$@"; do\n'
+            '  case "$argument" in\n'
+            '    --stapm-limit=*|--fast-limit=*|--slow-limit=*|--tctl-temp=*) ;;\n'
+            '    *) exit 2 ;;\n'
+            '  esac\n'
+            'done\n'
+            f'exec "{self.bin}/ryzenadj" "$@"\n'
+        )
+        wrapper.chmod(0o755)
+        env = {**self.env, "POWER_MODE_BACKEND": "ryzenadj",
+               "RYZENADJ_WRAPPER": str(wrapper),
+               "POWER_MODE_RYZEN_BALANCED": "25000,30000,32000,85"}
+        self.run_helper("balanced", env=env)
+
+        limits = ["--stapm-limit=25000", "--fast-limit=30000",
+                  "--slow-limit=32000", "--tctl-temp=85"]
+        calls = self.calls()
+        # sudo receives the wrapper path, never the unrestricted raw binary.
+        self.assertIn(["sudo", "--", str(wrapper), *limits], calls)
+        self.assertFalse([call for call in calls
+                          if call[:2] == ["sudo", "--"] and call[2] == "ryzenadj"], calls)
+        # The wrapper re-execs ryzenadj, so the limits still reach the backend.
+        self.assertIn(["ryzenadj", *limits], calls)
+        self.assertEqual(self.state_file.read_text(), "balanced\n")
+
+    def test_missing_wrapper_falls_back_to_raw_ryzenadj(self):
+        absent = self.root / "no-such-wrapper"
+        env = {**self.env, "POWER_MODE_BACKEND": "ryzenadj",
+               "RYZENADJ_WRAPPER": str(absent),
+               "POWER_MODE_RYZEN_BALANCED": "25000,30000,32000,85"}
+        self.run_helper("balanced", env=env)
+        self.assertEqual(self.calls(), [
+            ["sudo", "--", "ryzenadj", "--stapm-limit=25000", "--fast-limit=30000",
+             "--slow-limit=32000", "--tctl-temp=85"],
+            ["ryzenadj", "--stapm-limit=25000", "--fast-limit=30000",
+             "--slow-limit=32000", "--tctl-temp=85"],
+        ])
 
     def test_invalid_backend_is_rejected_before_state_or_commands(self):
         self.run_helper("balanced", env={**self.env, "POWER_MODE_BACKEND": "arbitrary"}, code=2)

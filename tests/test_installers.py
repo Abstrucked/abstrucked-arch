@@ -87,6 +87,11 @@ class InstallerTests(unittest.TestCase):
         self.write(self.repo / "config/tmux/theme.conf", "# tracked icon theme\n")
         self.write(self.repo / "themes/theme.sh", "# Not sourced during dry runs.\n")
         self.write(self.repo / "nvim/.config/nvim/init.lua", "-- managed fixture\n")
+        # install_stow requires plugin wiring and rendered colors, so a realistic
+        # checkout must ship the generators that produce them.
+        for name in ("plugins/pluginctl", "themes/themectl"):
+            self.write(self.repo / name, "#!/bin/sh\nexit 0\n")
+            (self.repo / name).chmod(0o755)
         (self.repo / "nvim/.config/nvim/lua").mkdir()
         for name in ("bash", "basename", "dirname", "date", "mkdir", "mktemp",
                      "cp", "mv", "rm", "rmdir", "ln", "readlink", "realpath",

@@ -13,10 +13,10 @@ waybar >/dev/null 2>&1 &
 swaync >/dev/null 2>&1 &
 hypridle >/dev/null 2>&1 &
 
-# Match Awesome's XDG autostart behavior without making optional entries fatal.
+# Use dex's default user-first XDG search order so user entries can override or
+# hide system entries (including when XDG_CONFIG_DIRS has multiple components).
 if command -v dex >/dev/null 2>&1; then
-    dex --environment Hyprland --autostart \
-        --search-paths "${XDG_CONFIG_DIRS:-/etc/xdg}/autostart:${XDG_CONFIG_HOME:-$HOME/.config}/autostart" || true
+    dex --environment Hyprland --autostart || true
 fi
 
 # Give hyprpaper a moment to expose its IPC socket, then give each output

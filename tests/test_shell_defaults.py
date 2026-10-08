@@ -116,7 +116,22 @@ class ShellDefaultsTests(unittest.TestCase):
                 self.assertIn("create-app=", aliases)
                 for alias_name in ALIASES:
                     self.assertIn(f"{alias_name}=", aliases)
-                self.assertIn(str(self.home / ".local/bin/nvim-launcher"), aliases)
+                # The literal HOME must not be baked in at definition time, so a
+                # HOME with spaces, "&" or glob characters still expands at
+                # invocation and survives to the executable as a single word.
+                self.assertNotIn(str(self.home), aliases)
+                if name in ("bash", "zsh"):
+                    launcher = self.home / ".local/bin/nvim-launcher"
+                    launcher.parent.mkdir(parents=True, exist_ok=True)
+                    launcher.write_text("#!/bin/sh\nprintf 'launched:%s\\n' \"$0\"\n")
+                    launcher.chmod(0o755)
+                    # eval re-parses, so aliases defined by the sourced file
+                    # become visible within the same -c command.
+                    run_alias = ("shopt -s expand_aliases; " if name == "bash" else "")
+                    run_alias += f'. "{wrapper}"; eval "nvim-ai somefile"'
+                    self.assertEqual(
+                        self.run_shell(shell, run_alias, custom_env).stdout.strip(),
+                        f"launched:{launcher}")
                 self.assertIn("custom-override", aliases)
 
     def test_real_stow_layout_has_helpers_only_under_config(self):
