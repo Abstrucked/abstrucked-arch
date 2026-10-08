@@ -14,6 +14,7 @@ if not ok or type(palette) ~= "table" or not palette.seg then
 		bg = "#1e1e2e",
 		fg = "#cdd6f4",
 		accent = "#fab387",
+		red = "#f38ba8",
 		surface = "#313244",
 		bg_dark = "#11111b",
 		muted = "#a6adc8",
@@ -245,7 +246,15 @@ package.preload["gears"] = function()
 		},
 		wallpaper = { maximized = function() end },
 		shape = { rounded_rect = function() end },
-		table = { join = function(...) return { ... } end },
+		table = {
+			join = function(...) return { ... } end,
+			crush = function(destination, source)
+				for key, value in pairs(source) do
+					destination[key] = value
+				end
+				return destination
+			end,
+		},
 	}
 end
 
@@ -262,9 +271,18 @@ package.preload["themes.colors"] = function()
 end
 
 local notifications, destroyed = {}, {}
+local critical_preset = { retained = "preset value" }
+local naughty_config = {
+	defaults = {},
+	presets = { critical = critical_preset },
+}
+local dbus_mapping = {
+	{ { appname = "tmux-agent", urgency = "\2" }, { timeout = 1 } },
+	{ { appname = "other-app" }, { timeout = 5 } },
+}
 package.preload["naughty"] = function()
 	return {
-		config = { defaults = {}, presets = {} },
+		config = naughty_config,
 		notify = function(args)
 			local notification = { args = args }
 			table.insert(notifications, notification)
@@ -274,6 +292,9 @@ package.preload["naughty"] = function()
 			table.insert(destroyed, notification)
 		end,
 	}
+end
+package.preload["naughty.dbus"] = function()
+	return { config = { mapping = dbus_mapping } }
 end
 
 -- Lain widgets run their settings callback once at creation, the
@@ -483,6 +504,38 @@ end
 screen = { primary = nil }
 
 local theme = dofile(theme_path)
+
+-- Notification setup updates the critical preset in place (D-Bus may
+-- already hold its reference) and replaces only the tmux-agent mapping.
+assert(type(palette.red) == "string" and palette.red ~= "",
+	"palette has a red color for tmux-agent alerts")
+assert(critical_preset == naughty_config.presets.critical,
+	"critical preset table identity")
+assert(critical_preset.retained == "preset value", "critical preset keeps other fields")
+assert(critical_preset.bg == theme.popup_bg and critical_preset.fg == theme.popup_fg,
+	"critical preset palette")
+assert(critical_preset.border_width == 0 and critical_preset.shape == theme.popup_shape,
+	"critical preset border and shape")
+assert(critical_preset.margin == theme.notification_margin
+	and critical_preset.position == "top_right" and critical_preset.timeout == 0,
+	"critical preset placement and timeout")
+assert(naughty_config.padding == dpi(8) and naughty_config.spacing == dpi(4),
+	"notification spacing")
+assert(naughty_config.defaults.position == "top_right"
+	and naughty_config.defaults.margin == theme.notification_margin,
+	"default notification placement")
+assert(#dbus_mapping == 2 and dbus_mapping[1][1].appname == "other-app",
+	"existing tmux-agent mapping is replaced")
+assert(dbus_mapping[2][1].appname == "tmux-agent"
+	and dbus_mapping[2][1].urgency == "\2", "tmux-agent mapping match")
+assert(dbus_mapping[2][2].bg == palette.red and dbus_mapping[2][2].fg == palette.bg,
+	"tmux-agent alert palette")
+assert(dbus_mapping[2][2].border_width == 0
+	and dbus_mapping[2][2].shape == theme.popup_shape,
+	"tmux-agent alert border and shape")
+assert(dbus_mapping[2][2].margin == theme.notification_margin
+	and dbus_mapping[2][2].position == "top_right"
+	and dbus_mapping[2][2].timeout == 30, "tmux-agent alert placement and timeout")
 
 -- Test helpers.
 local function find_all(root, predicate, results)
