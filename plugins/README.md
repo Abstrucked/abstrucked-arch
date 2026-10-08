@@ -8,9 +8,12 @@ being wired into it permanently.
 Stowed onto PATH from scripts/.local/bin; bash and zsh complete the
 subcommands, and `enable` and `disable` complete the plugins each can act on.
 
-- `<id>/manifest.conf` - `NAME="Display Name"`, and if the plugin has a bar
-  widget, `WAYBAR_MODULE="custom/<id>"` plus optionally
-  `WAYBAR_SECTION="left|center|right"` (default `right`).
+- `<id>/manifest.conf` - data-only literal assignments using the known keys
+  `NAME`, `WAYBAR_MODULE`, and `WAYBAR_SECTION` (optional; defaults to `right`).
+  Values may be single- or double-quoted literals; restricted plain literals
+  are also accepted. No shell expansion or escape evaluation occurs. Malformed
+  assignments/literals, unknown keys, and duplicate keys fail with line-specific
+  errors; invalid field values are rejected during validation.
 - `<id>/waybar.jsonc` - the module's config body, e.g. `{ "format": "...",
   "exec": "..." }`. Its id is added to the declared `WAYBAR_SECTION`'s
   modules array and its config to the module definitions when enabled; may
@@ -41,7 +44,9 @@ waybar); a pure-`hypr.lua` plugin is a no-op under Awesome and vice versa. A
 widget meant to show up in both sessions needs both a `waybar.jsonc` and an
 `awesome.lua`.
 
-Enabled state lives in `~/.local/state/plugins/enabled`, one id per line.
+Enabled state lives in `${XDG_STATE_HOME:-$HOME/.local/state}/plugins/enabled`,
+one id per line. Generated config destinations use
+`${XDG_CONFIG_HOME:-$HOME/.config}`.
 Enabling/disabling regenerates the generated files above and runs `themectl
 apply`. Mutations are serialized with a checkout-local lock and use unique
 staging directories. Files are built and syntax-checked (`awesome --check`,
@@ -57,6 +62,13 @@ re-renders, re-links and reloads everything (waybar, hyprland,
 awesome, ...) the same way a theme change does. A theme reload failure is
 reported separately: the plugin wiring remains committed, and rerunning
 `themectl apply` retries the reload without repeating the state change.
+Lock acquisition waits up to 60 seconds before failing with a timeout.
+
+Before publication, the helper validates Waybar module objects, definition
+fragments, and the combined template as JSONC, rejecting duplicate object
+definitions as well as malformed data. Validation uses Python 3.11+'s standard
+library. `pluginctl refresh` also sorts and deduplicates enabled ids and
+persists that normalized state.
 
 `themes/templates/waybar-config.jsonc.tpl`, `hyprland/.config/hypr/lua/plugins.lua`
 and `awesome/.config/awesome/plugins.lua` are generated (gitignored) from

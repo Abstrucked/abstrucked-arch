@@ -12,6 +12,7 @@ STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/plugins"
 STATE_FILE="$STATE_DIR/enabled"
 BASE_TPL="$DOTFILES_DIR/themes/templates/waybar-config.jsonc.base.tpl"
 GEN_TPL="$DOTFILES_DIR/themes/templates/waybar-config.jsonc.tpl"
+JSONC_VALIDATOR="$DOTFILES_DIR/scripts/config_syntax.py"
 XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
 HYPR_PLUGINS_LUA="$XDG_CONFIG_HOME/hypr/lua/plugins.lua"
 AWESOME_PLUGINS_LUA="$XDG_CONFIG_HOME/awesome/plugins.lua"
@@ -45,19 +46,45 @@ die() {
 
 # Every directory under plugins/ with a manifest.conf is a plugin, id == dirname.
 plugin_ids() {
-  local d
+  local d id
   for d in "$PLUGIN_DIR"/*/; do
-    [[ -f "$d/manifest.conf" ]] && basename "$d"
+    [[ -f "$d/manifest.conf" ]] || continue
+    id="${d%/}"
+    id="${id##*/}"
+    [[ "$id" =~ ^[A-Za-z0-9_-]+$ ]] || die "invalid discovered plugin id '$id'"
+    printf '%s\n' "$id"
   done
 }
 
 manifest_get() {
-  local id="$1" key="$2"
-  # shellcheck source=/dev/null # per-plugin manifest, chosen at runtime
-  (
-    . "$PLUGIN_DIR/$id/manifest.conf"
-    echo "${!key:-}"
-  )
+  local id="$1" requested="$2" line key value number=0
+  local assignment='^[[:space:]]*([A-Z][A-Z0-9_]*)[[:space:]]*=[[:space:]]*(.*)$'
+  local double_quoted='^"([^"]*)"[[:space:]]*(#.*)?$'
+  local single_quoted="^'([^']*)'[[:space:]]*(#.*)?$"
+  local unquoted='^([A-Za-z0-9_./#-]*)[[:space:]]*(#.*)?$'
+  local -A values=()
+  [[ "$id" =~ ^[A-Za-z0-9_-]+$ ]] || die "invalid plugin id '$id'"
+  [[ -r "$PLUGIN_DIR/$id/manifest.conf" ]] || die "$id: cannot read manifest.conf"
+  # Manifests are data, not executable shell. Quotes delimit literal values;
+  # substitutions and shell escape sequences are never evaluated.
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    number=$((number + 1))
+    [[ -z "${line//[[:space:]]/}" || "$line" =~ ^[[:space:]]*# ]] && continue
+    [[ "$line" =~ $assignment ]] || die "$id: invalid manifest assignment at line $number"
+    key="${BASH_REMATCH[1]}"
+    value="${BASH_REMATCH[2]}"
+    case "$key" in
+      NAME|WAYBAR_MODULE|WAYBAR_SECTION) ;;
+      *) die "$id: unknown manifest key '$key' at line $number" ;;
+    esac
+    [[ -z "${values[$key]+present}" ]] || die "$id: duplicate manifest key '$key' at line $number"
+    if [[ "$value" =~ $double_quoted || "$value" =~ $single_quoted || "$value" =~ $unquoted ]]; then
+      values[$key]="${BASH_REMATCH[1]}"
+    else
+      die "$id: invalid literal manifest value at line $number"
+    fi
+  done <"$PLUGIN_DIR/$id/manifest.conf"
+  printf '%s\n' "${values[$requested]:-}"
 }
 
 load_state() {
@@ -93,12 +120,21 @@ validate_enabled() {
 }
 
 list() {
-  local id mark
+  local id mark name discovered
+  discovered="$(plugin_ids)" || return 1
   while IFS= read -r id; do
     [[ -n "$id" ]] || continue
+    name="$(manifest_get "$id" NAME)" || return 1
     if is_enabled "$id"; then mark="[x]"; else mark="[ ]"; fi
-    printf '%s %-20s %s\n' "$mark" "$id" "$(manifest_get "$id" NAME)"
-  done < <(plugin_ids)
+    printf '%s %-20s %s\n' "$mark" "$id" "$name"
+  done <<<"$discovered"
+}
+
+check_waybar_jsonc() {
+  local mode="$1" file="$2"
+  command -v python3 >/dev/null || die "Waybar validation requires Python 3.11+"
+  [[ -r "$JSONC_VALIDATOR" ]] || die "missing JSONC validator $JSONC_VALIDATOR"
+  python3 -B "$JSONC_VALIDATOR" --jsonc "$mode" "$file" || die "invalid Waybar JSONC in $file"
 }
 
 # Rebuild the generated waybar template by splicing enabled plugins' module
@@ -117,10 +153,13 @@ sync_waybar() {
     [[ -f "$PLUGIN_DIR/$id/waybar.jsonc" ]] || continue
     module="$(manifest_get "$id" WAYBAR_MODULE)"
     [[ -n "$module" ]] || die "$id: waybar.jsonc present but WAYBAR_MODULE not set in manifest.conf"
+    [[ "$module" =~ ^[A-Za-z0-9_./#-]+$ ]] || die "$id: invalid WAYBAR_MODULE name"
     section="$(manifest_get "$id" WAYBAR_SECTION)"
+    check_waybar_jsonc --object "$PLUGIN_DIR/$id/waybar.jsonc"
     frag="$(cat "$PLUGIN_DIR/$id/waybar.jsonc")"
     defs+=$',\n    "'"$module"'": '"$frag"
     if [[ -f "$PLUGIN_DIR/$id/waybar-defs.jsonc" ]]; then
+      check_waybar_jsonc --fragment "$PLUGIN_DIR/$id/waybar-defs.jsonc"
       defs+=$',\n    '"$(cat "$PLUGIN_DIR/$id/waybar-defs.jsonc")"
     fi
     case "${section:-right}" in
@@ -130,10 +169,11 @@ sync_waybar() {
       *) die "$id: unknown WAYBAR_SECTION '$section' (want left, center or right)" ;;
     esac
   done < <(enabled_ids)
-  tpl="${tpl//%%PLUGIN_MODULES_LEFT%%/$left}"
-  tpl="${tpl//%%PLUGIN_MODULES_CENTER%%/$center}"
-  tpl="${tpl//%%PLUGIN_MODULES_RIGHT%%/$right}"
-  tpl="${tpl//%%PLUGIN_DEFS%%/$defs}"
+  tpl="${tpl//%%PLUGIN_MODULES_LEFT%%/"$left"}"
+  tpl="${tpl//%%PLUGIN_MODULES_CENTER%%/"$center"}"
+  tpl="${tpl//%%PLUGIN_MODULES_RIGHT%%/"$right"}"
+  tpl="${tpl//%%PLUGIN_DEFS%%/"$defs"}"
+  check_waybar_jsonc --object /dev/stdin <<<"$tpl"
   if [[ "${1:-}" == stdout ]]; then
     printf '%s\n' "$tpl"
   else
@@ -374,6 +414,8 @@ refresh() {
   enabled_ids | sort -u >"$WORK/enabled"
   mapfile -t ENABLED_IDS <"$WORK/enabled"
   validate_enabled
+  # Refresh commits the same normalized state that generated wiring uses.
+  UPDATE_STATE=true
   DESTINATIONS=("$GEN_TPL" "$HYPR_PLUGINS_LUA" "$AWESOME_PLUGINS_LUA")
   PAYLOADS=("$WORK/waybar.tpl" "$WORK/hypr.lua" "$WORK/awesome.lua")
   sync_bin
@@ -412,9 +454,9 @@ reload_theme() {
 
 enable() {
   local id="$1"
-  [[ -f "$PLUGIN_DIR/$id/manifest.conf" ]] || die "unknown plugin '$id' (try: pluginctl list)"
   # The id is spliced into generated Lua and shell strings.
   [[ "$id" =~ ^[A-Za-z0-9_-]+$ ]] || die "invalid plugin id '$id' (letters, digits, - and _ only)"
+  [[ -f "$PLUGIN_DIR/$id/manifest.conf" ]] || die "unknown plugin '$id' (try: pluginctl list)"
   is_enabled "$id" && {
     echo "already enabled: $id"
     return
@@ -428,6 +470,7 @@ enable() {
 
 disable() {
   local id="$1"
+  [[ "$id" =~ ^[A-Za-z0-9_-]+$ ]] || die "invalid plugin id '$id' (letters, digits, - and _ only)"
   is_enabled "$id" || {
     echo "not enabled: $id"
     return

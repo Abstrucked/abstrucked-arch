@@ -1,9 +1,11 @@
 """Plugin mutations use copied code, temporary homes and an allowlisted PATH."""
 import fcntl
+import json
 import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -33,6 +35,9 @@ class PluginTests(unittest.TestCase):
             executable = shutil.which(name)
             self.assertIsNotNone(executable, name)
             (self.bin / name).symlink_to(executable)
+        (self.bin / "python3").symlink_to(sys.executable)
+        (self.repo / "scripts").mkdir()
+        shutil.copy2(ROOT / "scripts/config_syntax.py", self.repo / "scripts/config_syntax.py")
         self.script(self.bin / "awesome", 'exec luac -p "${@: -1}"')
         self.script(self.repo / "themes/themectl",
                     '"$(dirname "$0")/../plugins/pluginctl" template-waybar >/dev/null\n')
@@ -242,6 +247,151 @@ exec ''' + real + ' "$@"')
         self.run_tool("template-waybar")
         self.assertEqual(list(self.home.iterdir()), [])
         self.assertFalse((self.plugins / ".pluginctl.lock").exists())
+
+    def test_manifest_is_data_and_rejects_malformed_lines_without_execution(self):
+        sentinel = self.root / "manifest-was-sourced"
+        manifest = self.plugins / "one/manifest.conf"
+        manifest.write_text(f'NAME="$(touch {sentinel})"\nfalse\n')
+        result = self.run_tool("list", success=False)
+        self.assertIn("one", result.stderr)
+        self.assertIn("line 2", result.stderr)
+        self.assertFalse(sentinel.exists())
+
+    def test_quoted_command_substitution_is_literal_data(self):
+        sentinel = self.root / "manifest-was-sourced"
+        manifest = self.plugins / "one/manifest.conf"
+        manifest.write_text(f'NAME="$(touch {sentinel})"\n')
+        result = self.run_tool("list")
+        self.assertIn(f'$(touch {sentinel})', result.stdout)
+        self.assertFalse(sentinel.exists())
+
+    def test_manifest_comments_and_simple_quote_variants_are_valid(self):
+        (self.plugins / "one/manifest.conf").write_text(
+            "  # leading comment\n\n NAME = 'Named plugin' # trailing\n"
+            'WAYBAR_MODULE = "custom/one" # module\nWAYBAR_SECTION=left\n')
+        result = self.run_tool("list")
+        self.assertIn("Named plugin", result.stdout)
+        self.assertEqual(self.run_tool("template-waybar").returncode, 0)
+
+    def test_unknown_and_duplicate_manifest_keys_are_rejected(self):
+        cases = {
+            "duplicate": 'NAME="one"\nNAME="again"\n',
+            "unknown": 'NAME="one"\nUNEXPECTED="value"\n',
+        }
+        for kind, content in cases.items():
+            with self.subTest(kind=kind):
+                manifest = self.plugins / "one/manifest.conf"
+                manifest.write_text(content)
+                result = self.run_tool("list", success=False)
+                self.assertIn("one", result.stderr)
+                self.assertIn("line 2", result.stderr)
+                self.assertIn("duplicate" if kind == "duplicate" else "unknown", result.stderr)
+
+    def test_malformed_manifest_makes_list_fail(self):
+        (self.plugins / "one/manifest.conf").write_text("not an assignment\n")
+        result = self.run_tool("list", success=False)
+        self.assertIn("invalid manifest assignment", result.stderr)
+
+    def test_invalid_discovered_directory_ids_fail_without_word_splitting(self):
+        for name in ("bad plugin", "bad\nplugin"):
+            with self.subTest(name=name):
+                directory = self.plugins / name
+                directory.mkdir()
+                try:
+                    (directory / "manifest.conf").write_text('NAME="bad"\n')
+                    result = self.run_tool("list", success=False)
+                    self.assertIn("invalid discovered plugin id", result.stderr)
+                finally:
+                    shutil.rmtree(directory)
+
+    def test_enable_and_disable_reject_path_like_ids_before_mutation(self):
+        for command in ("enable", "disable"):
+            with self.subTest(command=command):
+                before = self.live_snapshot()
+                result = self.run_tool(command, "../one", success=False)
+                self.assertIn("invalid plugin id", result.stderr)
+                self.assertEqual(self.live_snapshot(), before)
+
+    def test_waybar_module_and_defs_must_validate_before_publication(self):
+        self.run_tool("enable", "one")
+        cases = (
+            ("scalar module", "one/waybar.jsonc", "false"),
+            ("malformed module syntax", "one/waybar.jsonc", '{"format": "missing close"'),
+            ("malformed defs", "one/waybar-defs.jsonc", '"custom/child": {'),
+            ("duplicate base definition", "one/waybar-defs.jsonc", '"clock": {}'),
+        )
+        for label, relative, content in cases:
+            with self.subTest(case=label):
+                target = self.plugins / relative
+                existed = target.exists()
+                old = target.read_bytes() if existed else None
+                target.write_text(content)
+                before = self.live_snapshot()
+                self.run_tool("enable", "two", success=False)
+                self.assertEqual(self.live_snapshot(), before)
+                if existed:
+                    target.write_bytes(old)
+                else:
+                    target.unlink()
+
+    def test_jsonc_comments_trailing_commas_and_theme_strings_are_valid(self):
+        (self.plugins / "one/waybar.jsonc").write_text(
+            '{\n // module comment\n "format": "<span color=\'{{accent}}\'>{}</span>",\n}\n')
+        (self.plugins / "one/waybar-defs.jsonc").write_text(
+            '// fragment comment\n"custom/child": { "format": "{{fg}}", },\n')
+        self.run_tool("enable", "one")
+        rendered = self.generated[0].read_text()
+        self.assertIn("{{accent}}", rendered)
+        self.assertIn('"custom/child"', rendered)
+
+    def test_ampersands_in_module_json_survive_bash_marker_replacement(self):
+        module_json = '{"format": "left & right && {{accent}}", "exec": "printf x & y && z"}'
+        (self.plugins / "one/waybar.jsonc").write_text(module_json)
+        self.run_tool("enable", "one")
+        self.run_tool("refresh")
+
+        rendered = self.generated[0].read_text()
+        self.assertIn('"custom/one": ' + module_json, rendered)
+        self.assertNotIn("%%PLUGIN_", rendered)
+        document = json.loads(rendered)
+        self.assertEqual(document["custom/one"], {
+            "format": "left & right && {{accent}}",
+            "exec": "printf x & y && z",
+        })
+
+    def test_waybar_module_quote_injection_is_rejected(self):
+        sentinel = self.root / "module-was-evaluated"
+        (self.plugins / "one/manifest.conf").write_text(
+            f"NAME=one\nWAYBAR_MODULE='custom/one\" , \"evil$(touch {sentinel})'\n")
+        result = self.run_tool("enable", "one", success=False)
+        self.assertIn("invalid WAYBAR_MODULE", result.stderr)
+        self.assertFalse(sentinel.exists())
+        self.assertFalse(self.state.exists())
+
+    def test_invalid_base_template_is_checked_even_with_no_enabled_plugins(self):
+        self.templates.joinpath("waybar-config.jsonc.base.tpl").write_text("[]\n")
+        result = self.run_tool("template-waybar", success=False)
+        self.assertIn("invalid Waybar JSONC", result.stderr)
+
+    def test_refresh_persists_normalized_state_and_rolls_back_state_failure(self):
+        self.state.parent.mkdir(parents=True, exist_ok=True)
+        self.state.write_text("two\n\none\ntwo\n")
+        self.run_tool("refresh")
+        self.assertEqual(self.state.read_text(), "one\ntwo\n")
+
+        self.state.write_text("two\n\none\none\n")
+        before = self.live_snapshot()
+        self.fail_once("mv", self.state)
+        self.run_tool("refresh", success=False)
+        self.assertEqual(self.live_snapshot(), before)
+        self.assertEqual(list(self.plugins.glob(".transaction.*")), [])
+
+    def test_lock_timeout_is_reported_without_waiting(self):
+        (self.bin / "flock").unlink()
+        self.script(self.bin / "flock", 'exit 1')
+        result = self.run_tool("enable", "one", success=False)
+        self.assertIn("timed out waiting for pluginctl lock", result.stderr)
+        self.assertFalse(self.state.exists())
 
 
 if __name__ == "__main__":
