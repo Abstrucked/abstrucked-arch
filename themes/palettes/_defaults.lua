@@ -42,6 +42,15 @@ return function(p, mix)
     return { bg = tones[step], fg = p.fg, icon = hue }
   end
 
+  -- Prompts without their own segment colors follow the active palette. Derive
+  -- readable text from each effective background, including partial overrides.
+  local prompt = type(p.starship) == "table" and p.starship or {}
+  local cap = prompt.cap or mix(p.accent, p.fg, 0.35)
+  local seg1 = prompt.seg1 or p.accent
+  local seg2 = prompt.seg2 or tones[2]
+  local seg3 = prompt.seg3 or tones[1]
+  local seg4 = prompt.seg4 or p.bg
+
   return {
     -- Shades Omarchy's palette has no equivalent for.
     surface_alt = mix(p.surface, p.fg, 0.15),
@@ -108,8 +117,12 @@ return function(p, mix)
     },
 
     starship = {
-      cap = "#a3aed2", seg1 = "#769ff0", seg2 = "#394260", seg3 = "#212736",
-      seg4 = "#1d2230", on_seg1 = "#e3e5e5", text = "#a0a9cb", on_cap = "#090c0c",
+      cap = cap, seg1 = seg1, seg2 = seg2, seg3 = seg3, seg4 = seg4,
+      on_seg1 = on(seg1), text = on(seg4), on_cap = on(cap),
+      -- Existing explicit segment designs used seg1 as text on seg2 / seg3.
+      -- Keep that choice unless they explicitly set the new foreground roles.
+      on_seg2 = prompt.seg1 or on(seg2),
+      on_seg3 = prompt.seg1 or on(seg3),
     },
   }
 end

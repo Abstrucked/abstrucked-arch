@@ -103,7 +103,19 @@ the journal:
 
 Dependencies: Bash, Lua, GNU coreutils, util-linux (`flock`), and Python 3.11+
 (`tomllib`, for imports and herdr updates). Run regression checks with
-`python3 -m unittest discover -s tests -p 'test_themes.py'`.
+`python3 -B -m pytest tests/test_themes.py tests/test_theme_render.py tests/test_import_omarchy.py`.
+
+Starship's default segment colors follow the selected palette, with readable
+text derived for each segment background (at least 4.5:1 contrast). Palettes
+with explicit `starship` colors keep those choices, including the existing
+Mocha Peach and Tokyo Night designs. `starship.on_seg2` and `starship.on_seg3`
+can override Git and language-segment text independently; explicit colors
+remain authoritative even when they choose lower contrast.
+
+`import-omarchy` preserves the upstream color values, writes depth-indented Lua,
+and validates every available template before publishing. An existing palette
+requires `--force`; a failed validation or concurrent no-clobber import leaves
+it untouched. Generated-file comments identify the source template to edit.
 
 Never edit the generated files (or the symlinks pointing at `out/`); edit the
 palette or template instead. Awesome restarts on a palette change when it is
