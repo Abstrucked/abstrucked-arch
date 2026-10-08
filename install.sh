@@ -327,6 +327,13 @@ for component in "${SELECTED_COMPONENTS[@]}"; do
         # generated file. safe_symlink backs up a previous theme or symlink.
         safe_symlink "$DOTFILES_DIR/config/tmux/theme.conf" "$XDG_CONFIG_HOME/tmux/theme.conf" || die "Failed to link tmux theme"
 
+        # Persistence is also needed when the separate scripts component is not
+        # selected: save deliberate closures before tmux's last session exits.
+        mkdir -p "$HOME/.local/bin"
+        # Relative links remain compatible with the scripts Stow package.
+        tmux_helper=$(realpath --relative-to="$HOME/.local/bin" "$DOTFILES_DIR/scripts/.local/bin/tmux-save-workspace") || die "Failed to locate tmux persistence helper"
+        safe_symlink "$tmux_helper" "$HOME/.local/bin/tmux-save-workspace" || die "Failed to link tmux persistence helper"
+
         safe_symlink "$XDG_CONFIG_HOME/tmux/tmux.conf" "$HOME/.tmux.conf" || die "Failed to symlink tmux config"
         if [[ -x "$tpm_dir/bin/install_plugins" ]]; then
             "$tpm_dir/bin/install_plugins" || die "Failed to install tmux plugins"

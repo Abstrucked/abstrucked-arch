@@ -1,4 +1,4 @@
--- Tide: an ocean contour wallpaper, a slim top bar and a centered app dock.
+-- Tide: an ocean contour wallpaper and a slim top desktop bar.
 -- Floating workspaces leave room around softly rounded windows.
 local awful = require("awful")
 local gears = require("gears")
@@ -15,13 +15,12 @@ local build_widgets = require("themes.mono.widgets")
 local wallpaper = require("themes.tide.wallpaper")
 local run_shell = require("awesome-wm-widgets.run-shell-3.run-shell")
 local logout = require("awesome-wm-widgets.logout-widget.logout")
-local screen, tag = screen, tag
+local tag = tag
 local theme = {}
 local transparent = "#00000000"
 local line = style.mix(c.bg, c.fg, 0.12)
 local raised = style.mix(c.surface, c.fg, 0.06)
 local shared_widgets
-local titlebars = setmetatable({}, { __mode = "k" })
 
 theme.name = "tide"
 theme.system_title = "System / Tide"
@@ -43,7 +42,7 @@ theme.border_normal = line
 theme.border_focus = style.mix(c.accent, c.bg, 0.3)
 theme.border_marked = c.accent
 theme.keep_single_client_border = true
-theme.titlebars_enabled = true
+theme.titlebars_enabled = false
 theme.titlebar_bg_normal = c.surface
 theme.titlebar_bg_focus = c.surface
 theme.titlebar_fg_normal = theme.muted
@@ -120,66 +119,8 @@ function theme.client_shape(cl)
         and gears.shape.rectangle or rounded(12)
 end
 
-local function title_button(label, action, danger)
-    local text = wibox.widget({ text = label, align = "center", font = "sans 11", widget = wibox.widget.textbox })
-    local button = wibox.container.background(text, transparent, rounded(6))
-    button.forced_width = dpi(26)
-    button:buttons(gears.table.join(awful.button({}, 1, action)))
-    button:connect_signal("mouse::enter", function()
-        button.bg = danger and style.mix(c.surface, c.red or c.accent, 0.2) or raised
-    end)
-    button:connect_signal("mouse::leave", function() button.bg = transparent end)
-    return button
-end
-
-local function sync_titlebar(cl)
-    if not titlebars[cl] then return end
-    local floating = cl.floating or awful.layout.get(cl.screen) == awful.layout.suit.floating
-    local visible = floating and not (cl.fullscreen or cl.maximized or cl.maximized_horizontal or cl.maximized_vertical)
-    local _, height = cl:titlebar_top()
-    if visible and height == 0 then
-        awful.titlebar.show(cl)
-    elseif not visible and height > 0 then
-        awful.titlebar.hide(cl)
-    end
-end
-
--- Changing a workspace's layout also changes whether its clients need handles.
-screen.connect_signal("arrange", function(s)
-    for _, cl in ipairs(s.clients) do sync_titlebar(cl) end
-end)
-
-function theme.titlebar_fun(cl)
-    local title = awful.titlebar.widget.titlewidget(cl)
-    title.font, title.align, title.ellipsize = theme.font, "left", "end"
-    local drag = gears.table.join(
-        awful.button({}, 1, function()
-            cl:emit_signal("request::activate", "titlebar", { raise = true })
-            awful.mouse.client.move(cl)
-        end),
-        awful.button({}, 3, function()
-            cl:emit_signal("request::activate", "titlebar", { raise = true })
-            awful.mouse.client.resize(cl)
-        end)
-    )
-    local heading = wibox.container.margin(title, dpi(12), dpi(10))
-    heading:buttons(drag)
-    awful.titlebar(cl, { size = dpi(32) }):setup({
-        heading, nil,
-        {
-            title_button("−", function() cl.minimized = true end),
-            title_button("×", function() cl:kill() end, true),
-            layout = wibox.layout.fixed.horizontal,
-        },
-        layout = wibox.layout.align.horizontal,
-    })
-    -- Tiled clients use their app's own chrome. Floating windows get a handle.
-    titlebars[cl] = true
-    for _, property in ipairs({ "floating", "fullscreen", "maximized", "maximized_horizontal", "maximized_vertical", "screen" }) do
-        cl:connect_signal("property::" .. property, sync_titlebar)
-    end
-    sync_titlebar(cl)
-end
+-- Keep explicit titlebar requests from falling back to rc.lua's generic builder.
+function theme.titlebar_fun(_) end
 
 local function text(value, color, font)
     return wibox.widget({
@@ -332,81 +273,160 @@ local function build_panel(s, on_toggle)
     return function() set_visible(not panel.visible) end
 end
 
--- Each screen owns its dock; commands use the same preferences as rc.lua.
-local function build_dock(s)
-    local items = wibox.layout.fixed.horizontal()
-    items.spacing = dpi(6)
-    local function app(glyph, label, action)
-        local button = wibox.container.background(
-            wibox.container.place(text(glyph, c.accent, theme.widget_font), "center", "center"),
-            transparent, rounded(8))
-        button.forced_width, button.forced_height = dpi(38), dpi(38)
-        button:buttons(gears.table.join(awful.button({}, 1, function()
-            awful.screen.focus(s)
-            action()
-        end)))
-        button:connect_signal("mouse::enter", function() button.bg = raised end)
-        button:connect_signal("mouse::leave", function() button.bg = transparent end)
-        awful.tooltip({ objects = { button }, text = label })
-        items:add(button)
-    end
-    app("›_", "Terminal", function() awful.spawn(awful.util.terminal) end)
-    app("◎", "Browser", function() awful.spawn(os.getenv("BROWSER") or "brave") end)
-    app("▱", "Files", function() awful.spawn("pcmanfm") end)
-    items:add(wibox.container.margin(wibox.widget({
-        forced_width = dpi(1), color = line, widget = wibox.widget.separator,
-    }), dpi(4), dpi(4), dpi(7), dpi(7)))
-    app("⊞", "App launcher", function() run_shell.launch() end)
-    s.tide_dock = awful.popup({
-        screen = s, type = "dock", ontop = false, visible = true,
-        bg = c.surface .. "ed", fg = c.fg, border_width = dpi(1), border_color = line,
-        shape = rounded(12),
-        widget = wibox.container.margin(items, dpi(8), dpi(8), dpi(8), dpi(8)),
-    })
-    local function position()
-        local g = s.geometry
-        s.tide_dock.x = g.x + (g.width - s.tide_dock.width) / 2
-        s.tide_dock.y = g.y + g.height - s.tide_dock.height - dpi(24)
-    end
-    s.tide_dock:connect_signal("property::width", position)
-    s.tide_dock:connect_signal("property::height", position)
-    s:connect_signal("property::geometry", position)
-    position()
-end
-
--- Live readings from the shared CPU poller, rather than illustrative bars.
+-- Live readings from the shared pollers, rather than illustrative bars.
 local function build_monitor(s)
+    local graph_width = dpi(260)
     local label = text("CPU —", c.fg, theme.widget_font)
-    local graph = wibox.widget({
-        forced_width = dpi(260), forced_height = dpi(32), max_value = 100,
+    local cpu_graph = wibox.widget({
+        width = graph_width, forced_width = graph_width, forced_height = dpi(32), max_value = 100,
         background_color = transparent, color = c.accent,
         step_width = dpi(5), step_spacing = dpi(3), widget = wibox.widget.graph,
     })
-    local header = wibox.layout.align.horizontal(
+    local cpu_header = wibox.layout.align.horizontal(
         text("SYSTEM / AT EASE", theme.muted, "JetBrains Mono 8"), nil, label)
-    s.tide_monitor = awful.popup({
-        screen = s, type = "desktop", ontop = false, visible = true,
-        bg = c.surface, fg = c.fg, border_color = line, border_width = dpi(1), shape = rounded(12),
-        widget = {
-            { header, graph, spacing = dpi(12), layout = wibox.layout.fixed.vertical },
-            margins = dpi(16), widget = wibox.container.margin,
-        },
+
+    local ram_label = text("—", c.fg, theme.widget_font)
+    ram_label.align = "right"
+    local ram_graph = wibox.widget({
+        width = graph_width, forced_width = graph_width, forced_height = dpi(32), max_value = 100,
+        background_color = transparent, color = c.accent,
+        step_width = dpi(5), step_spacing = dpi(3), widget = wibox.widget.graph,
     })
+    local ram_header = wibox.layout.align.horizontal(
+        text("MEMORY", theme.muted, "JetBrains Mono 8"), nil,
+        wibox.container.constraint(ram_label, "max", dpi(190))
+    )
+
+    local down_color = c.seg and c.seg.net and c.seg.net.icon or c.accent
+    local up_color = c.seg and c.seg.fs and c.seg.fs.icon or c.fg
+    local download = text("DL —", down_color, "JetBrains Mono 8")
+    local upload = text("UL —", up_color, "JetBrains Mono 8")
+    local network_rates = wibox.widget({
+        download, upload, spacing = dpi(8), layout = wibox.layout.fixed.horizontal,
+    })
+    local network_graph = wibox.widget({
+        width = graph_width, forced_width = graph_width, forced_height = dpi(32), max_value = 1, scale = true, stack = true,
+        background_color = transparent, stack_colors = { down_color, up_color },
+        step_width = dpi(5), step_spacing = dpi(3), widget = wibox.widget.graph,
+    })
+    local network_header = wibox.layout.align.horizontal(
+        text("NETWORK", theme.muted, "JetBrains Mono 8"), nil,
+        wibox.container.constraint(network_rates, "max", dpi(190))
+    )
+
+    local function card(header, graph)
+        return awful.popup({
+            screen = s, type = "desktop", ontop = false, visible = true,
+            bg = c.surface, fg = c.fg, border_color = line, border_width = dpi(1), shape = rounded(12),
+            minimum_width = dpi(292), maximum_width = dpi(292),
+            widget = {
+                { header, graph, spacing = dpi(12), layout = wibox.layout.fixed.vertical },
+                margins = dpi(16), widget = wibox.container.margin,
+            },
+        })
+    end
+
+    s.tide_monitor = card(cpu_header, cpu_graph)
+    s.tide_ram_monitor = card(ram_header, ram_graph)
+    s.tide_network_monitor = card(network_header, network_graph)
+    s.tide_monitors = { s.tide_monitor, s.tide_ram_monitor, s.tide_network_monitor }
+
     local function position()
         local g = s.workarea
-        s.tide_monitor.x = g.x + g.width - s.tide_monitor.width - dpi(48)
-        s.tide_monitor.y = g.y + g.height - s.tide_monitor.height - dpi(120)
+        local gap = dpi(12)
+        local total_height = gap * (#s.tide_monitors - 1)
+        local maximum_width = 0
+        for _, monitor in ipairs(s.tide_monitors) do
+            total_height = total_height + monitor.height
+            maximum_width = math.max(maximum_width, monitor.width)
+        end
+        local right = math.min(dpi(48), math.max(0, g.width - maximum_width))
+        local bottom = math.min(dpi(120), math.max(0, g.height - total_height))
+        local y = g.y + g.height - bottom - total_height
+        for _, monitor in ipairs(s.tide_monitors) do
+            monitor.x = g.x + g.width - monitor.width - right
+            monitor.y = y
+            y = y + monitor.height + gap
+        end
     end
-    s.tide_monitor:connect_signal("property::width", position)
-    s.tide_monitor:connect_signal("property::height", position)
+    for _, monitor in ipairs(s.tide_monitors) do
+        monitor:connect_signal("property::width", position)
+        monitor:connect_signal("property::height", position)
+    end
     s:connect_signal("property::workarea", position)
     position()
-    local timer = gears.timer({ timeout = 2, autostart = true, call_now = true, callback = function()
-        local usage = cpu_now and tonumber(cpu_now.usage)
+
+    local seen_interfaces, previous_network_snapshot, traffic_totals = {}, nil, {}
+    local function numeric(value)
+        local number = tonumber(value)
+        if number and number == number and number > -math.huge and number < math.huge then return number end
+    end
+    -- lain reports KiB/s; prime each interface once so startup byte totals are not graphed.
+    local function refresh_network()
+        local net = type(net_now) == "table" and net_now or nil
+        if not net then
+            seen_interfaces, previous_network_snapshot = {}, nil
+            download.text, upload.text = "DL —", "UL —"
+            return
+        end
+        if net == previous_network_snapshot then return end
+        previous_network_snapshot = net
+
+        local devices = type(net.devices) == "table" and net.devices or {}
+        local present, received, sent, primed = {}, 0, 0, false
+        for name, device in pairs(devices) do
+            if type(device) == "table" then
+                present[name] = true
+                local down, up = numeric(device.received), numeric(device.sent)
+                if down ~= nil or up ~= nil then
+                    down, up = math.max(0, down or 0), math.max(0, up or 0)
+                    if seen_interfaces[name] then
+                        received, sent, primed = received + down, sent + up, true
+                    else
+                        seen_interfaces[name] = true
+                    end
+                end
+            end
+        end
+        for name in pairs(seen_interfaces) do
+            if not present[name] then seen_interfaces[name] = nil end
+        end
+
+        if not primed then
+            download.text, upload.text = "DL —", "UL —"
+            return
+        end
+        download.text, upload.text = "DL " .. rate(received), "UL " .. rate(sent)
+        table.insert(traffic_totals, received + sent)
+        while #traffic_totals > graph_width do table.remove(traffic_totals, 1) end
+        local maximum = 1
+        for _, total in ipairs(traffic_totals) do maximum = math.max(maximum, total) end
+        -- Stacked graphs scale groups independently, so use the largest combined column.
+        network_graph.max_value = maximum
+        network_graph:add_value(received, 1)
+        network_graph:add_value(sent, 2)
+    end
+
+    s.tide_monitor_timer = gears.timer({ timeout = 2, autostart = true, call_now = true, callback = function()
+        local usage = type(cpu_now) == "table" and numeric(cpu_now.usage)
         label.text = usage and string.format("%.0f%% cpu", usage) or "CPU —"
-        if usage then graph:add_value(usage) end
+        if usage then cpu_graph:add_value(usage) end
+
+        local memory = type(mem_now) == "table" and mem_now or nil
+        local percent = memory and numeric(memory.perc)
+        local used = memory and numeric(memory.used)
+        local total = memory and numeric(memory.total)
+        if percent and used and total and total > 0 then
+            percent = math.min(100, math.max(0, percent))
+            ram_label.text = string.format("%.0f%% · %.1f/%.1f GiB", percent, used / 1024, total / 1024)
+            ram_graph:add_value(percent)
+        else
+            ram_label.text = "—"
+        end
+
+        refresh_network()
     end })
-    s:connect_signal("removed", function() timer:stop() end)
+    s:connect_signal("removed", function() s.tide_monitor_timer:stop() end)
 end
 
 function theme.at_screen_connect(s)
@@ -551,7 +571,6 @@ function theme.at_screen_connect(s)
         [3] = { forced_height = dpi(1), color = line, widget = wibox.widget.separator },
         layout = wibox.layout.align.vertical,
     })
-    build_dock(s)
     build_monitor(s)
     -- Desktop furniture yields to fullscreen clients on its own screen.
     local function furniture_visibility()
@@ -559,8 +578,7 @@ function theme.at_screen_connect(s)
         for _, cl in ipairs(s.clients) do
             if cl.fullscreen and cl:isvisible() then visible = false; break end
         end
-        s.tide_dock.visible = visible
-        s.tide_monitor.visible = visible
+        for _, monitor in ipairs(s.tide_monitors or {}) do monitor.visible = visible end
     end
     s:connect_signal("arrange", furniture_visibility)
     furniture_visibility()

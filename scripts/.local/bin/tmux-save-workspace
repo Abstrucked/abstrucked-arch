@@ -1,0 +1,118 @@
+#!/usr/bin/env bash
+# Keep resurrect's latest workspace in sync with deliberate tmux closures.
+set -euo pipefail
+
+option() {
+    tmux show-option -gqv "$1"
+}
+
+install_hooks() {
+    local self quoted_self save_script exit_empty key
+    local -a keys
+    self=$(realpath -- "${BASH_SOURCE[0]}")
+    printf -v quoted_self '%q' "$self"
+    save_script=$(option @resurrect-save-script-path)
+    [[ -x "$save_script" ]] || return 0
+    # Continuum leaves this timestamp unset on secondary servers. Respect its
+    # ownership guard instead of replacing the primary server's shared snapshot.
+    if [[ -n $(option @continuum-save-interval) && -z $(option @continuum-save-last-timestamp) ]]; then
+        return 0
+    fi
+    if [[ "$save_script" != "$self" ]]; then
+        tmux set-option -g @workspace-resurrect-save-script "$save_script"
+    fi
+    exit_empty=$(option @workspace-exit-empty)
+    if [[ -z "$exit_empty" ]]; then
+        tmux set-option -g @workspace-exit-empty "$(tmux show-option -sqv exit-empty)"
+    fi
+
+    # Continuum and manual saves must use the same lock as closure saves.
+    tmux set-option -g @resurrect-save-script-path "$self"
+    read -r -a keys <<<"$(option @resurrect-save)"
+    ((${#keys[@]})) || keys=(C-s)
+    for key in "${keys[@]}"; do
+        tmux bind-key "$key" run-shell "$quoted_self"
+    done
+
+    # A fixed array index is reload-safe and preserves other plugins' hooks.
+    # Hold exit-empty off BEFORE scheduling run-shell: the final shell exit
+    # otherwise lets tmux quit before the shell job has even started.
+    tmux source-file - <<'TMUX'
+set-hook -g after-kill-pane[90] {
+    if-shell -F '#{!=:#{@workspace-restoring},on}' {
+        set-option -s exit-empty off
+        run-shell '"$HOME/.local/bin/tmux-save-workspace" --closed quiet'
+    }
+}
+set-hook -g pane-exited[90] {
+    if-shell -F '#{!=:#{@workspace-restoring},on}' {
+        set-option -s exit-empty off
+        run-shell '"$HOME/.local/bin/tmux-save-workspace" --closed quiet'
+    }
+}
+set-hook -g window-unlinked[90] {
+    if-shell -F '#{!=:#{@workspace-restoring},on}' {
+        set-option -s exit-empty off
+        run-shell '"$HOME/.local/bin/tmux-save-workspace" --closed quiet'
+    }
+}
+set-hook -g session-closed[90] {
+    if-shell -F '#{!=:#{@workspace-restoring},on}' {
+        set-option -s exit-empty off
+        run-shell '"$HOME/.local/bin/tmux-save-workspace" --closed quiet'
+    }
+}
+TMUX
+}
+
+if [[ ${1:-} == --install ]]; then
+    install_hooks
+    exit 0
+fi
+
+if [[ ${1:-} == --closed ]]; then
+    shift
+    exit_empty=$(option @workspace-exit-empty)
+    exit_empty=${exit_empty:-on}
+    trap 'tmux set-option -s exit-empty "$exit_empty" 2>/dev/null || true' EXIT
+    trap 'exit 1' HUP INT TERM
+fi
+
+# Resurrect replaces its startup pane/session while restoring. Those are not
+# user closures and must not overwrite the snapshot it is still reading.
+[[ $(option @workspace-restoring) != on ]] || exit 0
+save_script=$(option @workspace-resurrect-save-script)
+[[ -x "$save_script" ]] || exit 0
+directory=$(option @resurrect-dir)
+if [[ -z "$directory" ]]; then
+    if [[ -d "$HOME/.tmux/resurrect" ]]; then
+        directory="$HOME/.tmux/resurrect"
+    else
+        directory="${XDG_DATA_HOME:-$HOME/.local/share}/tmux/resurrect"
+    fi
+fi
+# Match resurrect's supported path substitutions without evaluating shell code.
+directory=${directory//\~/$HOME}
+directory=${directory//\$HOME/$HOME}
+directory=${directory//\$HOSTNAME/${HOSTNAME:-$(uname -n)}}
+umask 077
+mkdir -p -- "$directory"
+exec 9>"$directory/.workspace-save.lock"
+flock 9
+[[ $(option @workspace-restoring) != on ]] || exit 0
+
+# A failed query (for example kill-server or a crash) is NOT an empty workspace.
+# Preserve the last good snapshot in that case. With no sessions, unlink only
+# the restore pointer; all historical snapshots and captured output remain.
+sessions=$(tmux list-sessions -F '#{session_id}')
+if [[ -z "$sessions" ]]; then
+    rm -f -- "$directory/last"
+    exit 0
+fi
+
+# Upstream filenames have second precision. Saving twice into the same file
+# makes resurrect compare it with itself and delete it, leaving `last` dangling.
+while [[ -e "$directory/tmux_resurrect_$(date +%Y%m%dT%H%M%S).txt" ]]; do
+    sleep 0.1
+done
+"$save_script" "$@"

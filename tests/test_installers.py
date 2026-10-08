@@ -69,6 +69,10 @@ class InstallerTests(unittest.TestCase):
         shutil.copytree(ROOT / "lib", self.repo / "lib", symlinks=True)
         for name in (*STOW_PACKAGES, "hyprland", "zsh", "bash", "backgrounds"):
             (self.repo / name).mkdir()
+        helper = self.repo / "scripts/.local/bin/tmux-save-workspace"
+        helper.parent.mkdir(parents=True)
+        helper.write_text("#!/bin/sh\nexit 0\n")
+        helper.chmod(0o755)
         # Data fixtures avoid copying personal configs or links out of the repository.
         self.write(self.repo / "config/tmux/tmux.conf", 'set -g default-shell "/bin/zsh"\n')
         self.write(self.repo / "config/tmux/theme.conf", "# tracked icon theme\n")
@@ -372,6 +376,10 @@ set_login_shell "${1:-bash}"
         self.assertTrue(backups[0].is_symlink())
         self.assertEqual(backups[0].resolve(), original)
         self.assertEqual(original.read_text(), "original theme\n")
+        helper = self.home / ".local/bin/tmux-save-workspace"
+        self.assertTrue(helper.is_symlink())
+        self.assertEqual(helper.resolve(), self.repo / "scripts/.local/bin/tmux-save-workspace")
+        self.assertFalse(os.path.isabs(os.readlink(helper)))
 
     def test_tmux_existing_regular_theme_is_backed_up(self):
         theme = self.home / ".config/tmux/theme.conf"

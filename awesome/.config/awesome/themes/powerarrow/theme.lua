@@ -625,10 +625,10 @@ function theme.at_screen_connect(s)
 	-- Icon and text sit side by side at their natural
 	-- sizes: a fixed layout keeps every widget from
 	-- stretching the way an align layout would.
-	local function group(icon, text)
+	local function group(icon_widget, text_widget)
 		return wibox.widget({
-			icon,
-			text,
+			icon_widget,
+			text_widget,
 			spacing = dpi(bar.group_spacing),
 			layout = wibox.layout.fixed.horizontal,
 		})
