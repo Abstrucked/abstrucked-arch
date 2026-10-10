@@ -1,0 +1,5 @@
+# Never deploy documentation or interpreter caches into the user's home.
+README\.md
+\.stow-local-ignore
+__pycache__
+.*\.py[co]

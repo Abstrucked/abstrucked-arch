@@ -1,0 +1,79 @@
+# os-assistant configuration (strict TOML).
+#
+# Only the [model], [paths], [actions], [themes], [status], [limits], [bash], [web_search], and [alerts]
+# sections and keys shown here are accepted; anything else is rejected. The
+# defaults grant no arbitrary-folder or action access. This file holds no
+# credentials and never should.
+
+[model]
+name = 'qwen3:4b-instruct-2507-q4_K_M'
+host = 'http://127.0.0.1:11434'
+context = 8192
+keep_alive = '2m'
+timeout = 180
+max_output_tokens = 768
+
+[status]
+# Fixed read-only machine/dotfiles metadata; remove names to disable individual tools.
+enabled = ['desktop_status', 'power_status', 'plugin_status', 'display_status', 'dotfiles_status', 'alerts_status']
+
+[paths]
+# Folders the assistant may scan. Empty until you opt in, for example:
+allowed_roots = []
+# allowed_roots = ['~/Downloads']
+
+[actions]
+# Launching apps stays off until enabled, and even then every call needs a
+# typed 'yes' confirmation. App aliases map to fixed absolute executables:
+enabled = false
+apps = {}
+# apps = { firefox = '/usr/bin/firefox' }
+
+[bash]
+# Permits read-only Bash commands whose file-content reads stay inside
+# allowed_roots, with protected paths excluded. Separate from [paths], which
+# authorizes metadata scans only. Stays off until enabled, and with no roots
+# the Bash tool is not registered at all. Write commands additionally require
+# actions.enabled and a typed 'yes' confirmation too.
+enabled = false
+allowed_roots = []
+allow_writes = false
+# allowed_roots = ['~/Downloads']
+
+[web_search]
+# Optional web_search tool backed by a SearXNG you run yourself. Off by default.
+# host must be an HTTP loopback IP with a port. Every search needs a typed 'yes'
+# and SearXNG forwards the query to public search engines. SearXNG must enable
+# the JSON API (search: formats: [html, json]) and bind only to 127.0.0.1.
+enabled = false
+host = 'http://127.0.0.1:8888'
+timeout = 10                       # seconds, 1-30
+
+[themes]
+# Separate trust in this checkout's themectl pipeline, including hooks/reloads.
+# Theme changes also require actions.enabled and typed 'yes'.
+enabled = false
+timeout = 120
+
+[alerts]
+# Thresholds for `os-assistant --watch-alerts` (started by the system-alerts plugin:
+# pluginctl enable system-alerts) and `--check-alerts`. Read-only; state stays in memory.
+interval = 60                      # seconds between checks, 15-3600
+disk_paths = ['/']                 # up to 8 absolute paths to watch
+disk_warning_percent = 90          # used %, 50-99
+disk_critical_percent = 95         # must be above the warning value
+memory_warning_percent = 85
+memory_critical_percent = 95
+repeat_minutes = 60                # reminder while over a threshold; 0 = no reminders
+
+[limits]
+max_steps = 6
+tool_timeout = 5
+scan_entries = 3000
+scan_seconds = 3
+scan_depth = 8
+# Separate metadata-only recursive directory-size budgets. Snapshot/search
+# scan limits above stay intentionally small and do not truncate ordinary sizing.
+usage_entries = 100000
+usage_seconds = 10
+usage_depth = 64

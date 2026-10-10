@@ -1,0 +1,30 @@
+#!/bin/bash
+# Launch the local OS assistant.
+#
+# Works from this checkout and from a GNU Stow link: the launcher resolves its
+# own real location first, so a symlinked launcher, a moved checkout, or spaces
+# in the path all still find the entry point next to the package.
+set -euo pipefail
+
+if ! command -v realpath >/dev/null 2>&1; then
+    printf 'os-assistant: realpath is required.\n' >&2
+    exit 1
+fi
+
+self="$(realpath -- "${BASH_SOURCE[0]}")"
+bin_dir="$(dirname -- "$self")"
+entry="$bin_dir/../share/os-assistant/run.py"
+declare -r self bin_dir entry
+declare -r python=/usr/bin/python3
+
+if [[ ! -f "$entry" ]]; then
+    printf 'os-assistant: entry point not found: %s\n' "$entry" >&2
+    exit 1
+fi
+if [[ ! -x "$python" ]]; then
+    printf 'os-assistant: %s is required.\n' "$python" >&2
+    exit 1
+fi
+
+# -B: no bytecode files; -I: isolated mode, no user site or environment imports.
+exec "$python" -B -I "$entry" "$@"
