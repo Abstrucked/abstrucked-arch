@@ -125,6 +125,27 @@ for i = #dbus_mapping, 1, -1 do
 	end
 end
 table.insert(dbus_mapping, { { appname = "tmux-agent", urgency = "\2" }, agent_alert })
+-- os-assistant system alerts: critical stays until dismissed, normal is a
+-- warning that expires, low uses the default preset.
+local function system_alert(bg, fg, timeout)
+	return {
+		bg = bg,
+		fg = fg,
+		border_width = 0,
+		shape = theme.popup_shape,
+		margin = theme.notification_margin,
+		position = "top_right",
+		timeout = timeout,
+	}
+end
+for i = #dbus_mapping, 1, -1 do
+	if dbus_mapping[i][1].appname == "os-assistant" then
+		table.remove(dbus_mapping, i)
+	end
+end
+table.insert(dbus_mapping, { { appname = "os-assistant", urgency = "\2" }, system_alert(c.red, c.bg, 0) })
+table.insert(dbus_mapping, { { appname = "os-assistant", urgency = "\1" }, system_alert(c.yellow, c.bg, 15) })
+table.insert(dbus_mapping, { { appname = "os-assistant", urgency = "\0" }, system_alert(theme.popup_bg, theme.popup_fg, 8) })
 naughty.config.notify_callback = function(args)
 	args.border_width = 0
 	args.border_color = "#00000000"

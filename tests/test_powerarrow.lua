@@ -524,7 +524,7 @@ assert(naughty_config.padding == dpi(8) and naughty_config.spacing == dpi(4),
 assert(naughty_config.defaults.position == "top_right"
 	and naughty_config.defaults.margin == theme.notification_margin,
 	"default notification placement")
-assert(#dbus_mapping == 2 and dbus_mapping[1][1].appname == "other-app",
+assert(#dbus_mapping == 5 and dbus_mapping[1][1].appname == "other-app",
 	"existing tmux-agent mapping is replaced")
 assert(dbus_mapping[2][1].appname == "tmux-agent"
 	and dbus_mapping[2][1].urgency == "\2", "tmux-agent mapping match")
@@ -536,6 +536,15 @@ assert(dbus_mapping[2][2].border_width == 0
 assert(dbus_mapping[2][2].margin == theme.notification_margin
 	and dbus_mapping[2][2].position == "top_right"
 	and dbus_mapping[2][2].timeout == 30, "tmux-agent alert placement and timeout")
+for i, case in ipairs({ { "\2", 0 }, { "\1", 15 }, { "\0", 8 } }) do
+	local entry = dbus_mapping[2 + i]
+	assert(entry[1].appname == "os-assistant" and entry[1].urgency == case[1],
+		"os-assistant mapping match " .. i)
+	assert(entry[2].timeout == case[2] and entry[2].position == "top_right"
+		and entry[2].border_width == 0 and entry[2].shape == theme.popup_shape,
+		"os-assistant mapping timeout and placement " .. i)
+end
+assert(dbus_mapping[3][2].bg == palette.red, "os-assistant critical alert is red")
 
 -- Test helpers.
 local function find_all(root, predicate, results)

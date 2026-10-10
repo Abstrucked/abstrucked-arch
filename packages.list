@@ -63,8 +63,10 @@ npm
 lazydocker
 
 # Desktop utilities shared by the window-manager configurations and tmux
+# (libnotify provides notify-send)
 brightnessctl
 playerctl
+libnotify
 wl-clipboard
 power-profiles-daemon
 # Raw AMD Ryzen controls are opt-in: install ryzenadj separately if required.
