@@ -68,6 +68,7 @@ local widget_methods = {
 		self.bottom = value
 	end,
 	get_children = function(self) return self.children end,
+	set_children = function(self, children) self.children = children end,
 	get_all_children = function(self)
 		local all = {}
 		for _, child in ipairs(self.children) do
@@ -190,6 +191,7 @@ wibox.widget = setmetatable({
 	systray = function()
 		local widget = new_widget("systray")
 		widget.role = "systray"
+		widget.set_base_size = function(self, size) self.base_size = size end
 		return widget
 	end,
 	base = {
@@ -585,7 +587,7 @@ local function entry_signature(entry)
 	end
 	for _, child in ipairs(entry:get_all_children()) do
 		if child.role then
-			return child.role
+			return child.role == "power-mode" and "bat" or child.role
 		end
 		if child.widget == "textclock" then
 			return "clock"
@@ -762,7 +764,10 @@ local function check_scenario(primary, with_plugins, name)
 	expect(mem_group.widget == "fixed.horizontal", "icon-text group layout")
 	expect(mem_group.spacing == dpi(4), "icon-text spacing")
 	expect(#mem_group.children == 2, "icon and text only")
-	local mem_icon = mem_group.children[1]
+	local mem_icon_slot = mem_group.children[1]
+	expect(mem_icon_slot.widget == "place" and mem_icon_slot.valign == "center",
+		"memory icon centered in its row")
+	local mem_icon = mem_icon_slot.children[1]
 	expect(mem_icon.widget == "imagebox", "icon comes first")
 	expect(mem_icon.image == icon_of(theme.widget_mem, palette.seg.mem.icon), "memory icon")
 	expect(mem_icon.forced_width == dpi(14) and mem_icon.forced_height == dpi(14),
@@ -780,35 +785,38 @@ local function check_scenario(primary, with_plugins, name)
 	expect(mem_segment.bg == palette.seg.mem.bg, "memory segment background")
 	expect(mem_segment.fg == palette.seg.mem.fg, "memory segment foreground")
 
-	-- The battery group keeps the power mode after the charge,
-	-- at the same spacing.
+	-- The battery group starts with icons only when charge data is unavailable.
 	local bat_entry = entry_by_signature(right, "bat")
 	local bat_group = find(bat_entry, function(widget)
 		return widget.layout == wibox.layout.fixed.horizontal
 	end)
 	expect(bat_group.spacing == dpi(4), "battery group spacing")
-	expect(#bat_group.children == 3, "icon, charge and power mode")
-	expect(bat_group.children[1].widget == "imagebox", "battery icon first")
-	expect(bat_group.children[2].role == "bat", "charge second")
-	expect(bat_group.children[3].role == "power-mode", "power mode last")
+	expect(#bat_group.children == 2, "state icon and power mode only")
+	local bat_icon_slot = bat_group.children[1]
+	expect(bat_icon_slot.widget == "place" and bat_icon_slot.valign == "center",
+		"battery icon centered in its row")
+	local bat_icon = bat_icon_slot.children[1]
+	expect(bat_icon.widget == "imagebox", "battery icon first")
+	local power_mode_widget = bat_group.children[2]
+	expect(power_mode_widget.role == "power-mode", "power mode last")
 	expect(power_mode_args.icon_font == theme.widget_font, "power mode icon font")
 
 	-- Fixed slots and centered text for every changing value.
-	local function slot_check(role, width)
-		local textbox = find(tree, by_role(role))
+	local function slot_check(role, width, source)
+		local textbox = source or find(tree, by_role(role))
 		expect(textbox.forced_width == dpi(width), role .. " slot width")
 		expect(textbox.align == "center", role .. " slot alignment")
 		return textbox
 	end
-	local cpu_textbox = slot_check("cpu", 28)
-	local bat_textbox = slot_check("bat", 28)
-	slot_check("net", 80)
-	slot_check("mem", 40)
-	slot_check("fs", 40)
+	local cpu_textbox = slot_check("cpu", 32)
+	local bat_textbox = slot_check("bat", 32, lain_widgets.bat.widget)
+	slot_check("net", 96)
+	slot_check("mem", 44)
+	slot_check("fs", 44)
 	local clock_widget = find(tree, function(widget)
 		return widget.widget == "textclock"
 	end)
-	expect(clock_widget.forced_width == dpi(36), "clock slot width")
+	expect(clock_widget.forced_width == dpi(40), "clock slot width")
 	expect(clock_widget.align == "center", "clock slot alignment")
 	expect(clock_widget.format == "%H:%M", "plain clock format")
 
@@ -829,8 +837,8 @@ local function check_scenario(primary, with_plugins, name)
 	lain_widgets.net.update()
 	expect(find(tree, by_role("net")).text == "↓2.0M ↑512K", "network text")
 
-	-- The battery shows AC while charging, the charge otherwise,
-	-- and its segment and icon follow the charge level.
+	-- Mains uses icons only; battery power adds the charge percentage.
+	-- Both directions preserve the state icon and power-mode control.
 	local function bat_segment()
 		return find(bat_entry, function(widget)
 			return widget.widget == "background"
@@ -838,20 +846,35 @@ local function check_scenario(primary, with_plugins, name)
 	end
 	bat_now = { status = "Charging", ac_status = 1, perc = 100 }
 	lain_widgets.bat.update()
-	expect(bat_textbox.text == "AC", "battery AC text")
+	expect(bat_textbox.text == "", "no AC label")
+	expect(#bat_group.children == 2 and not find(bat_entry, by_role("bat")),
+		"no percentage slot on mains")
+	expect(bat_group.children[2] == power_mode_widget, "power mode retained on mains")
+	expect(bat_icon.image == icon_of(theme.widget_ac, palette.seg.bat.icon), "mains state icon")
 	expect(bat_segment().bg == palette.seg.bat.bg, "battery segment while charging")
 
 	bat_now = { status = "Discharging", ac_status = 0, perc = 10 }
 	lain_widgets.bat.update()
+	expect(#bat_group.children == 3 and bat_group.children[2] == bat_textbox,
+		"percentage slot restored after unplugging")
+	expect(bat_group.children[3] == power_mode_widget, "power mode retained on battery")
 	expect(bat_textbox.text == "10%", "battery charge text")
 	expect(bat_segment().bg == palette.seg.bat_low.bg, "low battery segment color")
-	expect(bat_group.children[1].image == icon_of(
+	expect(bat_icon.image == icon_of(
 		theme.widget_battery_low, palette.seg.bat_low.icon), "low battery icon")
 
 	bat_now = { status = "Discharging", ac_status = 0, perc = 3 }
 	lain_widgets.bat.update()
-	expect(bat_group.children[1].image == icon_of(
+	expect(bat_icon.image == icon_of(
 		theme.widget_battery_empty, palette.seg.bat_low.icon), "empty battery icon")
+	bat_now = { status = "Full", ac_status = 1, perc = 100 }
+	lain_widgets.bat.update()
+	expect(#bat_group.children == 2 and not find(bat_entry, by_role("bat")),
+		"percentage slot removed after reconnecting")
+	expect(bat_textbox.text == "" and bat_group.children[2] == power_mode_widget,
+		"fully charged on mains uses icons only")
+	expect(bat_segment().bg == palette.seg.bat.bg,
+		"mains restores normal battery segment color")
 
 	-- The calendar still attaches to the clock, and the lain
 	-- tooltips keep their colors and fonts.
@@ -865,7 +888,7 @@ local function check_scenario(primary, with_plugins, name)
 	local volume_widget = find(tree, by_role("volume"))
 	expect(volume_widget.signals["button::press"], "volume click and scroll")
 	expect(volumebar_args.width == dpi(80), "volume width")
-	expect(volumebar_args.margins == dpi(4), "volume margins")
+	expect(volumebar_args.margins == dpi(8), "volume margins")
 	expect(volumebar_args.main_color == palette.seg.volume.icon, "volume color")
 
 	-- Hover on the network segment still raises and clears its note.
@@ -932,9 +955,9 @@ local function check_scenario(primary, with_plugins, name)
 	template.create_callback(underline_self, fake_tag({}, false))
 	expect(marked.bg == "#00000000", "empty tag underline")
 
-	-- Fonts are unchanged.
+	-- Segment text is slightly larger while the general bar font stays the same.
 	expect(theme.font == "JetBrains Mono Nerd Font 10", "bar font unchanged")
-	expect(theme.widget_font == "JetBrains Mono Nerd Font 8", "widget font unchanged")
+	expect(theme.widget_font == "JetBrains Mono Nerd Font 9", "widget font")
 	expect(find(tree, by_role("mem")).font == theme.widget_font, "wrapped text font")
 end
 
