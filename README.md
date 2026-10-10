@@ -256,6 +256,20 @@ Without `--manager`, the helper skips in non-interactive mode, dry-run mode, or 
 - **pass-insert-utility** - Helper for inserting passwords into apps
 - **nvim-launcher** - Pre-configured Neovim launcher with API key loading
 
+## AUR pre-build scan (aurscan + yay)
+
+`install/setup-aurscan.sh` builds [aurscan](https://github.com/manticore-projects/aurscan) and links the `yay` stow package, whose `~/.config/yay/init.lua` makes yay (v13+) scan every AUR package after download and before anything is built or installed.
+
+```bash
+install/setup-aurscan.sh            # preview; changes nothing
+install/setup-aurscan.sh --apply    # build aurscan, then stow the yay package
+```
+
+- **Pinned build.** `install/aurscan/PKGBUILD` is a local copy of upstream's PKGBUILD that builds v0.9.2 from one reviewed git commit (offline, vendored Go dependencies). `makepkg` runs as your user and asks for sudo itself; the helper never calls sudo, never uses `--adopt`, and refuses to touch an existing personal `~/.config/yay/init.lua` (merge the block by hand instead).
+- **Static rules only.** The hook always sets `AURSCAN_RULES_ONLY=1`. aurscan's own docs rate models of 3B parameters or fewer as near-random for this job and recommend 14B at minimum, and without the flag it would auto-detect a cloud CLI and send package files off-machine. Neither is acceptable here, so only the built-in rules run.
+- **On a flag** aurscan aborts the build and prints a report; to continue anyway you must type `INSTALL` at the prompt. It reads the prompt from the terminal, so without a TTY a flagged package is blocked (fail closed). A desktop notification is also sent. If `/usr/bin/aurscan` is missing the hook aborts every AUR build rather than skipping the scan.
+- **Uninstall.** `stow -D --no-folding -d ~/.dotfiles -t ~ yay` removes the hook; `sudo pacman -Rns aurscan` removes the scanner.
+
 ## Tmux: Vi navigation and SSH clipboard
 
 The prefix is **Ctrl+a**. Use tmux 3.2+ and an OSC 52-capable terminal such as
