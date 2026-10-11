@@ -21,8 +21,11 @@ switching between multiple accounts. Add them here if you need them.
 
 ## Files
 
-- `bin/tailscale-status` - waybar JSON (default) or a plain string (`--plain`,
-  used by the awesome widget)
+- `bin/tailscale-status` - waybar-style JSON, used by both the waybar module
+  and the awesome widget. The bar shows only the connection state (a logo or
+  icon, bright when connected and grey otherwise), never the IP, so it is safe
+  to screenshot; the IP is still available through the menu's "copy this
+  device's IP"
 - `bin/tailscale-menu` - rofi menu: toggle, copy this device's IP, admin
   console, copy a peer's IP
 - `bin/tailscale-toggle` - `tailscale up`/`down` based on current state

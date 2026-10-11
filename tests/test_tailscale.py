@@ -135,49 +135,47 @@ printf '%s\\n' "tailscale-toggle $*" >>"$CALLS"
         self.assertEqual(self.run_script("tailscale-toggle").returncode, 0)
         self.assertIn("Failed to turn on", self.calls_text())
 
-    def test_status_invalid_input_emits_plain_and_structured_errors(self):
+    def test_status_invalid_input_is_error_class_with_off_text(self):
         cases = [(value, "0") for value in self.invalid_statuses()] + [
             ('{"BackendState":"Running"}', "1")
         ]
         for output, cli_exit in cases:
             with self.subTest(output=output, cli_exit=cli_exit):
                 self.env.update(TS_JSON=output, TS_EXIT=cli_exit)
-                plain = self.run_script("tailscale-status", "--plain")
-                self.assertEqual(plain.returncode, 0)
-                self.assertTrue(plain.stdout.rstrip().endswith(" error"))
-                structured = self.run_script("tailscale-status")
-                self.assertEqual(structured.returncode, 0)
-                data = json.loads(structured.stdout)
-                self.assertEqual((data["class"], data["alt"], data["text"]), ("error", "error", "error"))
+                result = self.run_script("tailscale-status")
+                self.assertEqual(result.returncode, 0)
+                data = json.loads(result.stdout)
+                self.assertEqual((data["class"], data["alt"], data["text"]), ("error", "error", "off"))
+                self.assertEqual(data["tooltip"], "Tailscale: daemon not running or status unreadable")
+                self.assertNotIn("error", data["text"])
 
-    def test_status_connected_ip_and_missing_optional_ip_formats(self):
+    def test_status_connected_never_shows_ip(self):
         self.env.update(TS_EXIT="0")
         self.env["TS_JSON"] = '{"BackendState":"Running","Self":{"TailscaleIPs":["100.64.0.1"]}}'
-        data = json.loads(self.run_script("tailscale-status").stdout)
-        self.assertEqual((data["class"], data["alt"], data["text"]), ("connected", "connected", "100.64.0.1"))
-        self.assertIn("100.64.0.1", data["tooltip"])
-        plain = self.run_script("tailscale-status", "--plain")
-        self.assertTrue(plain.stdout.rstrip().endswith(" 100.64.0.1"))
+        result = self.run_script("tailscale-status")
+        data = json.loads(result.stdout)
+        self.assertEqual((data["class"], data["alt"], data["text"]), ("connected", "connected", "on"))
+        self.assertEqual(data["tooltip"], "Tailscale: connected")
+        self.assertNotIn("100.", result.stdout)
 
         for self_value in ("null", "{}", '{"TailscaleIPs":null}', '{"TailscaleIPs":[]}'):
             with self.subTest(self_value=self_value):
                 self.env["TS_JSON"] = f'{{"BackendState":"Running","Self":{self_value}}}'
                 data = json.loads(self.run_script("tailscale-status").stdout)
                 self.assertEqual((data["class"], data["text"]), ("connected", "on"))
-                self.assertIn("IP unavailable", data["tooltip"])
 
-    def test_status_off_json_and_plain(self):
+    def test_status_off_json(self):
         self.env.update(TS_JSON='{"BackendState":"Stopped"}', TS_EXIT="0")
         data = json.loads(self.run_script("tailscale-status").stdout)
         self.assertEqual((data["class"], data["alt"], data["text"]), ("disconnected", "disconnected", "off"))
-        self.assertTrue(self.run_script("tailscale-status", "--plain").stdout.rstrip().endswith(" off"))
+        self.assertEqual(data["tooltip"], "Tailscale: Stopped")
 
-    def test_status_wrong_typed_optional_fields_are_errors(self):
+    def test_status_wrong_typed_optional_fields_are_ignored(self):
         for self_value in ('"bad"', '{"TailscaleIPs":false}', '{"TailscaleIPs":[9]}'):
             with self.subTest(self_value=self_value):
                 self.env["TS_JSON"] = f'{{"BackendState":"Running","Self":{self_value}}}'
                 data = json.loads(self.run_script("tailscale-status").stdout)
-                self.assertEqual(data["class"], "error")
+                self.assertEqual((data["class"], data["text"]), ("connected", "on"))
 
     def test_menu_invalid_status_notifies_before_rofi(self):
         cases = [(value, "0") for value in self.invalid_statuses()] + [
