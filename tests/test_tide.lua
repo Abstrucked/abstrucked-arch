@@ -46,7 +46,7 @@ local function widget(spec)
             number = math.max(0, number)
             if not self.scale then number = math.min(self.max_value, number) end
             table.insert(self.values, { value = number, group = group })
-            local limit = (self.width or 100) * (self.stack and 2 or 1)
+            local limit = self.width or 100
             while #self.values > limit do table.remove(self.values, 1) end
         end
     end
@@ -131,7 +131,11 @@ local gears = {
     filesystem = { get_themes_dir = function() return "/themes/" end },
     shape = { rounded_rect = function() end, rectangle = function() end, rounded_bar = function() end },
     string = { xml_escape = function(value) return value end },
-    table = { join = function(...) return { ... } end, clone = function(value) return value end },
+    table = { join = function(...) return { ... } end, clone = function(value) return value end,
+        crush = function(target, source)
+            for key, value in pairs(source) do target[key] = value end
+            return target
+        end },
     timer = function(args)
         local timer = object({ args = args })
         timer.again = function() if args.callback then args.callback() end end
@@ -306,10 +310,13 @@ for _, popup in ipairs(popup_records) do assert(popup.type ~= "dock", "screen se
 
 local cpu_graph, ram_graph, network_graph = popup_graph(monitors[1]), popup_graph(monitors[2]), popup_graph(monitors[3])
 assert(cpu_graph.max_value == 100 and ram_graph.max_value == 100, "CPU and RAM graphs must be bounded at 100")
-assert(network_graph.stack == true and network_graph.scale == true and network_graph.max_value == 1,
-    "network graph must be stacked and auto-scaled")
-assert(type(network_graph.stack_colors) == "table" and network_graph.stack_colors[1] ~= network_graph.stack_colors[2],
-    "network graph groups must use distinct colors")
+assert(not network_graph.stack and network_graph.scale == true and network_graph.min_value == 0,
+    "network graph must be a single auto-scaled total anchored at zero")
+assert(network_graph.step_width == cpu_graph.step_width and network_graph.step_spacing == cpu_graph.step_spacing
+    and network_graph.color == cpu_graph.color, "network graph must share the CPU block style")
+assert(network_graph.width * (network_graph.step_width + network_graph.step_spacing) >= network_graph.forced_width
+    and network_graph.width < network_graph.forced_width / 4,
+    "graph width must be the retained block count, not pixels")
 assert(not popup_has_text(monitors[1], "nan") and not popup_has_text(monitors[2], "inf")
     and not popup_has_text(monitors[3], "nan"),
     "missing readings must use an em dash, never non-finite text")
@@ -334,16 +341,13 @@ assert(#network_graph.values == 0, "first sample from a new interface must be su
 
 environment.net_now = { devices = { eth0 = { received = "2048", sent = "512" } } }
 refresh()
-assert(#network_graph.values == 2 and network_graph.values[1].value == 2048 and network_graph.values[1].group == 1
-    and network_graph.values[2].value == 512 and network_graph.values[2].group == 2,
-    "network graph must add received/down and sent/up as separate groups")
-assert(network_graph.max_value >= 2560,
-    "stacked network graph scale must include the combined retained download and upload peak")
+assert(#network_graph.values == 1 and network_graph.values[1].value == 2560,
+    "network graph must add one combined download+upload total")
 assert(popup_has_text(monitors[3], "DL") and popup_has_text(monitors[3], "UL")
     and popup_has_text(monitors[3], "2.0 MiB/s") and popup_has_text(monitors[3], "512 KiB/s"),
     "network label must keep distinct formatted download and upload rates")
 refresh()
-assert(#network_graph.values == 2, "unchanged network table must not append duplicate history")
+assert(#network_graph.values == 1, "unchanged network table must not append duplicate history")
 
 environment.cpu_now = { usage = 150 }
 environment.mem_now = { perc = -20, used = 10, total = 1024 }
@@ -351,11 +355,7 @@ environment.net_now = { devices = { eth0 = { received = -2, sent = -3 } } }
 refresh()
 assert(cpu_graph.values[#cpu_graph.values].value == 100 and ram_graph.values[#ram_graph.values].value == 0,
     "CPU and RAM samples must be clamped to 0..100")
-assert(network_graph.values[#network_graph.values - 1].value == 0 and network_graph.values[#network_graph.values].value == 0,
-    "negative network rates must clamp to zero")
-assert(network_graph.values[1].value == 2048 and network_graph.values[2].value == 512
-    and network_graph.max_value >= 2560,
-    "smaller samples must not clip the older stacked peak while it remains in history")
+assert(network_graph.values[#network_graph.values].value == 0, "negative network rates must clamp to zero")
 environment.mem_now = { perc = 50, used = 10, total = 0 }
 environment.cpu_now = { usage = -20 }
 refresh()
@@ -368,8 +368,7 @@ environment.net_now = { devices = {
     eth0 = { received = "1024", sent = "256" }, eth1 = { received = "999999999", sent = "999999999" },
 } }
 refresh()
-assert(network_graph.values[#network_graph.values - 1].value == 1024
-    and network_graph.values[#network_graph.values].value == 256,
+assert(network_graph.values[#network_graph.values].value == 1280,
     "a newly added interface spike must be excluded from established totals")
 environment.net_now = { devices = { eth1 = { received = "64", sent = "32" } } }
 refresh()
@@ -377,15 +376,14 @@ environment.net_now = { devices = {
     eth0 = { received = "999999999", sent = "999999999" }, eth1 = { received = "128", sent = "64" },
 } }
 refresh()
-assert(network_graph.values[#network_graph.values - 1].value == 128
-    and network_graph.values[#network_graph.values].value == 64,
+assert(network_graph.values[#network_graph.values].value == 192,
     "a reconnected interface must be primed again before its spike is used")
 for _ = 1, network_graph.width do
     environment.net_now = { devices = { eth1 = { received = "1", sent = "2" } } }
     refresh()
 end
-assert(network_graph.max_value == 3 and #network_graph.values == network_graph.width * 2,
-    "network scale must shrink after its bounded history expires an old peak")
+assert(#network_graph.values == network_graph.width and network_graph.values[1].value == 3,
+    "network history must be trimmed to the retained block count")
 local values_before_empty_devices = #network_graph.values
 environment.net_now = { devices = {} }
 refresh()
@@ -399,14 +397,13 @@ environment.net_now = nil
 environment.cpu_now = { usage = math.huge }
 environment.mem_now = { perc = 0 / 0, used = math.huge, total = 8192 }
 local values_before_invalid_metrics = #network_graph.values
-local maximum_before_invalid_metrics = network_graph.max_value
 refresh()
 assert(popup_has_current_text(monitors[1], "CPU —") and popup_has_current_text(monitors[2], "—")
     and popup_has_current_text(monitors[3], "DL —") and popup_has_current_text(monitors[3], "UL —"),
     "missing or non-finite metrics must replace stale labels with unavailable readings")
 environment.net_now = { devices = { eth0 = { received = "999999999", sent = "999999999" } } }
 refresh()
-assert(#network_graph.values == values_before_invalid_metrics and network_graph.max_value == maximum_before_invalid_metrics,
+assert(#network_graph.values == values_before_invalid_metrics,
     "network returning after a missing snapshot must prime its interfaces again")
 for _, sample in ipairs(cpu_graph.values) do
     assert(sample.value >= 0 and sample.value <= 100, "CPU history must remain bounded")

@@ -305,21 +305,23 @@ end
 local function build_monitor(s)
     local graph_width = dpi(260)
     local label = text("CPU —", c.fg, theme.widget_font)
-    local cpu_graph = wibox.widget({
-        width = graph_width, forced_width = graph_width, forced_height = dpi(32), max_value = 100,
-        background_color = transparent, color = c.accent,
-        step_width = dpi(5), step_spacing = dpi(3), widget = wibox.widget.graph,
-    })
+    local step_width, step_spacing = dpi(5), dpi(3)
+    -- Blocks that fit; also the retained sample count, so auto-scale only sees what is on screen.
+    local columns = math.ceil(graph_width / (step_width + step_spacing))
+    local function bar_graph(props)
+        return wibox.widget(gears.table.crush({
+            width = columns, forced_width = graph_width, forced_height = dpi(32),
+            background_color = transparent, color = c.accent,
+            step_width = step_width, step_spacing = step_spacing, widget = wibox.widget.graph,
+        }, props))
+    end
+    local cpu_graph = bar_graph({ max_value = 100 })
     local cpu_header = wibox.layout.align.horizontal(
         text("SYSTEM / AT EASE", theme.muted, "JetBrains Mono 8"), nil, label)
 
     local ram_label = text("—", c.fg, theme.widget_font)
     ram_label.align = "right"
-    local ram_graph = wibox.widget({
-        width = graph_width, forced_width = graph_width, forced_height = dpi(32), max_value = 100,
-        background_color = transparent, color = c.accent,
-        step_width = dpi(5), step_spacing = dpi(3), widget = wibox.widget.graph,
-    })
+    local ram_graph = bar_graph({ max_value = 100 })
     local ram_header = wibox.layout.align.horizontal(
         text("MEMORY", theme.muted, "JetBrains Mono 8"), nil,
         wibox.container.constraint(ram_label, "max", dpi(190))
@@ -332,11 +334,8 @@ local function build_monitor(s)
     local network_rates = wibox.widget({
         download, upload, spacing = dpi(8), layout = wibox.layout.fixed.horizontal,
     })
-    local network_graph = wibox.widget({
-        width = graph_width, forced_width = graph_width, forced_height = dpi(32), max_value = 1, scale = true, stack = true,
-        background_color = transparent, stack_colors = { down_color, up_color },
-        step_width = dpi(5), step_spacing = dpi(3), widget = wibox.widget.graph,
-    })
+    -- Rescales to the busiest visible sample; max_value = 1 is only the floor, and min_value = 0 keeps bars anchored at the baseline.
+    local network_graph = bar_graph({ max_value = 1, min_value = 0, scale = true })
     local network_header = wibox.layout.align.horizontal(
         text("NETWORK", theme.muted, "JetBrains Mono 8"), nil,
         wibox.container.constraint(network_rates, "max", dpi(190))
@@ -384,7 +383,7 @@ local function build_monitor(s)
     s:connect_signal("property::workarea", position)
     position()
 
-    local seen_interfaces, previous_network_snapshot, traffic_totals = {}, nil, {}
+    local seen_interfaces, previous_network_snapshot = {}, nil
     local function numeric(value)
         local number = tonumber(value)
         if number and number == number and number > -math.huge and number < math.huge then return number end
@@ -425,14 +424,7 @@ local function build_monitor(s)
             return
         end
         download.text, upload.text = "DL " .. rate(received), "UL " .. rate(sent)
-        table.insert(traffic_totals, received + sent)
-        while #traffic_totals > graph_width do table.remove(traffic_totals, 1) end
-        local maximum = 1
-        for _, total in ipairs(traffic_totals) do maximum = math.max(maximum, total) end
-        -- Stacked graphs scale groups independently, so use the largest combined column.
-        network_graph.max_value = maximum
-        network_graph:add_value(received, 1)
-        network_graph:add_value(sent, 2)
+        network_graph:add_value(received + sent)
     end
 
     s.tide_monitor_timer = gears.timer({ timeout = 2, autostart = true, call_now = true, callback = function()
