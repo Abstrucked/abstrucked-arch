@@ -34,6 +34,7 @@ end
 
 local popup_records, timer_records, titlebar_calls, shared_widget_calls = {}, {}, 0, 0
 local tray_records, tooltip_records = {}, {}
+local mono_system
 local function widget(spec)
     local value = object({ spec = spec })
     if type(spec) == "table" then
@@ -105,7 +106,11 @@ local awful = {
         screen.tags = { { screen = screen, selected = true, master_width_factor = 0 } }
     end,
     titlebar = titlebar,
-    tooltip = function(args) table.insert(tooltip_records, args) end,
+    tooltip = function(args)
+        table.insert(tooltip_records, args)
+        args.hide_calls = 0
+        return { hide = function() args.hide_calls = args.hide_calls + 1 end }
+    end,
     util = { terminal = "xterm", tagnames = { "1" }, taglist_buttons = {}, tasklist_buttons = {},
         mymainmenu = { toggle = function() end } },
     widget = { prompt = function() return object() end },
@@ -160,7 +165,8 @@ local modules = {
     ["themes.mono.icons"] = { get = function() return "icon" end },
     ["themes.mono.widgets"] = function()
         shared_widget_calls = shared_widget_calls + 1
-        return { system = object(), network = object(), volume = object(), battery = object(), fs = object() }
+        mono_system = object()
+        return { system = mono_system, network = object(), volume = object(), battery = object(), fs = object() }
     end,
     ["themes.tide.wallpaper"] = function() return "wallpaper" end,
     ["awesome-wm-widgets.run-shell-3.run-shell"] = { launch = function() end },
@@ -452,6 +458,19 @@ local status_triggers = {}
 for _, args in ipairs(tooltip_records) do
     if args.text == "System status" then table.insert(status_triggers, args.objects[1]) end
 end
+for _, trigger in ipairs(status_triggers) do
+    assert(trigger.children[1].children[1] ~= mono_system, "status trigger must not embed mono's widgets.system")
+end
+assert(mono_system.bound_buttons == nil, "theme must not touch mono's widgets.system buttons")
+local function tooltip_hides(index)
+    local count = 0
+    for _, args in ipairs(tooltip_records) do
+        if args.text == "System status" then
+            count = count + 1
+            if count == index then return args.hide_calls end
+        end
+    end
+end
 local function toggle_for(index) return status_triggers[index].bound_buttons[1].callback end
 assert(#status_triggers == 2 and #tray_records == 2, "each screen builds one status trigger and tray")
 local primary_tray, second_tray = tray_records[1], tray_records[2]
@@ -460,10 +479,12 @@ primary_tray:connect_signal("widget::redraw_needed", function() redraws.primary 
 second_tray:connect_signal("widget::redraw_needed", function() redraws.second = redraws.second + 1 end)
 
 toggle_for(1)()
+assert(tooltip_hides(1) == 1, "opening the primary panel must hide the status tooltip")
 assert(theme.bg_systray ~= surface and theme.bg_systray == "#222222/#eeeeee",
     "opening the primary panel must paint the tray with the raised pill colour")
 assert(redraws.primary == 1, "opening the primary panel must redraw the tray")
 toggle_for(1)()
+assert(tooltip_hides(1) == 1, "closing the panel must not hide the tooltip again")
 assert(theme.bg_systray == surface, "closing the primary panel must restore the surface colour")
 assert(redraws.primary == 2, "closing the primary panel must redraw the tray")
 

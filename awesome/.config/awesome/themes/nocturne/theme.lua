@@ -396,8 +396,6 @@ function theme.at_screen_connect(s)
     local task = wibox.container.constraint(s.mytasklist, "max", dpi(300))
     shared_widgets = shared_widgets or build_widgets({ colors = c, theme = theme })
     local widgets = shared_widgets
-    -- The status dot opens the drop-down below instead of a notification.
-    widgets.system:buttons({})
     s.fs = widgets.fs
 
     local clock = wibox.widget.textclock(
@@ -456,7 +454,13 @@ function theme.at_screen_connect(s)
     table.insert(right, widgets.volume)
     table.insert(right, widgets.battery)
     table.insert(right, wibox.container.place(layout_chip, "center", "center"))
-    local trigger = wibox.container.background(widgets.system, transparent, rounded(6))
+    -- Own dot, not mono's widgets.system: its tooltip and click notification
+    -- would pile up behind the drop-down.
+    local dot = wibox.widget({
+        forced_width = dpi(5), forced_height = dpi(5), shape = gears.shape.circle,
+        color = c.accent, widget = wibox.widget.separator,
+    })
+    local trigger = wibox.container.background(wibox.container.place(dot, "center", "center"), transparent, rounded(6))
     trigger.forced_width = dpi(20)
     table.insert(right, trigger)
 
@@ -467,9 +471,17 @@ function theme.at_screen_connect(s)
         wibox.container.margin(right_layout, dpi(12), dpi(8)), transparent, rounded(10)
     )
     status.forced_height = dpi(32)
-    local toggle_panel = build_panel(s, function(open) status.bg = open and raised or transparent end)
+    local status_tooltip = awful.tooltip({ objects = { trigger }, text = "System status" })
+    local toggle_panel = build_panel(s, function(open)
+        status.bg = open and raised or transparent
+        if open then status_tooltip.hide() end
+        -- The tray sits in the pill, so it follows the pill colour (primary only).
+        if s == screen.primary then
+            theme.bg_systray = open and raised or c.bg
+            tray:emit_signal("widget::redraw_needed")
+        end
+    end)
     trigger:buttons(gears.table.join(awful.button({}, 1, toggle_panel)))
-    awful.tooltip({ objects = { trigger }, text = "System status" })
 
     local launcher = wibox.container.background(
         wibox.container.place(wibox.widget({
