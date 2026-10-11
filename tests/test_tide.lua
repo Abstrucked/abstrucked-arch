@@ -33,6 +33,7 @@ local function object(properties)
 end
 
 local popup_records, timer_records, titlebar_calls, shared_widget_calls = {}, {}, 0, 0
+local tray_records, tooltip_records = {}, {}
 local function widget(spec)
     local value = object({ spec = spec })
     if type(spec) == "table" then
@@ -70,7 +71,11 @@ local wibox = {
 wibox.widget = setmetatable({
     textbox = "textbox", imagebox = "imagebox", progressbar = "progressbar", graph = "graph", separator = "separator",
     textclock = function() return object() end,
-    systray = function() return object() end,
+    systray = function()
+        local tray = object()
+        table.insert(tray_records, tray)
+        return tray
+    end,
 }, { __call = function(_, spec) return widget(spec) end })
 
 local titlebar = setmetatable({
@@ -100,7 +105,7 @@ local awful = {
         screen.tags = { { screen = screen, selected = true, master_width_factor = 0 } }
     end,
     titlebar = titlebar,
-    tooltip = function() end,
+    tooltip = function(args) table.insert(tooltip_records, args) end,
     util = { terminal = "xterm", tagnames = { "1" }, taglist_buttons = {}, tasklist_buttons = {},
         mymainmenu = { toggle = function() end } },
     widget = { prompt = function() return object() end },
@@ -151,7 +156,7 @@ local modules = {
     wibox = wibox,
     ["beautiful.xresources"] = { apply_dpi = function(value) return value end },
     ["themes.colors"] = { bg = "#111111", surface = "#222222", fg = "#eeeeee", accent = "#00aaff", muted = "#888888" },
-    ["themes.mono.style"] = { mix = function(first) return first end, on = function(first) return first end },
+    ["themes.mono.style"] = { mix = function(first, second) return first .. "/" .. tostring(second) end, on = function(first) return first end },
     ["themes.mono.icons"] = { get = function() return "icon" end },
     ["themes.mono.widgets"] = function()
         shared_widget_calls = shared_widget_calls + 1
@@ -277,6 +282,7 @@ local test_screen = object({
     workarea = { x = 0, y = 0, width = 1920, height = 1080 },
 })
 local timers_before_screen = #timer_records
+screen_api.primary = test_screen
 theme.at_screen_connect(test_screen)
 assert(test_screen.tide_dock == nil, "screen setup must not create a dock")
 assert(test_screen.mywibox and test_screen.mywibox.position == "top", "top status bar must remain")
@@ -438,4 +444,33 @@ local second_screen = object({
 theme.at_screen_connect(second_screen)
 assert(shared_widget_calls == 1, "shared status widgets must not be rebuilt for another screen")
 assert(extra_lain_samplers == 0, "desktop cards must reuse shared poller globals, not create lain samplers")
+
+-- The X11 tray cannot be transparent, so its colour must match what it sits on.
+local surface = "#222222"
+assert(theme.bg_systray == surface, "tray background must match the wibar surface, not the darker bg")
+local status_triggers = {}
+for _, args in ipairs(tooltip_records) do
+    if args.text == "System status" then table.insert(status_triggers, args.objects[1]) end
+end
+local function toggle_for(index) return status_triggers[index].bound_buttons[1].callback end
+assert(#status_triggers == 2 and #tray_records == 2, "each screen builds one status trigger and tray")
+local primary_tray, second_tray = tray_records[1], tray_records[2]
+local redraws = { primary = 0, second = 0 }
+primary_tray:connect_signal("widget::redraw_needed", function() redraws.primary = redraws.primary + 1 end)
+second_tray:connect_signal("widget::redraw_needed", function() redraws.second = redraws.second + 1 end)
+
+toggle_for(1)()
+assert(theme.bg_systray ~= surface and theme.bg_systray == "#222222/#eeeeee",
+    "opening the primary panel must paint the tray with the raised pill colour")
+assert(redraws.primary == 1, "opening the primary panel must redraw the tray")
+toggle_for(1)()
+assert(theme.bg_systray == surface, "closing the primary panel must restore the surface colour")
+assert(redraws.primary == 2, "closing the primary panel must redraw the tray")
+
+toggle_for(2)()
+assert(theme.bg_systray == surface, "a non-primary panel must not recolour the primary tray")
+assert(redraws.primary == 2 and redraws.second == 0, "a non-primary panel must not redraw any tray")
+toggle_for(2)()
+assert(theme.bg_systray == surface, "closing a non-primary panel must leave the tray alone")
+
 print("tide chrome and monitor tests passed")

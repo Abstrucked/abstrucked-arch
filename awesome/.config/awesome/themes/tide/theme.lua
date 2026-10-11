@@ -123,7 +123,8 @@ theme.tasklist_disable_icon = true
 theme.tasklist_bg_normal = transparent
 theme.tasklist_bg_focus = transparent
 theme.systray_icon_spacing = dpi(8)
-theme.bg_systray = c.bg
+-- Must match the wibar bg: the X11 tray is painted solid and cannot be transparent.
+theme.bg_systray = c.surface
 
 local layout_icons = gfs.get_themes_dir() .. "default/layouts/"
 for _, name in ipairs({ "tile", "tileleft", "tilebottom", "tiletop", "fairv", "fairh", "spiral",
@@ -567,7 +568,14 @@ function theme.at_screen_connect(s)
         wibox.container.margin(right_layout, dpi(12), dpi(8)), transparent, rounded(10)
     )
     status.forced_height = dpi(30)
-    local toggle_panel = build_panel(s, function(open) status.bg = open and raised or transparent end)
+    local toggle_panel = build_panel(s, function(open)
+        status.bg = open and raised or transparent
+        -- The tray sits in the pill, so it follows the pill colour (primary only).
+        if s == screen.primary then
+            theme.bg_systray = open and raised or c.surface
+            tray:emit_signal("widget::redraw_needed")
+        end
+    end)
     trigger:buttons(gears.table.join(awful.button({}, 1, toggle_panel)))
     awful.tooltip({ objects = { trigger }, text = "System status" })
 
