@@ -35,6 +35,24 @@ return function(p, mix)
     return best
   end
 
+  -- c nudged toward black or white (whichever contrasts more with bg) until it
+  -- reads on bg at 4.5:1, so a hue keeps its identity on a pale or dark block.
+  local function legible(c, bg)
+    if contrast(c, bg) >= 4.5 then return c end
+    local extreme = contrast("#000000", bg) > contrast("#ffffff", bg) and "#000000" or "#ffffff"
+    local out = c
+    for step = 1, 20 do
+      out = mix(c, extreme, step / 20)
+      if contrast(out, bg) >= 4.5 then break end
+    end
+    return out
+  end
+
+  -- The shades a palette may override; text on them is derived from the
+  -- effective value.
+  local surface_alt = p.surface_alt or mix(p.surface, p.fg, 0.15)
+  local selection = p.selection or mix(p.surface, p.fg, 0.15)
+
   -- A powerarrow segment: one of two neutral steps from bg toward fg, which
   -- neighbours alternate between, plain text, and the icon in the full hue.
   local tones = { mix(p.bg, p.fg, 0.09), mix(p.bg, p.fg, 0.17) }
@@ -53,10 +71,16 @@ return function(p, mix)
 
   return {
     -- Shades Omarchy's palette has no equivalent for.
-    surface_alt = mix(p.surface, p.fg, 0.15),
+    surface_alt = surface_alt,
     overlay = mix(p.bg, p.fg, 0.45),
     accent_alt = p.cyan or p.blue,
-    selection = mix(p.surface, p.fg, 0.15),
+    selection = selection,
+    -- Readable text on the selection (light in some palettes, dark in others).
+    on_selection = on(selection),
+    -- Hues made legible on surface_alt (yazi's mode and status segments).
+    accent_on_alt = legible(p.accent, surface_alt),
+    yellow_on_alt = legible(p.yellow, surface_alt),
+    red_on_alt = legible(p.red, surface_alt),
     -- Readable text on an accent-filled block (the tmux session name).
     on_accent = on(p.accent),
     -- The same for the status colours yazi fills (counts, modes, errors).
