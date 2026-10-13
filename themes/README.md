@@ -35,6 +35,10 @@ Both listings are read-only, so Tab never changes state.
   A destination of `-` renders only.
 - tmux reads its colours as `@thm_*` options from `~/.config/tmux/colors.conf`;
   the tracked `config/tmux/theme.conf` keeps the layout and ANSI fallbacks.
+- Yazi reads its colours from `~/.config/yazi/theme.toml`, rendered from
+  `templates/yazi-theme.toml.tpl`. There is no live reload: open Yazi instances
+  pick it up on their next start. `_defaults.lua` derives `on_red`, `on_green`
+  and `on_yellow` (readable text on those status colours) when a palette omits them.
 - GTK3 apps (PCManFM included) follow the palette through adw-gtk3
   (`adw-gtk-theme`): `gtk3-settings.ini` selects `adw-gtk3` or `adw-gtk3-dark` by
   the palette's `variant`, and `gtk3.css` recolors it with libadwaita's named

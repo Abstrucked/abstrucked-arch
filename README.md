@@ -267,13 +267,14 @@ Without `--manager`, the helper skips in non-interactive mode, dry-run mode, or 
 - **starship** - Cross-shell prompt (used with bash)
 - **bash-completion** - Tab completion for bash
 - **tmux** - Terminal multiplexer
-- **alacritty** - GPU-accelerated terminal
-- **ghostty** - Modern terminal emulator with dynamic theming
+- **ghostty** - Default terminal, opened through `ghostty-window` (resident instance) with dynamic theming
+- **alacritty** - GPU-accelerated terminal, kept for the Hyprland dropdown and the `nmtui` popup
 
 ### Window Manager & Desktop
 - **AwesomeWM** - Tiling window manager
 - **picom** - Compositor for transparency and effects
 - **pcmanfm** - File manager
+- **yazi** - Terminal file manager (Mod+e), with preview dependencies and plugins
 
 ### Development Tools
 - **Neovim** - Text editor with LazyVim distribution
@@ -453,7 +454,7 @@ pass-insert-utility
 
 First-party configuration packages are organized for GNU Stow: `alacritty/`,
 `awesome/`, `bash/`, `btop/`, `ghostty/`, `hyprland/`, `nvim/`, `pcmanfm/`,
-`picom/`, `ssh/`, and
+`picom/`, `ssh/`, `yazi/`, and
 `zsh/`. Other main areas are:
 
 - `install.sh`, `install/`, `lib/`, and the root `install-*.sh` helpers —
@@ -571,6 +572,51 @@ stow --simulate --verbose --no-folding -d "$PWD" -t "$HOME" -D ghossty -S ghostt
 
 Resolve conflicts first; remove `--simulate` only when ready to apply. Never use
 `--adopt` for this migration.
+
+### Default terminal
+
+Ghostty is the default terminal. `scripts/.local/bin/ghostty-window` opens
+windows in one resident Ghostty instance with `ghostty +new-window`, which is
+faster than a cold start. If nothing owns the bus name it starts that instance
+itself, so D-Bus never activates the reduced-environment systemd unit; without
+a reachable session bus it falls back to plain `ghostty`. The session starts the
+resident instance (awesome's `run_once`, Hyprland's `exec-once`), and
+`scripts/.config/shell/env.sh` exports `TERMINAL=ghostty-window`. Alacritty
+stays for the Hyprland dropdown terminal and the `nmtui` popup. The Ghostty
+config sets JetBrainsMono Nerd Font at size 10.
+
+### Yazi
+- `yazi/.config/yazi/` - `yazi.toml`, `keymap.toml`, `init.lua` and `package.toml`.
+  Mod+e opens Yazi in the default terminal.
+- Plugins are pinned in `package.toml` and installed by the installer through
+  `ya pkg install`. `ya pkg add/upgrade/delete` edit the tracked file through
+  the Stow link.
+- Custom keys: `l`/Enter smart-enter, `T` maximize preview, `c m` chmod,
+  `g .` to `~/.dotfiles`, `g _` to `~/_dev`.
+- The `y` shell wrapper (`scripts/.config/shell/aliases.sh`) changes to Yazi's
+  last directory on exit.
+- The preview pane is half the window and image sizes are tuned for Ghostty.
+  tmux sets `allow-passthrough` and `update-environment TERM TERM_PROGRAM`, so
+  images work inside tmux.
+- Preview dependencies (`7zip`, `zoxide`, `resvg`, `chafa`, `poppler`,
+  `imagemagick`) are in `packages.list`.
+- `themectl` renders the colours to `~/.config/yazi/theme.toml`; see
+  [themes/README.md](themes/README.md).
+
+To take this live on an existing machine:
+
+```bash
+sudo pacman -S --needed yazi 7zip zoxide resvg chafa poppler imagemagick
+cd ~/.dotfiles
+stow --no-folding -d ~/.dotfiles -t ~ yazi
+stow --no-folding -R -d ~/.dotfiles -t ~ scripts
+themectl apply
+ya pkg install
+tmux source-file ~/.tmux.conf
+```
+
+Then restart awesome (or log out and back in) so the resident Ghostty starts and
+`TERMINAL` is exported.
 
 ## 📋 Manual Installation
 
