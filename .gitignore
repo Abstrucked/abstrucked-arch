@@ -1,5 +1,6 @@
 scripts/.local/share
 scripts/.local/state
+scripts/.local/lib
 
 # Backup directories
 scripts.backup.*
@@ -15,6 +16,14 @@ known_hosts.old
 .env
 .env.*
 *.env
+
+# ssh/.ssh and gnupg/.gnupg hold private keys whenever ~/.ssh or ~/.gnupg is a
+# folded Stow link into them. Only our own files are tracked there, so nothing
+# else that lands in them can be committed by accident.
+ssh/.ssh/*
+!ssh/.ssh/config
+gnupg/.gnupg/*
+!gnupg/.gnupg/gpg-agent.conf
 
 # OS files
 .DS_Store
@@ -34,6 +43,7 @@ __pycache__/
 
 # Local-only configuration and credentials
 .claude/settings.local.json
+.claude/worktrees/
 secrets.json
 credentials.json
 *.token
