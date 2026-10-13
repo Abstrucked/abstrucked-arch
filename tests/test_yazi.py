@@ -11,7 +11,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG = ROOT / "yazi/.config/yazi"
 PLUGINS = ("git", "full-border", "smart-enter", "toggle-pane", "chmod", "githead",
-           "relative-motions", "duckdb", "mediainfo", "ouch")
+           "relative-motions", "piper", "duckdb", "mediainfo", "ouch")
 # Built into Yazi, so it needs no package.toml entry.
 BUILTIN_PLUGINS = {"zoxide", "fzf", "trash"}
 # Plugins shipped in this repo under plugins/<name>.yazi/ instead of package.toml.
@@ -64,7 +64,7 @@ class YaziPackageTests(unittest.TestCase):
                     referenced.add(match.group(1))
         for rule in load("yazi.toml").get("plugin", {}).values():
             for entry in rule:
-                referenced.add(entry["run"])
+                referenced.add(entry["run"].split()[0])
         referenced.update(re.findall(r'require\("([\w-]+)"\)', (CONFIG / "init.lua").read_text()))
         referenced -= BUILTIN_PLUGINS | {"mime"}
         self.assertTrue(referenced)
@@ -98,7 +98,7 @@ class YaziPackageTests(unittest.TestCase):
 
     def test_packages_list_has_preview_tools(self):
         packages = (ROOT / "packages.list").read_text().split()
-        for name in ("duckdb", "mediainfo", "ouch"):
+        for name in ("glow", "duckdb", "mediainfo", "ouch"):
             self.assertIn(name, packages)
 
     def test_core_settings(self):

@@ -41,8 +41,9 @@ resvg
 chafa
 poppler
 imagemagick
-# Tools behind the rich previews: duckdb for CSV/JSON/Parquet, mediainfo for
-# video and audio, ouch for archives (all in Arch extra)
+# Tools behind the rich previews: glow for Markdown, duckdb for CSV/Parquet,
+# mediainfo for video and audio, ouch for archives (all in Arch extra)
+glow
 duckdb
 mediainfo
 ouch

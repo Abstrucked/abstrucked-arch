@@ -40,22 +40,23 @@ run   = "git"
 group = "git"
 
 # Rich previews. Each is a package (see package.toml) that needs its tool on
-# PATH: duckdb, mediainfo, ouch.
+# PATH: glow, duckdb, mediainfo, ouch.
 
-# Markdown stays with the built-in code previewer: Reledia/glow calls
-# Command:args, which Yazi 26.9.1 removed, so its previewer errors.
+# Markdown through glow, run by yazi-rs's piper. Reledia/glow is not used: it
+# calls Command:args, which Yazi 26.9.1 removed. piper sets $t to light, dark or
+# auto from the terminal; $w is the pane width.
+[[plugin.prepend_previewers]]
+url = "*.md"
+run = 'piper -- CLICOLOR_FORCE=1 glow -w=$w -s="$([ "$t" = light ] && echo light || echo dark)" "$1"'
 
-# duckdb.yazi: tabular data. .txt and .xlsx stay with the built-in previewers.
+# duckdb.yazi: tabular data. .txt and .xlsx stay with the built-in previewers,
+# and so does .json, which is mostly config here and reads better highlighted.
 [[plugin.prepend_previewers]]
 url = "*.csv"
 run = "duckdb"
 
 [[plugin.prepend_previewers]]
 url = "*.tsv"
-run = "duckdb"
-
-[[plugin.prepend_previewers]]
-url = "*.json"
 run = "duckdb"
 
 [[plugin.prepend_previewers]]
@@ -77,16 +78,14 @@ run   = "duckdb"
 multi = false
 
 [[plugin.prepend_preloaders]]
-url   = "*.json"
-run   = "duckdb"
-multi = false
-
-[[plugin.prepend_preloaders]]
 url   = "*.parquet"
 run   = "duckdb"
 multi = false
 
 # mediainfo.yazi: audio and video only; still images keep Yazi's native preview.
+# boydaihungst/mediainfo.yazi is deprecated upstream and supports Yazi up to
+# 26.9.1, so it may need replacing after a Yazi upgrade. Fallback: remove its
+# two rules below; Yazi's built-in video thumbnail then applies.
 [[plugin.prepend_previewers]]
 mime = "{audio,video}/*"
 run  = "mediainfo"
