@@ -49,7 +49,7 @@ class BootstrapTests(unittest.TestCase):
         self.command("sudo", 'printf "prerequisites\\n" >> "$BOOTSTRAP_LOG"\n'
                      'exit "${FAIL_PREREQUISITES:-0}"')
         self.command("git", '''
-[[ "$*" == "clone --branch main -- https://github.com/Abstrucked/abstrucked-arch.git $HOME/.dotfiles" ]] || exit 9
+[[ "$*" == "clone --filter=blob:none --branch main -- https://github.com/Abstrucked/abstrucked-arch.git $HOME/.dotfiles" ]] || exit 9
 printf 'clone\\n' >> "$BOOTSTRAP_LOG"
 [[ "${FAIL_CLONE:-0}" == 0 ]] || exit 8
 ''' + f'"{shutil.which("mkdir")}" "$HOME/.dotfiles"\n' + '''

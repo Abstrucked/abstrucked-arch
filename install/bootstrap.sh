@@ -33,7 +33,8 @@ bootstrap_main() {
 
     printf 'Installing prerequisites, then cloning main into %s.\n' "$destination"
     sudo pacman -Syu --needed base-devel git curl
-    git clone --branch main -- "$repository" "$destination"
+    # Blobless clone: keeps full history but fetches old file contents on demand.
+    git clone --filter=blob:none --branch main -- "$repository" "$destination"
     cd -- "$destination"
     exec bash ./install.sh
 }

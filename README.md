@@ -12,12 +12,14 @@ then run:
 curl -fsSL https://raw.githubusercontent.com/Abstrucked/abstrucked-arch/main/install/bootstrap.sh | bash
 ```
 
-This command becomes available after `install/bootstrap.sh` is merged into `main`.
 The bootstrap updates the system and installs `base-devel`, `git`, and `curl`,
 clones `main` into `~/.dotfiles`, and starts the interactive installer. It reconnects
 standard input to your terminal so the installer menus work when launched through
 a pipe. An existing `~/.dotfiles` path is left untouched and stops the bootstrap;
 use the existing checkout's `./install.sh` to rerun installation.
+The clone is a blobless partial clone: history is complete, but old file versions
+are downloaded on demand, so commands like `git log -p` or `git blame` on old
+revisions need network access.
 
 To use `curl -fsSL https://abstrucked.com/dotfiles/install | bash`, configure that
 HTTPS route on your website to redirect to the raw GitHub URL above, or serve
@@ -112,6 +114,41 @@ Lua, Python 3.11+, and PyYAML for YAML files).
 CI runs both checks, including a real Stow/theme/plugin integration test in a
 temporary home. Validate Stow manually with `--simulate --verbose`, never
 `--adopt`: adoption moves existing user files into the repository.
+
+### Legacy folded Stow links
+
+Older installs ran Stow without `--no-folding`, so some home directories became
+symlinks into the checkout, for example `~/.ssh` → `~/.dotfiles/ssh/.ssh` or
+`~/.local` → `~/.dotfiles/scripts/.local`. Applications then write private state
+(SSH keys, app data) into the repository working tree, where only `.gitignore`
+keeps it out of commits and `git clean -fdx` would delete it. `--no-folding`
+prevents new folds but does not undo existing ones, so the installer refuses to
+stow while `~/.ssh`, `~/.gnupg`, `~/.local`, `~/.local/bin`, `~/.local/share`, or
+`~/.local/state` is a symlink into the checkout.
+
+`readlink ~/.ssh` shows where a link points; the directory just below the checkout
+in the target is the Stow package (`ssh`). To unfold `~/.ssh`:
+
+```bash
+mv ~/.ssh ~/.ssh.folded                  # renames only the symlink
+install -d -m 700 ~/.ssh
+# Files the repository does not track belong to you; review, then move them:
+git -C ~/.dotfiles ls-files --others --directory ssh/.ssh
+mv ~/.dotfiles/ssh/.ssh/<file> ~/.ssh/   # repeat for each listed file
+stow --no-folding -d ~/.dotfiles -t ~ ssh
+rm ~/.ssh.folded                         # the old link: no -r, no trailing slash
+```
+
+Use mode 700 only for private directories such as `.ssh` and `.gnupg`; a plain
+`mkdir` is enough for `.local` directories. Moved entries keep their path below
+the package directory, so `gnupg/.gnupg/private-keys-v1.d/` belongs at
+`~/.gnupg/private-keys-v1.d/`. `--directory` lists a wholly untracked
+subdirectory as one entry; move those whole, and create missing parent
+directories before moving a file from a deeper path.
+
+Verify with `ls -la ~/.ssh`, and check that `git -C ~/.dotfiles status --ignored`
+lists nothing under `ssh/.ssh`. Applications that recorded absolute paths in
+their own config may need those paths updated after their data moves.
 
 ## 🐚 Shell Selection
 
