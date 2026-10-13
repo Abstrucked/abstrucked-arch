@@ -7,7 +7,7 @@
 
 local mainMod = "SUPER"
 local altMod = "ALT"
-local terminal = "alacritty"
+local terminal = os.getenv("HOME") .. "/.local/bin/ghostty-window"
 local layout_switcher = os.getenv("HOME") .. "/.local/bin/hypr-layout"
 local monocle_cycler = os.getenv("HOME") .. "/.local/bin/hypr-monocle-cycle"
 
@@ -121,6 +121,7 @@ exec(mainMod .. " + Q", "brave")
 exec(mainMod .. " + D", "discord")
 exec(mainMod .. " + A", "hypr-editor")
 exec(mainMod .. " + SHIFT + W", terminal .. " -e nvim")
+exec(mainMod .. " + E", terminal .. " -e yazi")
 exec(mainMod .. " + X", "hypr-launcher run")
 exec(mainMod .. " + R", "hypr-launcher run")
 exec(mainMod .. " + SHIFT + B", "hypr-power-menu modes")

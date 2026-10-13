@@ -10,7 +10,7 @@ configuration {
     display-window: "Windows";
     matching: "fuzzy";
     drun-display-format: "{name}";
-    terminal: "alacritty";
+    terminal: "ghostty-window";
 }
 
 * {

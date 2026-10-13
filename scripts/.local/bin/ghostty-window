@@ -1,0 +1,13 @@
+#!/bin/bash
+# Open a Ghostty window in the resident instance (started by the session with
+# --gtk-single-instance=true --initial-window=false), which is much faster than
+# a cold start. +new-window passes the caller's working directory along and
+# accepts --working-directory, --command, --title, and -e like the plain CLI.
+# If no instance can be reached (no session bus, activation failure), start a
+# standalone Ghostty with the same arguments.
+set -euo pipefail
+
+if ghostty +new-window "$@"; then
+    exit 0
+fi
+exec ghostty "$@"

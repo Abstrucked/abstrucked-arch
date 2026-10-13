@@ -7,7 +7,7 @@ set -eu
 self="$(readlink -f "$0")"
 if [ "${1:-}" != --in-terminal ]; then
     # Create the terminal before asking pass to unlock pinentry-curses.
-    exec "${TERMINAL:-alacritty}" -e "$self" --in-terminal "$@"
+    exec "${TERMINAL:-ghostty-window}" -e "$self" --in-terminal "$@"
 fi
 shift
 
