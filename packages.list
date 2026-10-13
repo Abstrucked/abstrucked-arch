@@ -61,6 +61,8 @@ ffmpeg
 nodejs
 npm
 lazydocker
+# git filter-repo for history rewrites (a package, not a vendored pip copy)
+git-filter-repo
 
 # Desktop utilities shared by the window-manager configurations and tmux
 # (libnotify provides notify-send)

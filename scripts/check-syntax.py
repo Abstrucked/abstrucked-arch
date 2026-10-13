@@ -16,8 +16,6 @@ VENDORED = (
     "awesome/.config/awesome/lain/",
     "awesome/.config/awesome/volume-widget/",
     "zsh/.config/zsh/zsh-autocomplete/",
-    "scripts/.local/lib/python",
-    "scripts/.local/bin/git-filter-repo",
 )
 # Inner suffix -> shell dialect for templates such as env.sh.tpl.
 TEMPLATE_DIALECTS = {".sh": "sh", ".bash": "bash", ".zsh": "zsh"}

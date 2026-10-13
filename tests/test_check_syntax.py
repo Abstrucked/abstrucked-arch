@@ -85,7 +85,7 @@ class CheckSyntaxTests(unittest.TestCase):
 
         self.add_file("ignored.sh", "#!/bin/sh\necho ignored\n")
         (self.root / ".gitignore").write_text("ignored.sh\n")
-        self.add_file("scripts/.local/lib/python/vendor.py", "#!/usr/bin/env python3\n")
+        self.add_file("zsh/.config/zsh/zsh-autocomplete/vendor.sh", "#!/bin/sh\necho vendored\n")
         link_target = self.add_file("scripts/link-target", "not a shell script\n")
         (self.root / "scripts/link.sh").symlink_to(link_target)
         subprocess.run(["git", "-C", str(self.root), "add", "."], check=True)
@@ -101,7 +101,7 @@ class CheckSyntaxTests(unittest.TestCase):
         shellcheck = [line for line in calls if line.startswith("shellcheck\t")]
         self.assertEqual(shellcheck, ["shellcheck\t--shell=sh\tscripts/normal.sh"])
         self.assertFalse(any("readme.tpl" in line or "ignored.sh" in line
-                             or "vendor.py" in line or "link.sh" in line
+                             or "vendor.sh" in line or "link.sh" in line
                              for line in calls))
         self.assertNotIn("templates/env.sh.tpl", shellcheck[0])
         self.assertNotIn("templates/env.zsh.tpl", shellcheck[0])
@@ -123,7 +123,6 @@ class CheckSyntaxTests(unittest.TestCase):
         self.add_file("config/bad.json", '{"value": }\n')
         self.add_file("config/bad.yaml", "value: [\n")
         self.add_file("config/bad.toml", "value = [\n")
-        self.add_file("scripts/.local/lib/python/config.json", "not json\n")
         self.add_file("config/vendor-copy.toml", "bad = [\n")
         (self.root / "config/.gitignore").write_text("vendor-copy.toml\n")
         target = self.add_file("config/target.yml", "value: ok\n")
