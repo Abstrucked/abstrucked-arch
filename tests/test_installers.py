@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+from stat import S_IFDIR, S_IMODE
 import subprocess
 import sys
 import tempfile
@@ -16,6 +17,8 @@ import unittest
 
 
 ROOT = Path(__file__).resolve().parents[1]
+# The Stow step creates these itself, 0700, before the first package is stowed.
+PRIVATE_HOME_SNAPSHOT = {name: (S_IFDIR | 0o700, None) for name in (".ssh", ".gnupg")}
 COMMON_STOW_PACKAGES = (
     "ssh", "alacritty", "btop", "nvim", "pcmanfm", "scripts", "ghostty", "gnupg",
     "xsession",
@@ -95,7 +98,7 @@ class InstallerTests(unittest.TestCase):
         (self.repo / "nvim/.config/nvim/lua").mkdir()
         for name in ("bash", "basename", "dirname", "date", "mkdir", "mktemp",
                      "cp", "mv", "rm", "rmdir", "ln", "readlink", "realpath",
-                     "find", "grep", "sed", "cat", "sleep", "id"):
+                     "find", "grep", "sed", "cat", "sleep", "id", "chmod", "stat"):
             executable = shutil.which(name)
             self.assertIsNotNone(executable, f"Required test utility: {name}")
             (self.bin / name).symlink_to(executable)
@@ -152,6 +155,10 @@ class InstallerTests(unittest.TestCase):
         self.assertNotIn("Installation Complete!", result.stdout)
         self.assertNotIn("Post-Installation Instructions", result.stdout)
 
+    def assert_home_unchanged_except_private_dirs(self, before):
+        """The mocked Stow links nothing, so the step's only change is ~/.ssh and ~/.gnupg."""
+        self.assertEqual(snapshot(self.home), {**before, **PRIVATE_HOME_SNAPSHOT})
+
     def test_main_dry_run_backgrounds_tmux_preserves_home(self):
         self.seed_home()
         before = snapshot(self.home)
@@ -202,7 +209,7 @@ class InstallerTests(unittest.TestCase):
             *[["stow", "--no-folding", "-d", str(self.repo), "-t", str(self.home), pkg]
               for pkg in STOW_PACKAGES],
         ])
-        self.assertEqual(snapshot(self.home), before)
+        self.assert_home_unchanged_except_private_dirs(before)
 
     def test_window_manager_controls_stow_packages(self):
         for mode, expected_packages in STOW_PACKAGES_BY_WM.items():
@@ -460,7 +467,7 @@ set_login_shell "${1:-bash}"
         self.write(tmux_missing, "set -g status on\n# no shell setting\n")
         before = snapshot(self.home)
         self.run_script(args=("-y", "--only", "stow", "--only", "shell"), code=0)
-        self.assertEqual(snapshot(self.home), before)
+        self.assert_home_unchanged_except_private_dirs(before)
         self.assertTrue(target.is_symlink())
         self.assertTrue(tmux.is_symlink())
         self.assertFalse((self.home / ".dotfiles-backups").exists())
@@ -627,7 +634,9 @@ set_login_shell "${1:-bash}"
         self.assert_failed(result)
         self.assertIn("Failed to stow awesome", result.stdout)
         self.assertEqual([call[0] for call in self.calls()], ["stow"])
-        self.assertEqual(snapshot(self.home), before)
+        # The directories exist although the very first Stow call failed, so
+        # they are created ahead of the package loop.
+        self.assert_home_unchanged_except_private_dirs(before)
 
     def test_package_failure_is_fatal(self):
         self.env["FAIL_COMMAND"] = "yay"
@@ -657,7 +666,7 @@ set_login_shell "${1:-bash}"
         before = snapshot(self.home)
         result = self.run_script(args=("-y", "--only", "stow", "--only", "shell"))
         self.assert_failed(result)
-        self.assertEqual(snapshot(self.home), before)
+        self.assert_home_unchanged_except_private_dirs(before)
 
     def test_shell_stow_failure_restores_original_rc(self):
         self.write(self.home / ".zshrc", "keep original shell\n")
@@ -665,6 +674,132 @@ set_login_shell "${1:-bash}"
         result = self.run_script(args=("-y", "--only", "stow", "--only", "shell"))
         self.assert_failed(result)
         self.assertEqual((self.home / ".zshrc").read_text(), "keep original shell\n")
+
+    def test_folded_private_home_dirs_are_refused_before_any_change(self):
+        # Older installs ran Stow without --no-folding. Stow still treats those
+        # links as its own, so stowing on top would keep private files in the repo.
+        folds = {
+            ".ssh": "ssh/.ssh", ".gnupg": "gnupg/.gnupg", ".local": "scripts/.local",
+            ".local/bin": "scripts/.local/bin", ".local/share": "scripts/.local/share",
+            ".local/state": "scripts/.local/state",
+        }
+        for name, package_dir in folds.items():
+            for dry_run in (False, True):
+                with self.subTest(name=name, dry_run=dry_run):
+                    shutil.rmtree(self.home)
+                    self.home.mkdir()
+                    target = self.repo / package_dir
+                    target.mkdir(parents=True, exist_ok=True)
+                    link = self.home / name
+                    link.parent.mkdir(parents=True, exist_ok=True)
+                    link.symlink_to(os.path.relpath(target, link.parent))
+                    before_home, before_repo = snapshot(self.home), snapshot(self.repo)
+                    result = self.run_script(args=("-y", "--only", "stow", *(("--dry-run",) if dry_run else ())))
+                    self.assert_failed(result)
+                    self.assertIn(str(link), result.stdout)
+                    self.assertIn("Legacy folded Stow links", result.stdout)
+                    self.assertEqual(self.calls(), [])
+                    self.assertEqual(snapshot(self.home), before_home)
+                    self.assertEqual(snapshot(self.repo), before_repo)
+
+    def test_fold_detection_compares_fully_resolved_paths(self):
+        alias = self.base / "checkout alias"
+        alias.symlink_to(self.repo, target_is_directory=True)
+        target = self.repo / "ssh/.ssh"
+        target.mkdir()
+        hop = self.base / "hop"
+        hop.symlink_to(target)
+        link = self.home / ".ssh"
+        for label, destination, checkout in (
+            ("absolute link", target, self.repo),
+            ("chained links", hop, self.repo),
+            ("link names the checkout through an alias", alias / "ssh/.ssh", self.repo),
+            ("installer started through an alias", target, alias),
+        ):
+            with self.subTest(case=label):
+                link.unlink(missing_ok=True)
+                link.symlink_to(destination)
+                result = self.run_script(str(checkout / "install.sh"), args=("-y", "--only", "stow"))
+                self.assert_failed(result)
+                self.assertIn("Legacy folded Stow links", result.stdout)
+                self.assertEqual(self.calls(), [])
+
+    def test_private_home_links_outside_the_checkout_are_left_alone(self):
+        # A deliberate link to a secure volume is not a fold, and chmod would follow it.
+        outside = self.base / "secure volume"
+        # Shares the checkout path as a string prefix without being inside it.
+        lookalike = self.base / f"{self.repo.name}-private"
+        for path in (outside, lookalike):
+            path.mkdir()
+            path.chmod(0o755)
+        ssh = self.home / ".ssh"
+        for label, target in (("outside", outside), ("lookalike", lookalike),
+                              ("dangling", self.base / "missing")):
+            for dry_run in (True, False):
+                with self.subTest(target=label, dry_run=dry_run):
+                    self.log.write_text("")
+                    ssh.unlink(missing_ok=True)
+                    ssh.symlink_to(target)
+                    result = self.run_script(args=("-y", "--only", "stow", *(("--dry-run",) if dry_run else ())), code=0)
+                    self.assertNotIn("Legacy folded Stow links", result.stdout)
+                    self.assertNotIn(str(ssh), result.stdout)
+                    self.assertEqual(os.readlink(ssh), str(target))
+                    if target.exists():
+                        self.assertEqual(S_IMODE(target.stat().st_mode), 0o755)
+                    self.assertEqual(self.calls(), [] if dry_run else [
+                        ["stow", "--no-folding", "-d", str(self.repo), "-t", str(self.home), pkg]
+                        for pkg in STOW_PACKAGES])
+
+    def test_missing_private_home_dirs_are_planned_in_dry_run_and_created_owner_only(self):
+        # Even a fully open umask must not reach the new directories.
+        self.addCleanup(os.umask, os.umask(0))
+        before = snapshot(self.home)
+        result = self.run_script(args=("--dry-run", "-y", "--only", "stow"), code=0)
+        for name in (".ssh", ".gnupg"):
+            self.assertIn(f"[DRY RUN] mkdir -m 700 -- {self.home / name}", result.stdout)
+        self.assertEqual(snapshot(self.home), before)
+        self.assertEqual(self.calls(), [])
+        self.run_script(args=("-y", "--only", "stow"), code=0)
+        for name in (".ssh", ".gnupg"):
+            path = self.home / name
+            self.assertTrue(path.is_dir() and not path.is_symlink(), name)
+            self.assertEqual(S_IMODE(path.stat().st_mode), 0o700, name)
+
+    def test_open_private_home_dirs_are_restricted_to_their_owner(self):
+        for mode in (0o755, 0o750, 0o705, 0o711, 0o777):
+            with self.subTest(mode=oct(mode)):
+                self.log.write_text("")
+                shutil.rmtree(self.home)
+                self.home.mkdir()
+                ssh = self.home / ".ssh"
+                ssh.mkdir()
+                ssh.chmod(mode)
+                before = snapshot(self.home)
+                result = self.run_script(args=("--dry-run", "-y", "--only", "stow"), code=0)
+                self.assertIn(f"[DRY RUN] chmod go-rwx -- {ssh}", result.stdout)
+                self.assertEqual(S_IMODE(ssh.stat().st_mode), mode)
+                self.assertEqual(snapshot(self.home), before)
+                self.assertEqual(self.calls(), [])
+                result = self.run_script(args=("-y", "--only", "stow"), code=0)
+                self.assertIn(f"Restricting {ssh} to its owner", result.stdout)
+                self.assertEqual(S_IMODE(ssh.stat().st_mode), 0o700)
+
+    def test_owner_only_private_home_dirs_are_not_touched(self):
+        for name in (".ssh", ".gnupg"):
+            (self.home / name).mkdir()
+            (self.home / name).chmod(0o700)
+        before = snapshot(self.home)
+        result = self.run_script(args=("-y", "--only", "stow"), code=0)
+        self.assertNotIn("Restricting", result.stdout)
+        self.assertEqual(snapshot(self.home), before)
+
+    def test_dry_run_preview_matches_the_helper_command_a_real_run_executes(self):
+        # execute never starts the helpers in a dry run, so forwarding --dry-run
+        # only made the preview differ from the command a real run executes.
+        result = self.run_script(args=("--dry-run", "-y", "--only", "node", "--only", "lazyvim"), code=0)
+        for helper in ("install-node-manager.sh", "install-lazyvim.sh"):
+            self.assertIn(f"[DRY RUN] bash {self.repo}/{helper} --non-interactive\n", result.stdout)
+        self.assertEqual(self.calls(), [])
 
     def test_tmux_theme_links_tracked_theme_without_overwriting_existing_target(self):
         original = self.home / "theme-source"

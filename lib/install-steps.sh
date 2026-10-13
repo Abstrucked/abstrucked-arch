@@ -13,6 +13,12 @@ source "$(dirname "${BASH_SOURCE[0]}")/cleanup.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/args.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/components.sh"
 declare -agr COMMON_STOW_PACKAGES=(ssh alacritty btop nvim pcmanfm scripts ghostty gnupg xsession)
+# Older installs ran Stow without --no-folding and may have turned these into
+# links into the checkout. .config is absent on purpose: the ghostty migration
+# below handles a folded ~/.config.
+declare -agr FOLD_GUARDED_HOME_DIRS=(.ssh .gnupg .local .local/bin .local/share .local/state)
+# Stow would create these with the umask (0755) and gpg rejects such a homedir.
+declare -agr PRIVATE_HOME_DIRS=(.ssh .gnupg)
 declare -gr P10K_THEME_PATH=/usr/share/zsh-theme-powerlevel10k/powerlevel10k.zsh-theme
 declare -gr DRY_RUN_SHELL_PATH_PREFIX=/usr/bin
 
@@ -79,7 +85,6 @@ install_node() {
     if validate_file "$DOTFILES_DIR/install-node-manager.sh" false; then
         local -a node_args=()
         [[ "$NON_INTERACTIVE" != "true" ]] || node_args+=(--non-interactive)
-        [[ "$DRY_RUN" != "true" ]] || node_args+=(--dry-run)
         execute bash "$DOTFILES_DIR/install-node-manager.sh" "${node_args[@]}" || die "Node.js version manager installation failed"
         progress_complete "done"
     else
@@ -141,7 +146,50 @@ stow_config_package() {
     fi
 }
 
+# Stow treats a link it already owns as stowed, so --no-folding cannot undo a
+# fold left by an older install. Compare fully resolved paths: Stow writes
+# relative links and the checkout may itself be reached through a symlink. A
+# dangling link resolves to nothing and is never a fold.
+home_dir_folded_into_checkout() {
+    local link=$1 checkout=$2 resolved
+    [[ -L "$link" ]] || return 1
+    resolved=$(realpath -e -- "$link" 2>/dev/null) || return 1
+    [[ "$resolved" == "$checkout" || "$resolved" == "$checkout"/* ]]
+}
+
+# Read-only, so it also guards dry runs.
+reject_folded_home_dirs() {
+    local checkout dir folded=false
+    checkout=$(realpath -e -- "$DOTFILES_DIR") || die "Could not resolve $DOTFILES_DIR"
+    for dir in "${FOLD_GUARDED_HOME_DIRS[@]}"; do
+        home_dir_folded_into_checkout "$HOME/$dir" "$checkout" || continue
+        log_error "$HOME/$dir is a directory symlink into this checkout (legacy Stow folding), so applications write private files into the repository."
+        folded=true
+    done
+    [[ "$folded" != true ]] || die 'Unfold the links above before stowing; see "Legacy folded Stow links" in README.md.'
+}
+
+# Create the private directories 0700 before Stow can, and tighten any an
+# earlier install left open. Symlinks stay untouched: a link outside the
+# checkout may point at a secure volume, and chmod would follow it.
+secure_private_home_dirs() {
+    local dir target mode
+    for dir in "${PRIVATE_HOME_DIRS[@]}"; do
+        target="$HOME/$dir"
+        if [[ ! -e "$target" && ! -L "$target" ]]; then
+            execute mkdir -m 700 -- "$target" || die "Could not create $target"
+        elif [[ -d "$target" && ! -L "$target" ]]; then
+            mode=$(stat -c %a -- "$target") || die "Could not read the permissions of $target"
+            if ((8#$mode & 077)); then
+                log_info "Restricting $target to its owner (mode $mode)..."
+                execute chmod go-rwx -- "$target" || die "Could not restrict $target"
+            fi
+        fi
+    done
+}
+
 install_stow() {
+    reject_folded_home_dirs
     progress_step "Setting up symlinks with GNU Stow"
     if [[ "$DRY_RUN" != true ]]; then require_command stow "stow is required but not installed"; fi
     local -a stow_packages=()
@@ -154,6 +202,7 @@ install_stow() {
     esac
     stow_packages+=("${COMMON_STOW_PACKAGES[@]}")
     [[ -z "$SELECTED_SHELL" ]] || stow_packages+=("$SELECTED_SHELL")
+    secure_private_home_dirs
     # Stow merges directories and rejects conflicts without deleting user data.
     for package in "${stow_packages[@]}"; do
         if [[ -d "$DOTFILES_DIR/$package" ]]; then
@@ -309,7 +358,6 @@ install_lazyvim() {
         if validate_file "$DOTFILES_DIR/install-lazyvim.sh" false; then
             local -a lazyvim_args=()
             [[ "$NON_INTERACTIVE" != "true" ]] || lazyvim_args+=(--non-interactive)
-            [[ "$DRY_RUN" != "true" ]] || lazyvim_args+=(--dry-run)
             execute bash "$DOTFILES_DIR/install-lazyvim.sh" "${lazyvim_args[@]}" || die "LazyVim installation failed"
             progress_complete "done"
         else
