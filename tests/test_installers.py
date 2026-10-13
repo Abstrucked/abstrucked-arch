@@ -111,6 +111,9 @@ class InstallerTests(unittest.TestCase):
                    'printf "%s:x:1000:1000::%s:%s\\n" "$2" "$HOME" "${ACCOUNT_SHELL:-/usr/bin/zsh}"\n')
         (self.bin / "getent").chmod(0o755)
         self.log = self.base / "commands.jsonl"
+        # The zsh readiness check reads a Powerlevel10k file; never rely on the host's copy.
+        self.p10k_theme = self.base / "powerlevel10k.zsh-theme"
+        self.write(self.p10k_theme, "# fixture theme\n")
         # Do not inherit BASH_ENV, exported functions, XDG paths or manager settings.
         self.env = {
             "HOME": str(self.home), "PATH": str(self.bin), "TMPDIR": str(self.tmp),
@@ -119,6 +122,7 @@ class InstallerTests(unittest.TestCase):
             "XDG_CACHE_HOME": str(self.home / ".cache"),
             "XDG_STATE_HOME": str(self.home / ".local/state"),
             "COMMAND_LOG": str(self.log), "LC_ALL": "C", "TERM": "dumb",
+            "DOTFILES_P10K_THEME_PATH": str(self.p10k_theme),
         }
 
     def write(self, path, text):
@@ -667,6 +671,13 @@ set_login_shell "${1:-bash}"
         result = self.run_script(args=("-y", "--only", "stow", "--only", "shell"))
         self.assert_failed(result)
         self.assert_home_unchanged_except_private_dirs(before)
+
+    def test_missing_powerlevel10k_fails_zsh_install_before_stow(self):
+        self.env["DOTFILES_P10K_THEME_PATH"] = str(self.base / "missing.zsh-theme")
+        result = self.run_script(args=("-y", "--only", "stow", "--only", "shell"))
+        self.assert_failed(result)
+        self.assertIn("Powerlevel10k is required", result.stdout)
+        self.assertEqual([call for call in self.calls() if call[0] == "stow"], [])
 
     def test_shell_stow_failure_restores_original_rc(self):
         self.write(self.home / ".zshrc", "keep original shell\n")

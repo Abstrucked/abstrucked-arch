@@ -19,7 +19,9 @@ declare -agr COMMON_STOW_PACKAGES=(ssh alacritty btop nvim pcmanfm scripts ghost
 declare -agr FOLD_GUARDED_HOME_DIRS=(.ssh .gnupg .local .local/bin .local/share .local/state)
 # Stow would create these with the umask (0755) and gpg rejects such a homedir.
 declare -agr PRIVATE_HOME_DIRS=(.ssh .gnupg)
-declare -gr P10K_THEME_PATH=/usr/share/zsh-theme-powerlevel10k/powerlevel10k.zsh-theme
+# DOTFILES_P10K_THEME_PATH exists so tests can supply a fixture instead of
+# depending on the host's Powerlevel10k package.
+declare -gr P10K_THEME_PATH=${DOTFILES_P10K_THEME_PATH:-/usr/share/zsh-theme-powerlevel10k/powerlevel10k.zsh-theme}
 declare -gr DRY_RUN_SHELL_PATH_PREFIX=/usr/bin
 
 component_selected() {
