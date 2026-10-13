@@ -32,3 +32,70 @@ desc = "Go to ~/.dotfiles"
 on   = [ "g", "_" ]
 run  = "cd ~/_dev"
 desc = "Go to ~/_dev"
+
+# relative-motions.yazi: digits start a motion (3j, 12k, 2yy). They replace the
+# preset tab switching on 1-9; switch tabs with [ and ] (previous and next), or
+# with <n>gt through the plugin.
+[[mgr.prepend_keymap]]
+on   = "1"
+run  = "plugin relative-motions 1"
+desc = "Move in relative steps"
+
+[[mgr.prepend_keymap]]
+on   = "2"
+run  = "plugin relative-motions 2"
+desc = "Move in relative steps"
+
+[[mgr.prepend_keymap]]
+on   = "3"
+run  = "plugin relative-motions 3"
+desc = "Move in relative steps"
+
+[[mgr.prepend_keymap]]
+on   = "4"
+run  = "plugin relative-motions 4"
+desc = "Move in relative steps"
+
+[[mgr.prepend_keymap]]
+on   = "5"
+run  = "plugin relative-motions 5"
+desc = "Move in relative steps"
+
+[[mgr.prepend_keymap]]
+on   = "6"
+run  = "plugin relative-motions 6"
+desc = "Move in relative steps"
+
+[[mgr.prepend_keymap]]
+on   = "7"
+run  = "plugin relative-motions 7"
+desc = "Move in relative steps"
+
+[[mgr.prepend_keymap]]
+on   = "8"
+run  = "plugin relative-motions 8"
+desc = "Move in relative steps"
+
+[[mgr.prepend_keymap]]
+on   = "9"
+run  = "plugin relative-motions 9"
+desc = "Move in relative steps"
+
+# duckdb.yazi: column scrolling. Its README suggests H and L, which would hide
+# the history back and forward defaults, so Alt+h and Alt+l are used instead.
+[[mgr.prepend_keymap]]
+on   = "<A-h>"
+run  = "plugin duckdb -1"
+desc = "Scroll the data preview one column left"
+
+[[mgr.prepend_keymap]]
+on   = "<A-l>"
+run  = "plugin duckdb +1"
+desc = "Scroll the data preview one column right"
+
+# zen.yazi (local plugin). Alt+z is unused by the 26.9.1 preset; z and Z are
+# taken by zoxide and fzf.
+[[mgr.prepend_keymap]]
+on   = "<A-z>"
+run  = "plugin zen"
+desc = "Toggle Zen view"

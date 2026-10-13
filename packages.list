@@ -41,6 +41,11 @@ resvg
 chafa
 poppler
 imagemagick
+# Tools behind the rich previews: duckdb for CSV/JSON/Parquet, mediainfo for
+# video and audio, ouch for archives (all in Arch extra)
+duckdb
+mediainfo
+ouch
 
 # System monitoring
 btop
