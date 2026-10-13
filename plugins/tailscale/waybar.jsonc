@@ -1,12 +1,12 @@
 {
     "exec": "tailscale-status",
     "return-type": "json",
-    "interval": 15,
+    "interval": 5,
     "format": "{icon}",
     "format-icons": {
-        "connected": "<span color='{{fg}}'>󰖂</span>",
-        "disconnected": "<span color='{{muted}}'>󰖂</span>",
-        "error": "<span color='{{muted}}'>󰖂</span>"
+        "connected": "<span color='{{green}}'>󰖂</span>",
+        "disconnected": "<span color='{{muted}}' alpha='40%'>󰖂</span>",
+        "error": "<span color='{{muted}}' alpha='40%'>󰖂</span>"
     },
     "on-click": "tailscale-menu",
     "on-click-right": "tailscale-toggle",

@@ -23,9 +23,9 @@ switching between multiple accounts. Add them here if you need them.
 
 - `bin/tailscale-status` - waybar-style JSON, used by both the waybar module
   and the awesome widget. The bar shows only the connection state (a logo or
-  icon, bright when connected and grey otherwise), never the IP, so it is safe
-  to screenshot; the IP is still available through the menu's "copy this
-  device's IP"
+  icon: a green T mark when connected, a dim dot grid when off), never the IP,
+  so it is safe to screenshot; the IP is still available through the menu's
+  "copy this device's IP". It refreshes right after a click and every 5 s
 - `bin/tailscale-menu` - rofi menu: toggle, copy this device's IP, admin
   console, copy a peer's IP
 - `bin/tailscale-toggle` - `tailscale up`/`down` based on current state
