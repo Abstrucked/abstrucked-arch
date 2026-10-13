@@ -17,6 +17,32 @@ local run_shell = require("awesome-wm-widgets.run-shell-3.run-shell")
 local logout = require("awesome-wm-widgets.logout-widget.logout")
 local screen, tag = screen, tag
 local theme = {}
+
+-- Bound a stalled PipeWire query and allow a later refresh to retry.
+local function make_volume_poller(on_read)
+    local in_flight = false
+    local request_id = 0
+    return function()
+        if in_flight then return end
+        in_flight = true
+        request_id = request_id + 1
+        local current_request = request_id
+        local pid
+        local timeout = gears.timer({ timeout = 5, single_shot = true, callback = function()
+            if not in_flight or request_id ~= current_request then return end
+            if pid then awful.spawn({ "kill", "-KILL", tostring(pid) }) end
+            in_flight = false
+        end })
+        pid = awful.spawn.easy_async({ "wpctl", "get-volume", "@DEFAULT_AUDIO_SINK@" }, function(...)
+            if not in_flight or request_id ~= current_request then return end
+            in_flight = false
+            timeout:stop()
+            on_read(...)
+        end)
+        timeout:start()
+    end
+end
+-- End volume polling helper.
 local transparent = "#00000000"
 local line = style.mix(c.bg, c.fg, 0.12)
 local raised = style.mix(c.surface, c.fg, 0.06)
@@ -251,6 +277,12 @@ local function build_panel(s, on_toggle)
     local system = text("—")
     local disk = text("—")
     local battery = text("", theme.muted, theme.widget_font)
+    local poll_volume = make_volume_poller(function(stdout, _, _, code)
+        local value = code == 0 and tonumber(stdout:match("Volume:%s*([%d%.]+)"))
+        volume.value = value and value * 100 or 0
+        level.text = not value and "—" or stdout:find("[MUTED]", 1, true) and "off"
+            or string.format("%.0f%%", value * 100)
+    end)
 
     local content = wibox.widget({
         {
@@ -311,12 +343,7 @@ local function build_panel(s, on_toggle)
             battery.markup = string.format("<span foreground='%s'>Battery %d%% · %s</span>",
                 theme.muted, percent, gears.string.xml_escape(bat_now.status or ""))
         end
-        awful.spawn.easy_async({ "wpctl", "get-volume", "@DEFAULT_AUDIO_SINK@" }, function(stdout, _, _, code)
-            local value = code == 0 and tonumber(stdout:match("Volume:%s*([%d%.]+)"))
-            volume.value = value and value * 100 or 0
-            level.text = not value and "—" or stdout:find("[MUTED]", 1, true) and "off"
-                or string.format("%.0f%%", value * 100)
-        end)
+        poll_volume()
     end
     local timer = gears.timer({ timeout = 2, callback = refresh })
 
@@ -369,8 +396,6 @@ function theme.at_screen_connect(s)
     local task = wibox.container.constraint(s.mytasklist, "max", dpi(300))
     shared_widgets = shared_widgets or build_widgets({ colors = c, theme = theme })
     local widgets = shared_widgets
-    -- The status dot opens the drop-down below instead of a notification.
-    widgets.system:buttons({})
     s.fs = widgets.fs
 
     local clock = wibox.widget.textclock(
@@ -429,7 +454,13 @@ function theme.at_screen_connect(s)
     table.insert(right, widgets.volume)
     table.insert(right, widgets.battery)
     table.insert(right, wibox.container.place(layout_chip, "center", "center"))
-    local trigger = wibox.container.background(widgets.system, transparent, rounded(6))
+    -- Own dot, not mono's widgets.system: its tooltip and click notification
+    -- would pile up behind the drop-down.
+    local dot = wibox.widget({
+        forced_width = dpi(5), forced_height = dpi(5), shape = gears.shape.circle,
+        color = c.accent, widget = wibox.widget.separator,
+    })
+    local trigger = wibox.container.background(wibox.container.place(dot, "center", "center"), transparent, rounded(6))
     trigger.forced_width = dpi(20)
     table.insert(right, trigger)
 
@@ -440,9 +471,17 @@ function theme.at_screen_connect(s)
         wibox.container.margin(right_layout, dpi(12), dpi(8)), transparent, rounded(10)
     )
     status.forced_height = dpi(32)
-    local toggle_panel = build_panel(s, function(open) status.bg = open and raised or transparent end)
+    local status_tooltip = awful.tooltip({ objects = { trigger }, text = "System status" })
+    local toggle_panel = build_panel(s, function(open)
+        status.bg = open and raised or transparent
+        if open then status_tooltip.hide() end
+        -- The tray sits in the pill, so it follows the pill colour (primary only).
+        if s == screen.primary then
+            theme.bg_systray = open and raised or c.bg
+            tray:emit_signal("widget::redraw_needed")
+        end
+    end)
     trigger:buttons(gears.table.join(awful.button({}, 1, toggle_panel)))
-    awful.tooltip({ objects = { trigger }, text = "System status" })
 
     local launcher = wibox.container.background(
         wibox.container.place(wibox.widget({

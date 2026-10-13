@@ -19,6 +19,7 @@ declare -r SYNC=/usr/local/libexec/themectl-greeter-sync
 declare -r SYNC_CONF=/etc/lightdm/themectl-greeter.conf
 declare -r GREETER_DIR=/etc/xdg/lightdm/lightdm-gtk-greeter.conf.d
 declare -r MARK="# dotfiles: themectl login screen (install/lightdm-greeter.sh)"
+STATE_HOME="${XDG_STATE_HOME:-$HOME/.local/state}"
 
 die() { echo "lightdm-greeter: $*" >&2; exit 1; }
 
@@ -59,6 +60,9 @@ install_conf() {
 
 install_greeter() {
   local previous tmp
+  [[ "$STATE_HOME" == /* ]] || die "XDG_STATE_HOME must be an absolute path"
+  [[ "$STATE_HOME" != *$'\n'* && "$STATE_HOME" != *$'\r'* ]] \
+    || die "XDG_STATE_HOME must not contain a newline or carriage return"
   previous="$(current_greeter)"
   # On a re-run our own block hides the original; keep the one saved then.
   if [[ -z "$previous" || "$previous" == lightdm-gtk-greeter ]]; then
@@ -69,7 +73,7 @@ install_greeter() {
   sudo install -Dm755 -- "$HERE/lightdm/themectl-greeter-sync" "$SYNC"
   sudo install -Dm644 -- "$HERE/lightdm/40-dotfiles.conf" "$GREETER_DIR/40-dotfiles.conf"
   printf 'user=%s\nstage=%s\nprevious_greeter=%s\n' \
-    "$(id -un)" "$HOME/.local/state/themes/greeter" "$previous" |
+    "$(id -un)" "$STATE_HOME/themes/greeter" "$previous" |
     sudo install -m644 /dev/stdin "$SYNC_CONF"
 
   tmp="$(mktemp)"

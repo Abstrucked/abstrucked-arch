@@ -24,6 +24,29 @@ require_non_root() {
     fi
 }
 
+# Authenticate before privileged installation work, never prompting in automation.
+# Return an error rather than exiting so optional UI setup can fall back safely.
+validate_sudo_access() {
+    [[ "${DRY_RUN:-false}" != "true" ]] || return 0
+    if ! command_exists sudo; then
+        log_error "sudo is required for the selected installation steps"
+        return 1
+    fi
+    local sudo_args=()
+    if [[ "${NON_INTERACTIVE:-false}" == "true" ]]; then
+        sudo_args+=(-n)
+    fi
+    if ! sudo "${sudo_args[@]}" -v; then
+        if [[ "${NON_INTERACTIVE:-false}" == "true" ]]; then
+            log_error "Unattended installation requires cached sudo credentials; run sudo -v first."
+        else
+            log_error "Could not authenticate with sudo"
+        fi
+        return 1
+    fi
+    return 0
+}
+
 # Validate a package name (alphanumeric, hyphens, underscores, dots)
 validate_package_name() {
     local pkg=$1

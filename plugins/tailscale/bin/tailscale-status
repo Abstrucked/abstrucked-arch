@@ -1,36 +1,38 @@
 #!/bin/bash
-# Prints tailscale's connection state, either as waybar custom-module JSON
-# (default) or as a plain one-line string with --plain, for reuse by the
-# awesome.lua widget. The JSON leaves the icon to waybar.jsonc's format-icons,
-# keyed by "alt", so the config can colour it. Requires: tailscale, jq.
+# Prints tailscale's connection state as waybar custom-module JSON, also
+# consumed by the awesome.lua widget. Only the state is reported, never the
+# device IP, so the bar is safe for screenshots and screen shares. "text" is
+# "on" or "off"; the icon is left to waybar.jsonc, keyed by "alt" (same as
+# "class": connected, disconnected or error). Requires: tailscale, jq.
 set -euo pipefail
 
-icon_up=$'\U000F0928'
-icon_down=$'\U000F092D'
+status=""
+state=""
+read_error=0
+if ! status="$(tailscale status --json 2>/dev/null)"; then
+  read_error=1
+elif ! state="$(jq -ers '
+  if length == 1 and (.[0] | type) == "object" then
+    .[0].BackendState | select(type == "string" and length > 0)
+  else error("invalid status")
+  end
+' <<<"$status" 2>/dev/null)"; then
+  read_error=1
+fi
 
-status="$(tailscale status --json 2>/dev/null)" || status=""
-
-if [[ -z "$status" ]]; then
-  text="$icon_down off"
-  tooltip="tailscale: not running"
+if (( read_error )); then
+  text="off"
+  tooltip="Tailscale: daemon not running or status unreadable"
+  class="error"
+elif [[ "$state" == "Running" ]]; then
+  text="on"
+  tooltip="Tailscale: connected"
+  class="connected"
+else
+  text="off"
+  tooltip="Tailscale: $state"
   class="disconnected"
-else
-  backend_state="$(jq -r '.BackendState' <<<"$status")"
-  self_ip="$(jq -r '.Self.TailscaleIPs[0] // ""' <<<"$status")"
-  if [[ "$backend_state" == "Running" && -n "$self_ip" ]]; then
-    text="$icon_up $self_ip"
-    tooltip="tailscale: connected as $self_ip"
-    class="connected"
-  else
-    text="$icon_down off"
-    tooltip="tailscale: $backend_state"
-    class="disconnected"
-  fi
 fi
 
-if [[ "${1:-}" == "--plain" ]]; then
-  echo "$text"
-else
-  jq -nc --arg text "${text#* }" --arg tooltip "$tooltip" --arg class "$class" \
-    '{text: $text, tooltip: $tooltip, class: $class, alt: $class}'
-fi
+jq -nc --arg text "$text" --arg tooltip "$tooltip" --arg class "$class" \
+  '{text: $text, tooltip: $tooltip, class: $class, alt: $class}'

@@ -63,7 +63,8 @@ end
 
 theme.font = "JetBrains Mono Nerd Font 10"
 -- Text inside the powerarrow segments; pl() applies it to every textbox.
-theme.widget_font = "JetBrains Mono Nerd Font 8"
+theme.widget_font = "JetBrains Mono Nerd Font 9"
+theme.systray_icon_spacing = dpi(4)
 
 theme.fg_normal = c.fg -- Font Color
 theme.bg_normal = c.bg
@@ -125,6 +126,27 @@ for i = #dbus_mapping, 1, -1 do
 	end
 end
 table.insert(dbus_mapping, { { appname = "tmux-agent", urgency = "\2" }, agent_alert })
+-- os-assistant system alerts: critical stays until dismissed, normal is a
+-- warning that expires, low uses the default preset.
+local function system_alert(bg, fg, timeout)
+	return {
+		bg = bg,
+		fg = fg,
+		border_width = 0,
+		shape = theme.popup_shape,
+		margin = theme.notification_margin,
+		position = "top_right",
+		timeout = timeout,
+	}
+end
+for i = #dbus_mapping, 1, -1 do
+	if dbus_mapping[i][1].appname == "os-assistant" then
+		table.remove(dbus_mapping, i)
+	end
+end
+table.insert(dbus_mapping, { { appname = "os-assistant", urgency = "\2" }, system_alert(c.red, c.bg, 0) })
+table.insert(dbus_mapping, { { appname = "os-assistant", urgency = "\1" }, system_alert(c.yellow, c.bg, 15) })
+table.insert(dbus_mapping, { { appname = "os-assistant", urgency = "\0" }, system_alert(theme.popup_bg, theme.popup_fg, 8) })
 naughty.config.notify_callback = function(args)
 	args.border_width = 0
 	args.border_color = "#00000000"
@@ -279,23 +301,24 @@ local bar = {
 	height = 24,          -- wibar height
 	arrow_depth = 9,      -- powerline chevron depth cap
 	segment_padding = 10, -- pl() padding on both sides of a segment
-	icon = 14,            -- standard icon size inside a segment
+	icon = 14,            -- standard icon slot inside a segment
+	metric_icon = 10,     -- visible metric artwork, matching the widget text
 	group_spacing = 4,    -- gap between an icon and its text
 	group_gap = 6,        -- gap between logical groups of segments
 	tag_padding = 9,      -- taglist padding around each tag
 	tasklist_margin = 12, -- tasklist distance from the bar's ends
 	volume_width = 80,    -- volume bar width
-	volume_margins = 4,   -- volume bar vertical margins
+	volume_margins = 8,   -- leaves an 8px track inside the 24px bar
 	logout_margin = 4,    -- the logout widget's internal icon margin
 	-- Fixed slots keep changing values from resizing the bar. Each is
-	-- sized for the 8-point mono widget font: "100%", "AC", "128.0G",
+	-- sized for the 9-point mono widget font: "100%", "128.0G",
 	-- "↓1023M ↑1023G" and "23:59" all fit their slot.
 	slots = {
-		cpu = 28,
-		bat = 28,
-		net = 80,
-		clock = 36,
-		text = 40, -- memory and filesystem
+		cpu = 32,
+		bat = 32,
+		net = 96,
+		clock = 40,
+		text = 44, -- memory and filesystem
 	},
 }
 
@@ -312,6 +335,20 @@ local function segment_icon(path, color)
 	local image = wibox.widget.imagebox(icon(path, color))
 	image.forced_width = dpi(bar.icon)
 	image.forced_height = dpi(bar.icon)
+	-- These 16px PNGs contain 8px artwork. Scale the full image to twice
+	-- the artwork size and center it inside the unchanged icon slot.
+	local artwork_size = dpi(bar.metric_icon)
+	local image_size = artwork_size * 2
+	local draw_image = image.draw
+	function image:draw(context, cr, width, height)
+		cr:save()
+		-- Keep resampling at the artwork's edges inside the requested size.
+		cr:rectangle((width - artwork_size) / 2, (height - artwork_size) / 2, artwork_size, artwork_size)
+		cr:clip()
+		cr:translate((width - image_size) / 2, (height - image_size) / 2)
+		draw_image(self, context, cr, image_size, image_size)
+		cr:restore()
+	end
 	return image
 end
 
@@ -376,6 +413,17 @@ local function build_screen_widgets(s)
 		settings = function()
 			local ac = not bat_now.status or bat_now.status == "N/A" or bat_now.ac_status == 1
 			local seg = battery_seg(bat_now.perc, ac)
+			-- Remove the percentage slot on mains, including its reserved width.
+			-- Rebuild the row only when the power source changes.
+			if widgets.bat_group and widgets.bat_on_ac ~= ac then
+				local children = { widgets.bat_icon_slot }
+				if not ac then
+					children[#children + 1] = widget
+				end
+				children[#children + 1] = widgets.power_mode
+				widgets.bat_group:set_children(children)
+				widgets.bat_on_ac = ac
+			end
 			-- The segment is built after the widget, and Lain runs this once
 			-- at creation, so it may not exist yet.
 			if widgets.bat_segment then
@@ -383,7 +431,7 @@ local function build_screen_widgets(s)
 			end
 			if bat_now.status and bat_now.status ~= "N/A" then
 				if bat_now.ac_status == 1 then
-					widget:set_text("AC")
+					widget:set_text("")
 					baticon:set_image(icon(theme.widget_ac, seg.icon))
 					return
 				elseif bat_now.perc and tonumber(bat_now.perc) <= 5 then
@@ -395,7 +443,7 @@ local function build_screen_widgets(s)
 				end
 				widget:set_text(bat_now.perc .. "%")
 			else
-				widget:set_markup()
+				widget:set_text("")
 				baticon:set_image(icon(theme.widget_ac, seg.icon))
 			end
 		end,
@@ -614,9 +662,16 @@ function theme.at_screen_connect(s)
 		layout = wibox.layout.fixed.horizontal,
 	}
 	if s == screen.primary then
+		local tray = wibox.widget.systray()
+		tray:set_base_size(dpi(bar.icon))
+		-- Vertical padding keeps tray icons at the same size as segment
+		-- icons, including when the tray has no entries.
+		local tray_margin = dpi((bar.height - bar.icon) / 2)
 		-- A little space before the first segment, like the gaps
 		-- between segments.
-		table.insert(right_widgets, wibox.container.margin(wibox.widget.systray(), 0, dpi(bar.group_gap)))
+		table.insert(right_widgets, wibox.container.margin(
+			tray, 0, dpi(bar.group_gap), tray_margin, tray_margin
+		))
 	end
 
 	-- generated by plugins/pluginctl; always exists, may be a no-op
@@ -625,10 +680,10 @@ function theme.at_screen_connect(s)
 	-- Icon and text sit side by side at their natural
 	-- sizes: a fixed layout keeps every widget from
 	-- stretching the way an align layout would.
-	local function group(icon, text)
+	local function group(icon_widget, text_widget)
 		return wibox.widget({
-			icon,
-			text,
+			wibox.container.place(icon_widget, nil, "center"),
+			text_widget,
 			spacing = dpi(bar.group_spacing),
 			layout = wibox.layout.fixed.horizontal,
 		})
@@ -649,17 +704,17 @@ function theme.at_screen_connect(s)
 	if #right_widgets > 0 then
 		table.insert(right_widgets, group_gap())
 	end
-	-- The power mode sits inside the battery segment, after the charge.
-	widgets.bat_segment = pl(
-		wibox.widget({
-			widgets.baticon,
-			widgets.bat.widget,
-			power_mode.widget({ icon_font = theme.widget_font }),
-			spacing = dpi(bar.group_spacing),
-			layout = wibox.layout.fixed.horizontal,
-		}),
-		battery_seg(nil, true)
-	)
+	-- The power mode follows the state icon, with a percentage only on battery.
+	widgets.bat_icon_slot = wibox.container.place(widgets.baticon, nil, "center")
+	widgets.power_mode = power_mode.widget({ icon_font = theme.widget_font })
+	widgets.bat_group = wibox.widget({
+		widgets.bat_icon_slot,
+		widgets.bat.widget,
+		widgets.power_mode,
+		spacing = dpi(bar.group_spacing),
+		layout = wibox.layout.fixed.horizontal,
+	})
+	widgets.bat_segment = pl(widgets.bat_group, battery_seg(nil, true))
 	widgets.bat.update()
 
 	table.insert(right_widgets, pl(widgets.volume, c.seg.volume))

@@ -9,13 +9,27 @@
 local ai_usage_widget = once(function()
     local dkjson = require("lain.util").dkjson
     local wibox = require("wibox")
+    local beautiful = require("beautiful")
+    local dpi = require("beautiful.xresources").apply_dpi
+    local Pango = require("lgi").Pango
     local seg = c.seg and c.seg.ai or { icon = c.fg }
+    local font = beautiful.get_font(beautiful.widget_font or beautiful.font)
+    -- Match the text's font size rather than stretching the logo to bar height.
+    local icon_size = font:get_size() / Pango.SCALE
+    if not font:get_size_is_absolute() then
+        icon_size = icon_size * beautiful.xresources.get_dpi() / 72
+    end
+    icon_size = math.max(1, math.floor(icon_size + 0.5))
     local logos = {}
     local logo = wibox.widget.imagebox()
+    logo.forced_width = icon_size
+    logo.forced_height = icon_size
     local text = wibox.widget.textbox()
+    text.font = font
     local widget = wibox.widget({
-        { logo, top = 1, bottom = 1, right = 4, widget = wibox.container.margin },
+        wibox.container.place(logo, nil, "center"),
         text,
+        spacing = dpi(4),
         layout = wibox.layout.fixed.horizontal,
     })
     local tooltip = awful.tooltip({ objects = { widget } })

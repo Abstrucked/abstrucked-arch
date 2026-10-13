@@ -14,7 +14,8 @@ export WINIT_X11_SCALE_FACTOR=1.0
 # Qt apps take the themectl palette through qt6ct, as GTK apps do through
 # adw-gtk3 (themes/README.md). Hyprland sets the same value itself.
 export QT_QPA_PLATFORMTHEME=qt6ct
-export PATH="$HOME/.local/bin:$HOME/n/bin:$HOME/.asdf/shims:$HOME/.local/share/pnpm:$PATH"
+# shellcheck source=../scripts/.config/shell/env.sh
+. "${XDG_CONFIG_HOME:-$HOME/.config}/shell/env.sh"
 
 # Arrange the monitors (ultrawide first, 16:9 to its right, a laptop panel
 # alone or below) before the window manager starts, so Awesome builds its

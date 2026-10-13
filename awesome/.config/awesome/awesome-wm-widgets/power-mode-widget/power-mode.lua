@@ -1,7 +1,7 @@
 -------------------------------------------------
 -- Power Mode widget for Awesome Window Manager
 -- Switches between battery save, balanced, and performance modes
--- using ryzenadj for AMD Ryzen processors
+-- using system power profiles or an explicitly configured hardware backend
 -------------------------------------------------
 
 local awful = require("awful")
@@ -23,7 +23,7 @@ local modes = {
         alt_key = "b",
         script = "batt-save-mode.sh",
         color = "#a6e3a1",
-        desc = "1.6GHz, 10W, 70°C"
+        desc = "Lower energy use"
     },
     {
         id = "balanced",
@@ -33,7 +33,7 @@ local modes = {
         alt_key = "a",
         script = "balanced-mode.sh",
         color = "#89b4fa",
-        desc = "2.1GHz, 15W, 80°C"
+        desc = "Balanced energy and speed"
     },
     {
         id = "performance",
@@ -43,7 +43,7 @@ local modes = {
         alt_key = "p",
         script = "perf-mode.sh",
         color = "#f38ba8",
-        desc = "2.5GHz, 20W, 85°C"
+        desc = "Favor performance"
     },
 }
 

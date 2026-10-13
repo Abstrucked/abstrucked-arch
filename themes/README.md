@@ -76,12 +76,14 @@ are preserved before an atomic replacement. Backups are stored under
 
 ## Login screen
 
-`install/lightdm-greeter.sh` (once, with sudo) switches LightDM to
-lightdm-gtk-greeter and makes it follow the theme; `--revert` undoes it.
+Run `./install/lightdm-greeter.sh` once as your regular user. It uses `sudo`
+where needed to switch LightDM to lightdm-gtk-greeter and make it follow the
+theme; `--revert` undoes it. Do not run the script itself with `sudo`.
 The greeter runs as the `lightdm` user and cannot read your home, so:
 
 - themectl renders `lightdm-gtk-greeter.css` into
-  `~/.local/state/themes/greeter/gtk.css`, and `hooks/lightdm.sh` stages the
+  `${XDG_STATE_HOME:-$HOME/.local/state}/themes/greeter/gtk.css`, and
+  `hooks/lightdm.sh` stages the
   background color and a wallpaper per monitor class next to it
   (`display-detect pick`, the same sets the desktop uses).
 - LightDM runs `themectl-greeter-sync` as root before each login screen. It
@@ -92,12 +94,28 @@ The greeter runs as the `lightdm` user and cannot read your home, so:
 A switch shows at the next logout or reboot. After `display-detect set`, run
 `themectl apply` to restage the wallpapers. Non-color greeter settings (font,
 indicators, clock) live in `install/lightdm/40-dotfiles.conf`; rerun the
-installer after changing them. The sync logs to the journal:
+installer after changing them. The stage path follows
+`${XDG_STATE_HOME:-$HOME/.local/state}`. If you change `XDG_STATE_HOME`, rerun
+`./install/lightdm-greeter.sh` as your regular user so the installed sync helper
+uses that state root. The script invokes `sudo` internally. The sync logs to
+the journal:
 `journalctl -t themectl-greeter-sync`.
 
 Dependencies: Bash, Lua, GNU coreutils, util-linux (`flock`), and Python 3.11+
 (`tomllib`, for imports and herdr updates). Run regression checks with
-`python3 -m unittest discover -s tests -p 'test_themes.py'`.
+`python3 -B -m pytest tests/test_themes.py tests/test_theme_render.py tests/test_import_omarchy.py`.
+
+Starship's default segment colors follow the selected palette, with readable
+text derived for each segment background (at least 4.5:1 contrast). Palettes
+with explicit `starship` colors keep those choices, including the existing
+Mocha Peach and Tokyo Night designs. `starship.on_seg2` and `starship.on_seg3`
+can override Git and language-segment text independently; explicit colors
+remain authoritative even when they choose lower contrast.
+
+`import-omarchy` preserves the upstream color values, writes depth-indented Lua,
+and validates every available template before publishing. An existing palette
+requires `--force`; a failed validation or concurrent no-clobber import leaves
+it untouched. Generated-file comments identify the source template to edit.
 
 Never edit the generated files (or the symlinks pointing at `out/`); edit the
 palette or template instead. Awesome restarts on a palette change when it is

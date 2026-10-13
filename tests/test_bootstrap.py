@@ -12,6 +12,23 @@ import unittest
 
 
 SCRIPT = Path(__file__).resolve().parents[1] / "install/bootstrap.sh"
+CONFIG_BOOTSTRAP = Path(__file__).resolve().parents[1] / "bootstrap-configs.sh"
+
+
+class BootstrapConfigContractTests(unittest.TestCase):
+    def test_argument_parser_has_a_namespaced_function_and_call(self):
+        source = CONFIG_BOOTSTRAP.read_text()
+        self.assertIn("bootstrap_parse_args() {", source)
+        self.assertIn('bootstrap_parse_args "$@"', source)
+        self.assertNotRegex(source, r"(?m)^parse_args\(\)\s*\{")
+        self.assertNotRegex(source, r'(?m)^\s*parse_args\s+"')
+
+    def test_help_cli_remains_available(self):
+        result = subprocess.run(["bash", str(CONFIG_BOOTSTRAP), "--help"],
+                                text=True, capture_output=True, timeout=10)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(f"Usage: {CONFIG_BOOTSTRAP} [OPTIONS]", result.stdout)
+        self.assertIn("--dry-run", result.stdout)
 
 
 @unittest.skipIf(os.geteuid() == 0, "Bootstrap intentionally rejects root")
@@ -32,7 +49,7 @@ class BootstrapTests(unittest.TestCase):
         self.command("sudo", 'printf "prerequisites\\n" >> "$BOOTSTRAP_LOG"\n'
                      'exit "${FAIL_PREREQUISITES:-0}"')
         self.command("git", '''
-[[ "$*" == "clone --branch main -- https://github.com/Abstrucked/abstrucked-arch.git $HOME/.dotfiles" ]] || exit 9
+[[ "$*" == "clone --filter=blob:none --branch main -- https://github.com/Abstrucked/abstrucked-arch.git $HOME/.dotfiles" ]] || exit 9
 printf 'clone\\n' >> "$BOOTSTRAP_LOG"
 [[ "${FAIL_CLONE:-0}" == 0 ]] || exit 8
 ''' + f'"{shutil.which("mkdir")}" "$HOME/.dotfiles"\n' + '''

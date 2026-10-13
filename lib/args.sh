@@ -10,6 +10,7 @@ _ARGS_SH_LOADED=1
 
 # Source logging functions
 source "$(dirname "${BASH_SOURCE[0]}")/logging.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/component-registry.sh"
 
 # Global flags (defaults)
 DRY_RUN=false
@@ -46,16 +47,12 @@ show_help() {
     echo -e "  ${GREEN}--wm MODE${NC}           Window manager: awesome, both, or hyprland"
     echo ""
     echo -e "${YELLOW}Available Steps:${NC}"
-    echo -e "  packages      Install system packages"
-    echo -e "  yay           Install yay AUR helper"
-    echo -e "  node          Install Node.js version manager"
-    echo -e "  yubikey       Install YubiKey tools"
-    echo -e "  stow          Setup symlinks with GNU Stow"
-    echo -e "  shell         Select default shell (requires stow selection)"
-    echo -e "  theme         Setup Alacritty theme"
-    echo -e "  backgrounds   Setup desktop backgrounds"
-    echo -e "  tmux          Setup Tmux configuration"
-    echo -e "  lazyvim       Install LazyVim Neovim distribution"
+    local component desc step
+    for component in "${COMPONENTS[@]}"; do
+        desc=$(get_component_desc "$component")
+        step=$(get_component_step "$component")
+        printf '  %-12s %s\n' "$step" "$desc"
+    done
     echo ""
     echo -e "${YELLOW}Examples:${NC}"
     echo -e "  $script_name                      # Interactive installation"
@@ -97,10 +94,7 @@ parse_args() {
                 if [[ -z "${2:-}" || "$2" == -* ]]; then
                     die "$1 requires a step name"
                 fi
-                case "$2" in
-                    packages|yay|node|yubikey|stow|shell|theme|backgrounds|tmux|lazyvim) ;;
-                    *) die "Unknown step: $2" ;;
-                esac
+                component_step_known "$2" || die "Unknown step: $2"
                 if [[ "$1" == --only ]]; then
                     RUN_STEPS+=("$2")
                 else

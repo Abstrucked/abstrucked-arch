@@ -1,0 +1,72 @@
+# Maintainer: abstrucked
+# Local pinned copy of upstream's packaging/aurscan/PKGBUILD (Andreas Reichel,
+# Tom Hale), adapted to build v0.9.2 from a git commit instead of a tarball.
+
+pkgname=aurscan
+pkgver=0.9.2
+pkgrel=1
+pkgdesc='Pre-build malware scanner for AUR packages (with paru / yay hooks)'
+arch=('x86_64' 'aarch64')
+url='https://github.com/manticore-projects/aurscan'
+license=('Apache-2.0')
+depends=('glibc')
+makedepends=('go' 'git')
+optdepends=(
+  'yay: syay wrapper, editor-gate hook, and --update-check'
+  'paru: sparu wrapper, PreBuildCommand hook, and --update-check'
+)
+options=('!lto')
+# The exact reviewed commit (tag v0.9.2) is the integrity check, so the
+# checksum is SKIP: git verifies the object hash of the pinned commit.
+source=("aurscan::git+https://github.com/manticore-projects/aurscan.git#commit=7ab80cac87b4db572c2494feef17ec27a904e302")
+sha256sums=('SKIP')
+
+_pkgpath='github.com/manticore-projects/aurscan/internal/version'
+
+prepare() {
+  cd "$pkgname"
+  mkdir -p build
+}
+
+build() {
+  cd "$pkgname"
+
+  export CGO_CPPFLAGS="${CPPFLAGS}"
+  export CGO_CFLAGS="${CFLAGS}"
+  export CGO_CXXFLAGS="${CXXFLAGS}"
+  export CGO_LDFLAGS="${LDFLAGS}"
+  # Dependencies are vendored in the repository, so the build is offline.
+  export GOFLAGS='-buildmode=pie -trimpath -mod=vendor -modcacherw'
+
+  # Stamp the version from $pkgver; derive the build date from
+  # SOURCE_DATE_EPOCH to stay reproducible.
+  local _date
+  _date="$(date -u -d "@${SOURCE_DATE_EPOCH:-$(date +%s)}" +%Y-%m-%dT%H:%M:%SZ)"
+
+  go build -o build/ \
+    -ldflags "-linkmode=external -compressdwarf=false \
+      -X ${_pkgpath}.Version=v${pkgver} \
+      -X ${_pkgpath}.Date=${_date}" \
+    ./cmd/aurscan
+}
+
+check() {
+  cd "$pkgname"
+  go test ./...
+}
+
+package() {
+  cd "$pkgname"
+
+  install -Dm755 build/aurscan "${pkgdir}/usr/bin/${pkgname}"
+
+  local _link
+  for _link in syay sparu aurscan-edit; do
+    ln -s "$pkgname" "${pkgdir}/usr/bin/${_link}"
+  done
+
+  install -Dm644 LICENSE "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+  install -Dm644 README.md "${pkgdir}/usr/share/doc/${pkgname}/README.md"
+}
+
+# vim:set ts=2 sw=2 et ft=PKGBUILD:

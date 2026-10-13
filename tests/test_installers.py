@@ -1,4 +1,4 @@
-"""Run with: python3 -B -m unittest discover -s tests -v.
+"""Run with: python3 -B -m pytest tests/test_installers.py -q.
 
 Only copied installers execute. All fixture state lives in a private temporary
 directory; PATH is an allowlist, not the host PATH with a few commands prepended.
@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+from stat import S_IFDIR, S_IMODE
 import subprocess
 import sys
 import tempfile
@@ -16,8 +17,10 @@ import unittest
 
 
 ROOT = Path(__file__).resolve().parents[1]
+# The Stow step creates these itself, 0700, before the first package is stowed.
+PRIVATE_HOME_SNAPSHOT = {name: (S_IFDIR | 0o700, None) for name in (".ssh", ".gnupg")}
 COMMON_STOW_PACKAGES = (
-    "ssh", "alacritty", "btop", "nvim", "pcmanfm", "scripts", "ghossty", "gnupg",
+    "ssh", "alacritty", "btop", "nvim", "pcmanfm", "scripts", "ghostty", "gnupg",
     "xsession",
 )
 STOW_PACKAGES = ("awesome", "picom", *COMMON_STOW_PACKAGES)
@@ -34,8 +37,17 @@ with open(os.environ["COMMAND_LOG"], "a") as log:
 if name == os.environ.get("FAIL_COMMAND"):
     sys.exit(42)
 if name == "sudo" and len(sys.argv) > 1:
-    os.execvp(sys.argv[1], sys.argv[1:])
-if name not in ("git", "yay", "stow", "nvim", "chsh"):
+    args = sys.argv[1:]
+    if args in (["-n", "-v"], ["-v"]):
+        if os.environ.get("FAIL_SUDO_VALIDATION") == "1":
+            sys.exit(1)
+        sys.exit(0)
+    if args[0] == "-n":
+        args = args[1:]
+    if args[0] == "-v":
+        sys.exit(0)
+    os.execvp(args[0], args)
+if name not in ("git", "yay", "stow", "nvim", "chsh", "zsh", "systemctl"):
     sys.exit("Unexpected external command: " + name)
 '''
 
@@ -69,20 +81,29 @@ class InstallerTests(unittest.TestCase):
         shutil.copytree(ROOT / "lib", self.repo / "lib", symlinks=True)
         for name in (*STOW_PACKAGES, "hyprland", "zsh", "bash", "backgrounds"):
             (self.repo / name).mkdir()
+        helper = self.repo / "scripts/.local/bin/tmux-save-workspace"
+        helper.parent.mkdir(parents=True)
+        helper.write_text("#!/bin/sh\nexit 0\n")
+        helper.chmod(0o755)
         # Data fixtures avoid copying personal configs or links out of the repository.
         self.write(self.repo / "config/tmux/tmux.conf", 'set -g default-shell "/bin/zsh"\n')
         self.write(self.repo / "config/tmux/theme.conf", "# tracked icon theme\n")
         self.write(self.repo / "themes/theme.sh", "# Not sourced during dry runs.\n")
         self.write(self.repo / "nvim/.config/nvim/init.lua", "-- managed fixture\n")
+        # install_stow requires plugin wiring and rendered colors, so a realistic
+        # checkout must ship the generators that produce them.
+        for name in ("plugins/pluginctl", "themes/themectl"):
+            self.write(self.repo / name, "#!/bin/sh\nexit 0\n")
+            (self.repo / name).chmod(0o755)
         (self.repo / "nvim/.config/nvim/lua").mkdir()
         for name in ("bash", "basename", "dirname", "date", "mkdir", "mktemp",
                      "cp", "mv", "rm", "rmdir", "ln", "readlink", "realpath",
-                     "find", "grep", "sed", "cat", "sleep", "id"):
+                     "find", "grep", "sed", "cat", "sleep", "id", "chmod", "stat"):
             executable = shutil.which(name)
             self.assertIsNotNone(executable, f"Required test utility: {name}")
             (self.bin / name).symlink_to(executable)
         for name in ("git", "yay", "stow", "nvim", "pacman", "curl", "sudo",
-                     "systemctl", "makepkg", "make", "wget", "chsh"):
+                      "systemctl", "makepkg", "make", "wget", "chsh", "zsh"):
             self.write(self.bin / name, f"#!{sys.executable}\n" + MOCK)
             (self.bin / name).chmod(0o755)
         self.write(self.bin / "getent", '#!/bin/bash\n'
@@ -90,6 +111,9 @@ class InstallerTests(unittest.TestCase):
                    'printf "%s:x:1000:1000::%s:%s\\n" "$2" "$HOME" "${ACCOUNT_SHELL:-/usr/bin/zsh}"\n')
         (self.bin / "getent").chmod(0o755)
         self.log = self.base / "commands.jsonl"
+        # The zsh readiness check reads a Powerlevel10k file; never rely on the host's copy.
+        self.p10k_theme = self.base / "powerlevel10k.zsh-theme"
+        self.write(self.p10k_theme, "# fixture theme\n")
         # Do not inherit BASH_ENV, exported functions, XDG paths or manager settings.
         self.env = {
             "HOME": str(self.home), "PATH": str(self.bin), "TMPDIR": str(self.tmp),
@@ -98,6 +122,7 @@ class InstallerTests(unittest.TestCase):
             "XDG_CACHE_HOME": str(self.home / ".cache"),
             "XDG_STATE_HOME": str(self.home / ".local/state"),
             "COMMAND_LOG": str(self.log), "LC_ALL": "C", "TERM": "dumb",
+            "DOTFILES_P10K_THEME_PATH": str(self.p10k_theme),
         }
 
     def write(self, path, text):
@@ -134,6 +159,10 @@ class InstallerTests(unittest.TestCase):
         self.assertNotIn("Installation Complete!", result.stdout)
         self.assertNotIn("Post-Installation Instructions", result.stdout)
 
+    def assert_home_unchanged_except_private_dirs(self, before):
+        """The mocked Stow links nothing, so the step's only change is ~/.ssh and ~/.gnupg."""
+        self.assertEqual(snapshot(self.home), {**before, **PRIVATE_HOME_SNAPSHOT})
+
     def test_main_dry_run_backgrounds_tmux_preserves_home(self):
         self.seed_home()
         before = snapshot(self.home)
@@ -150,9 +179,9 @@ class InstallerTests(unittest.TestCase):
         self.seed_home()
         before = snapshot(self.home)
         result = self.run_script(args=("--dry-run", "-y"), code=0)
-        for pkg in (self.repo / "packages.list").read_text().splitlines():
-            if pkg and not pkg.startswith("#"):
-                self.assertIn(f"[DRY RUN] yay -S --needed --noconfirm -- {pkg}", result.stdout)
+        packages = [pkg for pkg in (self.repo / "packages.list").read_text().splitlines()
+                    if pkg and not pkg.startswith("#")]
+        self.assertIn(f"[DRY RUN] yay -S --needed --noconfirm --sudoflags=-n -- {' '.join(packages)}", result.stdout)
         self.assertIn(f"[DRY RUN] stow --no-folding -d {self.repo} -t {self.home} zsh", result.stdout)
         self.assertIn("Would link tmux config and theme", result.stdout)
         self.assertEqual(snapshot(self.home), before)
@@ -181,11 +210,10 @@ class InstallerTests(unittest.TestCase):
             args.extend(("--skip", component))
         self.run_script(args=args, code=0)
         self.assertEqual(self.calls(), [
-            ["git", "-C", str(self.repo), "submodule", "update", "--init", "--recursive"],
             *[["stow", "--no-folding", "-d", str(self.repo), "-t", str(self.home), pkg]
               for pkg in STOW_PACKAGES],
         ])
-        self.assertEqual(snapshot(self.home), before)
+        self.assert_home_unchanged_except_private_dirs(before)
 
     def test_window_manager_controls_stow_packages(self):
         for mode, expected_packages in STOW_PACKAGES_BY_WM.items():
@@ -197,7 +225,6 @@ class InstallerTests(unittest.TestCase):
                 )
                 self.assertIn(f"Selected window manager", result.stdout)
                 self.assertEqual(self.calls(), [
-                    ["git", "-C", str(self.repo), "submodule", "update", "--init", "--recursive"],
                     *[["stow", "--no-folding", "-d", str(self.repo), "-t", str(self.home), pkg]
                       for pkg in expected_packages],
                 ])
@@ -214,14 +241,159 @@ class InstallerTests(unittest.TestCase):
                 self.run_script(args=("-y", "--only", "packages", "--wm", mode), code=0)
                 expected = []
                 for filename in files:
-                    expected.extend(
-                        line for line in (self.repo / filename).read_text().splitlines()
-                        if line and not line.startswith("#")
-                    )
+                    expected.extend(line for line in (self.repo / filename).read_text().splitlines()
+                                    if line and not line.startswith("#") and line not in expected)
                 self.assertEqual(
-                    [call[-1] for call in self.calls() if call[0] == "yay"],
-                    expected,
+                    [call for call in self.calls() if call[0] == "yay"],
+                    [["yay", "-S", "--needed", "--noconfirm", "--sudoflags=-n", "--", *expected]],
                 )
+
+    def test_package_manifests_are_batched_and_deduplicated(self):
+        self.write(self.repo / "packages.list", "alpha\nshared\n")
+        self.write(self.repo / "packages-awesome.list", "shared\nbeta\n")
+        self.run_script(args=("-y", "--only", "packages", "--wm", "awesome"), code=0)
+        self.assertEqual([call for call in self.calls() if call[0] == "yay"], [
+            ["yay", "-S", "--needed", "--noconfirm", "--sudoflags=-n", "--", "alpha", "shared", "beta"],
+        ])
+
+    def test_selected_steps_follow_policy_order_not_cli_order(self):
+        result = self.run_script(
+            args=("-y", "--only", "stow", "--only", "packages", "--skip", "shell"),
+            code=0,
+        )
+        calls = self.calls()
+        self.assertEqual(calls[0][0], "sudo")  # privilege preflight
+        self.assertEqual(calls[1][0], "yay")   # packages precede Stow
+        self.assertEqual([call[0] for call in calls[2:]], ["stow"] * len(STOW_PACKAGES))
+        self.assertLess(result.stdout.index("Installing system packages"),
+                        result.stdout.index("Setting up symlinks with GNU Stow"))
+
+    def test_unsafe_backup_root_fails_before_any_install_or_authentication(self):
+        alias = self.base / "checkout-backup-alias"
+        alias.symlink_to(self.repo, target_is_directory=True)
+        for root in ("relative-root", str(self.repo / "backups"), str(alias / "backups")):
+            for dry_run in (False, True):
+                with self.subTest(root=root, dry_run=dry_run):
+                    self.env["DOTFILES_BACKUP_ROOT"] = root
+                    before_home, before_repo = snapshot(self.home), snapshot(self.repo)
+                    args = ("-y", "--only", "packages")
+                    if dry_run:
+                        args += ("--dry-run",)
+                    result = self.run_script(args=args)
+                    self.assert_failed(result)
+                    self.assertIn("backup root", result.stdout)
+                    self.assertEqual(self.calls(), [])
+                    self.assertEqual(snapshot(self.home), before_home)
+                    self.assertEqual(snapshot(self.repo), before_repo)
+
+    def test_all_selected_steps_follow_policy_order_in_dry_run(self):
+        terminal_config = self.home / ".config/alacritty/alacritty.toml"
+        self.write(terminal_config, 'shell = "/old/zsh"\n')
+        before = snapshot(self.home)
+        # Reverse menu and execution order to prove the dispatcher controls it.
+        args = ["--dry-run", "-y"]
+        args.extend(item for step in (
+            "yubikey", "lazyvim", "shell", "tmux", "backgrounds", "theme",
+            "stow", "node", "packages", "yay",
+        ) for item in ("--only", step))
+        result = self.run_script(args=args, code=0)
+        markers = (
+            "yay already installed",
+            "Installing system packages",
+            "Installing Node.js version manager",
+            "Installing YubiKey tools",
+            "Setting up symlinks with GNU Stow",
+            "Applying system theme",
+            "Setting up desktop backgrounds",
+            "Setting up Tmux configuration",
+            "[dry-run] Would update " + str(terminal_config),
+            "[dry-run] Would set the login shell to zsh",
+            "Installing LazyVim Neovim distribution",
+        )
+        positions = [result.stdout.index(marker) for marker in markers]
+        self.assertEqual(positions, sorted(positions), result.stdout)
+        self.assertEqual(snapshot(self.home), before)
+        self.assertEqual(self.calls(), [])
+
+    def test_failed_earlier_phase_stops_later_selected_phase(self):
+        self.env["FAIL_COMMAND"] = "yay"
+        result = self.run_script(
+            args=("-y", "--only", "stow", "--only", "packages", "--skip", "shell"),
+        )
+        self.assert_failed(result)
+        self.assertEqual([call[0] for call in self.calls()], ["sudo", "yay"])
+        self.assertNotIn("Setting up symlinks with GNU Stow", result.stdout)
+
+    def test_step_function_temporaries_do_not_escape_the_function(self):
+        self.write(self.repo / "test-step-locals.sh", '''#!/bin/bash
+set -euo pipefail
+source ./lib/logging.sh
+source ./lib/validation.sh
+source ./lib/args.sh
+source ./lib/components.sh
+source ./lib/install-steps.sh
+DOTFILES_DIR=$PWD
+WINDOW_MANAGER=awesome
+yay_install_args=(-S --needed)
+sudo_args=()
+pkg=sentinel package=sentinel packages_file=sentinel
+install_packages
+[[ "$pkg" == sentinel && "$package" == sentinel && "$packages_file" == sentinel ]]
+[[ ! -v seen_packages && ! -v packages && ! -v package_files ]]
+''')
+        self.run_script("test-step-locals.sh", code=0)
+
+    def test_interactive_package_install_keeps_yay_confirmation(self):
+        self.run_script(args=("--only", "packages", "--wm", "awesome"), input="d\n\n", code=0)
+        self.assertEqual([call for call in self.calls() if call[0] == "yay"], [
+            ["yay", "-S", "--needed", "--", *[
+                line for line in (self.repo / "packages.list").read_text().splitlines()
+                if line and not line.startswith("#")
+            ], *[
+                line for line in (self.repo / "packages-awesome.list").read_text().splitlines()
+                if line and not line.startswith("#")
+            ]],
+        ])
+
+    def test_yubikey_unattended_flags_and_systemctl_sudo_are_noninteractive_only(self):
+        self.run_script(args=("-y", "--only", "yubikey"), code=0)
+        self.assertEqual(self.calls(), [
+            ["sudo", "-n", "-v"],
+            ["yay", "-S", "--needed", "--noconfirm", "--sudoflags=-n", "--",
+             "yubikey-manager", "yubico-authenticator-bin", "pcsclite", "ccid"],
+            ["sudo", "-n", "systemctl", "enable", "pcscd.service"],
+            ["systemctl", "enable", "pcscd.service"],
+        ])
+
+    def test_interactive_yubikey_keeps_confirmation_and_sudo_prompt(self):
+        self.run_script(args=("--only", "yubikey"), input="10\n\n", code=0)
+        self.assertEqual(self.calls(), [
+            ["sudo", "-v"],
+            ["yay", "-S", "--needed", "--", "yubikey-manager", "yubico-authenticator-bin",
+             "pcsclite", "ccid"],
+            ["sudo", "systemctl", "enable", "pcscd.service"],
+            ["systemctl", "enable", "pcscd.service"],
+        ])
+
+    def test_sudo_preflight_failure_stops_before_package_or_stow_actions(self):
+        self.env["FAIL_SUDO_VALIDATION"] = "1"
+        result = self.run_script(args=("-y", "--only", "packages", "--only", "stow"))
+        self.assert_failed(result)
+        self.assertEqual(self.calls(), [["sudo", "-n", "-v"]])
+
+    def test_invalid_later_package_manifest_prevents_any_yay_call(self):
+        self.write(self.repo / "packages.list", "valid-first\n")
+        self.write(self.repo / "packages-hyprland.list", "--invalid\n")
+        result = self.run_script(args=("-y", "--only", "packages", "--wm", "hyprland"))
+        self.assert_failed(result)
+        self.assertIn("Invalid packages", result.stdout)
+        self.assertEqual([call for call in self.calls() if call[0] == "yay"], [])
+
+    def test_empty_package_manifests_skip_yay(self):
+        self.write(self.repo / "packages.list", "# base packages\n\n")
+        self.write(self.repo / "packages-awesome.list", "# comments only\n")
+        self.run_script(args=("-y", "--only", "packages", "--wm", "awesome"), code=0)
+        self.assertEqual([call for call in self.calls() if call[0] == "yay"], [])
 
     def test_invalid_window_manager_is_rejected_before_work(self):
         result = self.run_script(args=("-y", "--only", "stow", "--wm", "sway"))
@@ -280,6 +452,151 @@ set_login_shell "${1:-bash}"
             ["chsh", "-s", expected, "tester"],
         ])
 
+    def test_terminal_shell_noop_does_not_back_up_or_replace_symlink(self):
+        resolved = str((self.bin / "zsh").resolve())
+        source = self.repo / "terminal config/alacritty.toml"
+        self.write(source, f'shell = "{resolved}"\n# keep this comment\n')
+        target = self.home / ".config/alacritty/alacritty.toml"
+        target.parent.mkdir(parents=True)
+        target.symlink_to(source)
+        tmux_source = self.repo / "terminal config/tmux.conf"
+        self.write(tmux_source,
+                   f'  set -g default-shell "{resolved}" # keep comment\n'
+                   f'    set-option -g default-shell "{resolved}"\n'
+                   '# set -g default-shell "/ignored/zsh"\n')
+        tmux = self.home / ".config/tmux/tmux.conf"
+        tmux.parent.mkdir(parents=True)
+        tmux.symlink_to(tmux_source)
+        tmux_missing = self.home / ".config/tmux/no-shell.conf"
+        self.write(tmux_missing, "set -g status on\n# no shell setting\n")
+        before = snapshot(self.home)
+        self.run_script(args=("-y", "--only", "stow", "--only", "shell"), code=0)
+        self.assert_home_unchanged_except_private_dirs(before)
+        self.assertTrue(target.is_symlink())
+        self.assertTrue(tmux.is_symlink())
+        self.assertFalse((self.home / ".dotfiles-backups").exists())
+
+        tmux_source.write_text("set -g status on\n# no configured shell\n")
+        before_missing_setting = snapshot(self.home)
+        self.run_script(args=("-y", "--only", "stow", "--only", "shell"), code=0)
+        self.assertEqual(snapshot(self.home), before_missing_setting)
+        self.assertFalse((self.home / ".dotfiles-backups").exists())
+
+    def test_terminal_shell_edit_backs_up_and_preserves_symlink_and_content(self):
+        shell_dir = self.home / "shell bins"
+        shell = shell_dir / "zsh"
+        self.write(shell, "#!/bin/sh\nexit 0\n")
+        shell.chmod(0o755)
+        self.env["PATH"] = f"{shell_dir}:{self.bin}"
+        resolved = str(shell.resolve())
+        source = self.repo / "terminal config/alacritty.toml"
+        self.write(source, 'shell = "/old/zsh"\n[window]\nopacity = 0.9\n')
+        target = self.home / ".config/alacritty/alacritty.toml"
+        target.parent.mkdir(parents=True)
+        target.symlink_to(source)
+        target_link = os.readlink(target)
+        target_inode = target.lstat().st_ino
+        tmux_source = self.repo / "terminal config/tmux.conf"
+        self.write(tmux_source,
+                   f'  set-option -g default-shell "{resolved}" # keep first match\n'
+                   '    set -g default-shell "/old/zsh" # preserve this comment\n'
+                   '    set -sg default-shell "/old/bash"\n'
+                   '    set -s -g default-shell "/old/ksh"\n'
+                   '  # set -g default-shell "/commented/out"\n'
+                   'set -g status on\n')
+        tmux = self.home / ".config/tmux/tmux.conf"
+        tmux.parent.mkdir(parents=True)
+        tmux.symlink_to(tmux_source)
+        tmux_link = os.readlink(tmux)
+        tmux_inode = tmux.lstat().st_ino
+
+        self.run_script(args=("-y", "--only", "stow", "--only", "shell"), code=0)
+
+        self.assertTrue(target.is_symlink())
+        self.assertEqual(os.readlink(target), target_link)
+        self.assertEqual(target.lstat().st_ino, target_inode)
+        self.assertEqual(source.read_text(),
+                         f'shell = "{resolved}"\n[window]\nopacity = 0.9\n')
+        self.assertTrue(tmux.is_symlink())
+        self.assertEqual(os.readlink(tmux), tmux_link)
+        self.assertEqual(tmux.lstat().st_ino, tmux_inode)
+        self.assertEqual(tmux_source.read_text(),
+                         f'  set-option -g default-shell "{resolved}" # keep first match\n'
+                         f'    set -g default-shell "{resolved}" # preserve this comment\n'
+                         f'    set -sg default-shell "{resolved}"\n'
+                         f'    set -s -g default-shell "{resolved}"\n'
+                         '  # set -g default-shell "/commented/out"\n'
+                         'set -g status on\n')
+        backups = list((self.home / ".dotfiles-backups").rglob("alacritty.toml"))
+        self.assertEqual(len(backups), 1)
+        self.assertEqual(backups[0].read_text(), 'shell = "/old/zsh"\n[window]\nopacity = 0.9\n')
+        tmux_backups = list((self.home / ".dotfiles-backups").rglob("tmux.conf"))
+        self.assertEqual(len(tmux_backups), 1)
+        self.assertIn('set -g default-shell "/old/zsh" # preserve this comment',
+                      tmux_backups[0].read_text())
+
+    def test_terminal_shell_backup_failure_prevents_symlink_target_edits(self):
+        shell_dir = self.home / "shell bins"
+        shell = shell_dir / "zsh"
+        self.write(shell, "#!/bin/sh\nexit 0\n")
+        shell.chmod(0o755)
+        self.env["PATH"] = f"{shell_dir}:{self.bin}"
+        self.env["FAIL_COMMAND"] = "cp"
+        (self.bin / "cp").unlink()
+        self.write(self.bin / "cp", f"#!{sys.executable}\n" + MOCK)
+        (self.bin / "cp").chmod(0o755)
+        resolved = str(shell.resolve())
+
+        source = self.repo / "terminal config/alacritty.toml"
+        original = f'shell = "/old/zsh"\n# preserve\n'
+        self.write(source, original)
+        target = self.home / ".config/alacritty/alacritty.toml"
+        target.parent.mkdir(parents=True)
+        target.symlink_to(source)
+        link_text = os.readlink(target)
+        link_inode = target.lstat().st_ino
+        source_inode = source.stat().st_ino
+
+        result = self.run_script(args=("-y", "--only", "stow", "--only", "shell"))
+
+        self.assert_failed(result)
+        self.assertIn("Failed to back up", result.stdout)
+        self.assertEqual(os.readlink(target), link_text)
+        self.assertEqual(target.lstat().st_ino, link_inode)
+        self.assertEqual(source.stat().st_ino, source_inode)
+        self.assertEqual(source.read_text(), original)
+
+    def test_empty_terminal_shell_settings_are_updated(self):
+        shell_dir = self.home / "shell bins"
+        shell = shell_dir / "zsh"
+        self.write(shell, "#!/bin/sh\nexit 0\n")
+        shell.chmod(0o755)
+        self.env["PATH"] = f"{shell_dir}:{self.bin}"
+        resolved = str(shell.resolve())
+
+        alacritty = self.home / ".config/alacritty/alacritty.toml"
+        self.write(alacritty, 'shell = ""\n')
+        tmux = self.home / ".config/tmux/tmux.conf"
+        self.write(tmux, f'set -g default-shell "{resolved}"\n'
+                   '  set-option -g default-shell "" # trailing empty value\n')
+
+        self.run_script(args=("-y", "--only", "stow", "--only", "shell"), code=0)
+
+        self.assertEqual(alacritty.read_text(), f'shell = "{resolved}"\n')
+        self.assertEqual(tmux.read_text(),
+                         f'set -g default-shell "{resolved}"\n'
+                         f'  set-option -g default-shell "{resolved}" # trailing empty value\n')
+
+    def test_terminal_shell_dry_run_does_not_require_selected_shell(self):
+        config = self.home / ".config/alacritty/alacritty.toml"
+        self.write(config, 'shell = "/old/zsh"\n')
+        before = snapshot(self.home)
+        (self.bin / "zsh").unlink()
+        result = self.run_script(args=("--dry-run", "-y", "--only", "stow", "--only", "shell"), code=0)
+        self.assertIn("Would update", result.stdout)
+        self.assertEqual(snapshot(self.home), before)
+        self.assertEqual(self.calls(), [])
+
     def test_login_shell_is_left_alone_when_already_current(self):
         self.env["ACCOUNT_SHELL"] = str((self.bin / "bash").resolve())
         self.env["SHELL"] = "/usr/bin/zsh"
@@ -320,15 +637,24 @@ set_login_shell "${1:-bash}"
         result = self.run_script(args=("-y", "--only", "stow", "--skip", "shell"))
         self.assert_failed(result)
         self.assertIn("Failed to stow awesome", result.stdout)
-        self.assertEqual([call[0] for call in self.calls()], ["git", "stow"])
-        self.assertEqual(snapshot(self.home), before)
+        self.assertEqual([call[0] for call in self.calls()], ["stow"])
+        # The directories exist although the very first Stow call failed, so
+        # they are created ahead of the package loop.
+        self.assert_home_unchanged_except_private_dirs(before)
 
     def test_package_failure_is_fatal(self):
         self.env["FAIL_COMMAND"] = "yay"
         result = self.run_script(args=("-y", "--only", "packages", "--only", "stow"))
         self.assert_failed(result)
-        self.assertIn("Failed to install: stow", result.stdout)
-        self.assertEqual(self.calls(), [["yay", "-S", "--needed", "--noconfirm", "--", "stow"]])
+        self.assertIn("Failed to install packages", result.stdout)
+        packages = []
+        for filename in ("packages.list", "packages-awesome.list"):
+            packages.extend(line for line in (self.repo / filename).read_text().splitlines()
+                            if line and not line.startswith("#") and line not in packages)
+        self.assertEqual(self.calls(), [
+            ["sudo", "-n", "-v"],
+            ["yay", "-S", "--needed", "--noconfirm", "--sudoflags=-n", "--", *packages],
+        ])
         self.assertEqual(snapshot(self.home), {})
 
     def test_invalid_package_without_final_newline_is_rejected(self):
@@ -336,7 +662,7 @@ set_login_shell "${1:-bash}"
         result = self.run_script(args=("-y", "--only", "packages"))
         self.assert_failed(result)
         self.assertIn("Invalid packages", result.stdout)
-        self.assertEqual(self.calls(), [])
+        self.assertEqual(self.calls(), [["sudo", "-n", "-v"]])
 
     def test_base_stow_failure_preserves_selected_shell_rc(self):
         self.env["FAIL_COMMAND"] = "stow"
@@ -344,7 +670,14 @@ set_login_shell "${1:-bash}"
         before = snapshot(self.home)
         result = self.run_script(args=("-y", "--only", "stow", "--only", "shell"))
         self.assert_failed(result)
-        self.assertEqual(snapshot(self.home), before)
+        self.assert_home_unchanged_except_private_dirs(before)
+
+    def test_missing_powerlevel10k_fails_zsh_install_before_stow(self):
+        self.env["DOTFILES_P10K_THEME_PATH"] = str(self.base / "missing.zsh-theme")
+        result = self.run_script(args=("-y", "--only", "stow", "--only", "shell"))
+        self.assert_failed(result)
+        self.assertIn("Powerlevel10k is required", result.stdout)
+        self.assertEqual([call for call in self.calls() if call[0] == "stow"], [])
 
     def test_shell_stow_failure_restores_original_rc(self):
         self.write(self.home / ".zshrc", "keep original shell\n")
@@ -352,6 +685,132 @@ set_login_shell "${1:-bash}"
         result = self.run_script(args=("-y", "--only", "stow", "--only", "shell"))
         self.assert_failed(result)
         self.assertEqual((self.home / ".zshrc").read_text(), "keep original shell\n")
+
+    def test_folded_private_home_dirs_are_refused_before_any_change(self):
+        # Older installs ran Stow without --no-folding. Stow still treats those
+        # links as its own, so stowing on top would keep private files in the repo.
+        folds = {
+            ".ssh": "ssh/.ssh", ".gnupg": "gnupg/.gnupg", ".local": "scripts/.local",
+            ".local/bin": "scripts/.local/bin", ".local/share": "scripts/.local/share",
+            ".local/state": "scripts/.local/state",
+        }
+        for name, package_dir in folds.items():
+            for dry_run in (False, True):
+                with self.subTest(name=name, dry_run=dry_run):
+                    shutil.rmtree(self.home)
+                    self.home.mkdir()
+                    target = self.repo / package_dir
+                    target.mkdir(parents=True, exist_ok=True)
+                    link = self.home / name
+                    link.parent.mkdir(parents=True, exist_ok=True)
+                    link.symlink_to(os.path.relpath(target, link.parent))
+                    before_home, before_repo = snapshot(self.home), snapshot(self.repo)
+                    result = self.run_script(args=("-y", "--only", "stow", *(("--dry-run",) if dry_run else ())))
+                    self.assert_failed(result)
+                    self.assertIn(str(link), result.stdout)
+                    self.assertIn("Legacy folded Stow links", result.stdout)
+                    self.assertEqual(self.calls(), [])
+                    self.assertEqual(snapshot(self.home), before_home)
+                    self.assertEqual(snapshot(self.repo), before_repo)
+
+    def test_fold_detection_compares_fully_resolved_paths(self):
+        alias = self.base / "checkout alias"
+        alias.symlink_to(self.repo, target_is_directory=True)
+        target = self.repo / "ssh/.ssh"
+        target.mkdir()
+        hop = self.base / "hop"
+        hop.symlink_to(target)
+        link = self.home / ".ssh"
+        for label, destination, checkout in (
+            ("absolute link", target, self.repo),
+            ("chained links", hop, self.repo),
+            ("link names the checkout through an alias", alias / "ssh/.ssh", self.repo),
+            ("installer started through an alias", target, alias),
+        ):
+            with self.subTest(case=label):
+                link.unlink(missing_ok=True)
+                link.symlink_to(destination)
+                result = self.run_script(str(checkout / "install.sh"), args=("-y", "--only", "stow"))
+                self.assert_failed(result)
+                self.assertIn("Legacy folded Stow links", result.stdout)
+                self.assertEqual(self.calls(), [])
+
+    def test_private_home_links_outside_the_checkout_are_left_alone(self):
+        # A deliberate link to a secure volume is not a fold, and chmod would follow it.
+        outside = self.base / "secure volume"
+        # Shares the checkout path as a string prefix without being inside it.
+        lookalike = self.base / f"{self.repo.name}-private"
+        for path in (outside, lookalike):
+            path.mkdir()
+            path.chmod(0o755)
+        ssh = self.home / ".ssh"
+        for label, target in (("outside", outside), ("lookalike", lookalike),
+                              ("dangling", self.base / "missing")):
+            for dry_run in (True, False):
+                with self.subTest(target=label, dry_run=dry_run):
+                    self.log.write_text("")
+                    ssh.unlink(missing_ok=True)
+                    ssh.symlink_to(target)
+                    result = self.run_script(args=("-y", "--only", "stow", *(("--dry-run",) if dry_run else ())), code=0)
+                    self.assertNotIn("Legacy folded Stow links", result.stdout)
+                    self.assertNotIn(str(ssh), result.stdout)
+                    self.assertEqual(os.readlink(ssh), str(target))
+                    if target.exists():
+                        self.assertEqual(S_IMODE(target.stat().st_mode), 0o755)
+                    self.assertEqual(self.calls(), [] if dry_run else [
+                        ["stow", "--no-folding", "-d", str(self.repo), "-t", str(self.home), pkg]
+                        for pkg in STOW_PACKAGES])
+
+    def test_missing_private_home_dirs_are_planned_in_dry_run_and_created_owner_only(self):
+        # Even a fully open umask must not reach the new directories.
+        self.addCleanup(os.umask, os.umask(0))
+        before = snapshot(self.home)
+        result = self.run_script(args=("--dry-run", "-y", "--only", "stow"), code=0)
+        for name in (".ssh", ".gnupg"):
+            self.assertIn(f"[DRY RUN] mkdir -m 700 -- {self.home / name}", result.stdout)
+        self.assertEqual(snapshot(self.home), before)
+        self.assertEqual(self.calls(), [])
+        self.run_script(args=("-y", "--only", "stow"), code=0)
+        for name in (".ssh", ".gnupg"):
+            path = self.home / name
+            self.assertTrue(path.is_dir() and not path.is_symlink(), name)
+            self.assertEqual(S_IMODE(path.stat().st_mode), 0o700, name)
+
+    def test_open_private_home_dirs_are_restricted_to_their_owner(self):
+        for mode in (0o755, 0o750, 0o705, 0o711, 0o777):
+            with self.subTest(mode=oct(mode)):
+                self.log.write_text("")
+                shutil.rmtree(self.home)
+                self.home.mkdir()
+                ssh = self.home / ".ssh"
+                ssh.mkdir()
+                ssh.chmod(mode)
+                before = snapshot(self.home)
+                result = self.run_script(args=("--dry-run", "-y", "--only", "stow"), code=0)
+                self.assertIn(f"[DRY RUN] chmod go-rwx -- {ssh}", result.stdout)
+                self.assertEqual(S_IMODE(ssh.stat().st_mode), mode)
+                self.assertEqual(snapshot(self.home), before)
+                self.assertEqual(self.calls(), [])
+                result = self.run_script(args=("-y", "--only", "stow"), code=0)
+                self.assertIn(f"Restricting {ssh} to its owner", result.stdout)
+                self.assertEqual(S_IMODE(ssh.stat().st_mode), 0o700)
+
+    def test_owner_only_private_home_dirs_are_not_touched(self):
+        for name in (".ssh", ".gnupg"):
+            (self.home / name).mkdir()
+            (self.home / name).chmod(0o700)
+        before = snapshot(self.home)
+        result = self.run_script(args=("-y", "--only", "stow"), code=0)
+        self.assertNotIn("Restricting", result.stdout)
+        self.assertEqual(snapshot(self.home), before)
+
+    def test_dry_run_preview_matches_the_helper_command_a_real_run_executes(self):
+        # execute never starts the helpers in a dry run, so forwarding --dry-run
+        # only made the preview differ from the command a real run executes.
+        result = self.run_script(args=("--dry-run", "-y", "--only", "node", "--only", "lazyvim"), code=0)
+        for helper in ("install-node-manager.sh", "install-lazyvim.sh"):
+            self.assertIn(f"[DRY RUN] bash {self.repo}/{helper} --non-interactive\n", result.stdout)
+        self.assertEqual(self.calls(), [])
 
     def test_tmux_theme_links_tracked_theme_without_overwriting_existing_target(self):
         original = self.home / "theme-source"
@@ -372,6 +831,10 @@ set_login_shell "${1:-bash}"
         self.assertTrue(backups[0].is_symlink())
         self.assertEqual(backups[0].resolve(), original)
         self.assertEqual(original.read_text(), "original theme\n")
+        helper = self.home / ".local/bin/tmux-save-workspace"
+        self.assertTrue(helper.is_symlink())
+        self.assertEqual(helper.resolve(), self.repo / "scripts/.local/bin/tmux-save-workspace")
+        self.assertFalse(os.path.isabs(os.readlink(helper)))
 
     def test_tmux_existing_regular_theme_is_backed_up(self):
         theme = self.home / ".config/tmux/theme.conf"

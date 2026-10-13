@@ -9,12 +9,6 @@ if ! command -v tmux &>/dev/null; then
   exit 1
 fi
 
-if ! command -v fzf &>/dev/null; then
-  echo "Error: fzf is not installed" >&2
-  echo "Install with: sudo pacman -S fzf" >&2
-  exit 1
-fi
-
 # Handle popup mode
 if [[ "${1:-}" == "--popup" ]]; then
   # If already in a popup, just run normally
@@ -33,8 +27,10 @@ find_dirs() {
   
   # Add common directories if they exist
   [[ -d "$HOME" ]] && dirs+=("$HOME")
-  [[ -d "$HOME/.config" ]] && dirs+=("$HOME/.config")
-  [[ -d "$HOME/_dev" ]] && dirs+=("$HOME/_dev")
+  local config_dir=${DOTFILES_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}}
+  local dev_dir=${DOTFILES_DEV_DIR:-$HOME/_dev}
+  [[ -d "$config_dir" ]] && dirs+=("$config_dir")
+  [[ -d "$dev_dir" ]] && dirs+=("$dev_dir")
   [[ -d "$HOME/Projects" ]] && dirs+=("$HOME/Projects")
   
   # Add current directory
@@ -42,7 +38,7 @@ find_dirs() {
   
   # Find all directories (sorted, unique)
   for dir in "${dirs[@]}"; do
-    find -L "$dir" -mindepth 1 -maxdepth 1 -type d 2>/dev/null
+    find -L "$dir" -mindepth 1 -maxdepth 1 -type d 2>/dev/null || return
   done | sort -u
 }
 
@@ -50,11 +46,46 @@ find_dirs() {
 if [[ $# -eq 1 ]]; then
   selected="$1"
 else
-  selected=$(find_dirs | fzf --prompt="Select project> " --height=40% --reverse)
+  if ! command -v fzf &>/dev/null; then
+    echo "Error: fzf is not installed" >&2
+    echo "Install with: sudo pacman -S fzf" >&2
+    exit 1
+  fi
+  # Resolve discovery separately so clean fzf cancellation cannot mask find failures.
+  if found_dirs=$(find_dirs); then
+    :
+  else
+    discovery_status=$?
+    echo "Error: could not discover project directories" >&2
+    exit "$discovery_status"
+  fi
+  if [[ -n "$found_dirs" ]]; then
+    if selected=$(fzf --prompt="Select project> " --height=40% --reverse <<<"$found_dirs"); then
+      fzf_status=0
+    else
+      fzf_status=$?
+    fi
+  else
+    if selected=$(fzf --prompt="Select project> " --height=40% --reverse </dev/null); then
+      fzf_status=0
+    else
+      fzf_status=$?
+    fi
+  fi
+  if [[ $fzf_status -eq 1 ]]; then
+    exit 0
+  elif [[ $fzf_status -ne 0 ]]; then
+    exit "$fzf_status"
+  fi
 fi
 
 if [[ -z "$selected" ]]; then
   exit 0
+fi
+
+if [[ ! -d "$selected" ]]; then
+  echo "Error: project directory does not exist: $selected" >&2
+  exit 1
 fi
 
 # Create session name (replace dots with underscores for tmux compatibility)

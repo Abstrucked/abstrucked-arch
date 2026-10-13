@@ -32,12 +32,24 @@ if [[ ! -t 0 ]]; then
   exit 1
 fi
 
+DOTFILES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+
+validate_name() {
+  local label="$1"
+  local value="$2"
+  if [[ ! "$value" =~ ^[A-Za-z0-9][A-Za-z0-9._+-]*$ || "$value" == *..* ]]; then
+    print_error "$label must contain only letters, numbers, dots, underscores, plus signs, or hyphens; it cannot contain '..'."
+    exit 1
+  fi
+}
+
 # Prompt for program name
 read -r -p "Enter the program name (e.g., nvim, code, cursor): " program
 if [[ -z "$program" ]]; then
   print_error "Program name cannot be empty."
   exit 1
 fi
+validate_name "Program name" "$program"
 
 # Prompt for category
 read -r -p "Enter the category (e.g., ai, dev): " category
@@ -45,32 +57,58 @@ if [[ -z "$category" ]]; then
   print_error "Category cannot be empty."
   exit 1
 fi
+validate_name "Category" "$category"
 
 # Define paths
 launcher_dir="$HOME/.local/bin"
 launcher_file="${launcher_dir}/${program}-launcher"
+launcher_dir_real="$(realpath -m "$launcher_dir")"
+launcher_file_real="$(realpath -m "$launcher_file")"
+case "$launcher_file_real" in
+  "$launcher_dir_real"/*) ;;
+  *)
+    print_error "Launcher path resolves outside $launcher_dir."
+    exit 1
+    ;;
+esac
+launcher_file="$launcher_file_real"
+
+if [[ -L "$launcher_file" ]]; then
+  print_error "Refusing to overwrite a symbolic-link launcher: $launcher_file"
+  exit 1
+fi
 
 # Detect which shell is stowed
-if [[ -L "$HOME/.bashrc" ]] && [[ "$(readlink "$HOME/.bashrc")" == *"dotfiles/bash"* ]]; then
+if [[ -L "$HOME/.bashrc" ]] && [[ "$(realpath -m "$HOME/.bashrc")" == "$DOTFILES_DIR/bash/"* ]]; then
     SHELL_TYPE="bash"
-    aliases_file="$HOME/.dotfiles/bash/.config/bash/aliases.sh"
-    shell_rc_file="$HOME/.dotfiles/bash/.bashrc"
+    aliases_file="$DOTFILES_DIR/bash/.config/bash/aliases.sh"
+    shell_rc_file="$DOTFILES_DIR/bash/.bashrc"
     source_pattern="source.*aliases.sh"
-elif [[ -L "$HOME/.zshrc" ]] && [[ "$(readlink "$HOME/.zshrc")" == *"dotfiles/zsh"* ]]; then
+elif [[ -L "$HOME/.zshrc" ]] && [[ "$(realpath -m "$HOME/.zshrc")" == "$DOTFILES_DIR/zsh/"* ]]; then
     SHELL_TYPE="zsh"
-    aliases_file="$HOME/.dotfiles/zsh/.config/zsh/aliases.zsh"
-    shell_rc_file="$HOME/.dotfiles/zsh/.zshrc"
+    aliases_file="$DOTFILES_DIR/zsh/.config/zsh/aliases.zsh"
+    shell_rc_file="$DOTFILES_DIR/zsh/.zshrc"
     source_pattern="source.*aliases.zsh"
 else
     # Default to zsh for backward compatibility
     SHELL_TYPE="zsh"
-    aliases_file="$HOME/.dotfiles/zsh/.config/zsh/aliases.zsh"
-    shell_rc_file="$HOME/.dotfiles/zsh/.zshrc"
+    aliases_file="$DOTFILES_DIR/zsh/.config/zsh/aliases.zsh"
+    shell_rc_file="$DOTFILES_DIR/zsh/.zshrc"
     source_pattern="source.*aliases.zsh"
 fi
 
 # Create launcher script
 print_info "Creating launcher script: $launcher_file"
+if [[ -e "$launcher_file" ]]; then
+  backup_file="${launcher_file}.backup.$(date +%Y%m%d%H%M%S)"
+  suffix=0
+  while [[ -e "$backup_file" ]]; do
+    suffix=$((suffix + 1))
+    backup_file="${launcher_file}.backup.$(date +%Y%m%d%H%M%S).$suffix"
+  done
+  cp -p -- "$launcher_file" "$backup_file"
+  print_warning "Existing launcher backed up to: $backup_file"
+fi
 printf -v launch_command '%q' "$program"
 launch_flags=""
 if [[ "$program" == "opencode" ]]; then
@@ -116,9 +154,9 @@ if ! grep -q "$source_pattern" "$shell_rc_file"; then
     echo "" >>"$shell_rc_file"
     echo "# Source custom aliases" >>"$shell_rc_file"
     if [[ "$SHELL_TYPE" == "bash" ]]; then
-        echo "source \"\$HOME/.dotfiles/bash/.config/bash/aliases.sh\"" >>"$shell_rc_file"
+        printf 'source "%s/bash/.config/bash/aliases.sh"\n' "$DOTFILES_DIR" >>"$shell_rc_file"
     else
-        echo "source \"\$HOME/.dotfiles/zsh/.config/zsh/aliases.zsh\"" >>"$shell_rc_file"
+        printf 'source "%s/zsh/.config/zsh/aliases.zsh"\n' "$DOTFILES_DIR" >>"$shell_rc_file"
     fi
     print_success "Source line added to $SHELL_TYPE config."
 else

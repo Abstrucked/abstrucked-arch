@@ -27,6 +27,7 @@ end
 
 local ok, palette = pcall(dofile, palette_path)
 if not ok then fail("cannot load palette " .. palette_path .. ": " .. tostring(palette)) end
+if type(palette) ~= "table" then fail("palette " .. palette_path .. " must return a table") end
 
 -- Blend two #rrggbb colors. amount is 0..1, 0 being all of `a`.
 local function mix(a, b, amount)
@@ -42,11 +43,16 @@ local function mix(a, b, amount)
 end
 
 -- Recursively fill only the keys the palette does not already define.
-local function fill(target, source)
+local function fill(target, source, prefix)
   for key, value in pairs(source) do
+    local path = prefix and (prefix .. "." .. tostring(key)) or tostring(key)
     if type(value) == "table" then
-      if type(target[key]) ~= "table" then target[key] = {} end
-      fill(target[key], value)
+      if target[key] == nil then
+        target[key] = {}
+      elseif type(target[key]) ~= "table" then
+        fail("palette key '" .. path .. "' must be a table to merge defaults (got " .. type(target[key]) .. ")")
+      end
+      fill(target[key], value, path)
     elseif target[key] == nil then
       target[key] = value
     end
@@ -62,16 +68,26 @@ if defaults_file then
   if type(build_defaults) ~= "function" then fail(defaults_path .. " must return a function(palette, mix)") end
   local built_ok, defaults = pcall(build_defaults, palette, mix)
   if not built_ok then fail("building defaults failed: " .. tostring(defaults)) end
+  if type(defaults) ~= "table" then fail(defaults_path .. " must build a table") end
   fill(palette, defaults)
 end
 
 local function lookup(key)
+  if key:sub(1, 1) == "." or key:sub(-1) == "." or key:find("..", 1, true) then
+    fail("invalid dotted key '" .. key .. "'")
+  end
   local v = palette
+  local prefix = ""
   for part in key:gmatch("[^.]+") do
-    if type(v) ~= "table" then fail("palette has no key '" .. key .. "'") end
+    if v == nil then fail("palette has no key '" .. prefix .. "' (needed for '" .. key .. "')") end
+    if type(v) ~= "table" then
+      fail("palette key '" .. prefix .. "' is a " .. type(v) .. ", not a table (needed for '" .. key .. "')")
+    end
+    prefix = prefix == "" and part or (prefix .. "." .. part)
     v = v[part]
   end
-  if v == nil or type(v) == "table" then fail("palette has no value for '" .. key .. "'") end
+  if v == nil then fail("palette has no value for '" .. key .. "'") end
+  if type(v) == "table" then fail("palette key '" .. key .. "' is a table, expected a value") end
   return v
 end
 

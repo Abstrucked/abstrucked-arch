@@ -61,12 +61,17 @@ ffmpeg
 nodejs
 npm
 lazydocker
+# git filter-repo for history rewrites (a package, not a vendored pip copy)
+git-filter-repo
 
 # Desktop utilities shared by the window-manager configurations and tmux
+# (libnotify provides notify-send)
 brightnessctl
 playerctl
+libnotify
 wl-clipboard
-ryzenadj
+power-profiles-daemon
+# Raw AMD Ryzen controls are opt-in: install ryzenadj separately if required.
 
 # Audio: wpctl drives the volume keys in both window managers
 wireplumber

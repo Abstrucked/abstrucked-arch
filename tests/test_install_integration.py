@@ -2,6 +2,7 @@
 import os
 from pathlib import Path
 import shutil
+import stat
 import subprocess
 import tempfile
 import unittest
@@ -21,7 +22,7 @@ class InstallIntegrationTests(unittest.TestCase):
                 path.mkdir()
             prefixes = ("lib/", "themes/", "plugins/", "awesome/", "hyprland/",
                         "ssh/", "alacritty/", "btop/", "nvim/", "pcmanfm/", "scripts/",
-                        "ghossty/", "gnupg/", "xsession/", "picom/")
+                        "ghostty/", "gnupg/", "xsession/", "picom/")
             # Include new first-party inputs before staging, but no ignored
             # theme output, caches or state.
             names = subprocess.check_output(
@@ -30,18 +31,24 @@ class InstallIntegrationTests(unittest.TestCase):
             for name in sorted(set(filter(None, names))):
                 if name != "install.sh" and not name.startswith(prefixes):
                     continue
-                if name.startswith("scripts/.local/lib/python"):
-                    continue
                 source, dest = ROOT / name, repo / name
+                # The Git index also lists unstaged deletions. Copy the current
+                # working tree, but retain tracked symlinks even if dangling.
+                if not source.exists() and not source.is_symlink():
+                    continue
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 if source.is_symlink():
                     dest.symlink_to(os.readlink(source))
                 else:
                     shutil.copy2(source, dest)
 
+            # Compatibility package alias keeps installs made from the old
+            # checkout valid while the canonical package is now ghostty.
+            (repo / "ghossty").symlink_to("ghostty", target_is_directory=True)
+
             for name in ("awk", "bash", "basename", "cat", "cp", "date", "dirname", "echo", "flock", "grep", "id",
                          "ln", "lua", "luac", "mkdir", "mktemp", "mv", "python3", "readlink", "realpath",
-                         "rm", "rmdir", "sed", "sleep", "sort", "stow", "tail", "timeout", "touch", "xargs"):
+                         "rm", "rmdir", "sed", "sleep", "sort", "stat", "stow", "tail", "timeout", "touch", "xargs"):
                 executable = shutil.which(name)
                 self.assertIsNotNone(executable, name)
                 (commands / name).symlink_to(executable)
@@ -63,6 +70,8 @@ class InstallIntegrationTests(unittest.TestCase):
                    "XDG_CONFIG_HOME": str(home / ".config"),
                    "XDG_STATE_HOME": str(home / ".local/state"), "TMPDIR": str(root),
                    "ALLOW_ROOT": "true"}
+            # Pin the umask: Stow alone would create the private directories 0755.
+            self.addCleanup(os.umask, os.umask(0o022))
             for _ in range(2):
                 result = subprocess.run(["bash", str(repo / "install.sh"), "-y", "--only", "stow", "--wm", "both"],
                                         cwd=repo, env=env, capture_output=True, text=True, timeout=30)
@@ -73,9 +82,17 @@ class InstallIntegrationTests(unittest.TestCase):
                 self.assertEqual((home / ".config/gtk-3.0/bookmarks").read_text(),
                                  (home / "Downloads").as_uri() + "\n")
                 # The scripts package puts the API-key loader in ~, but its
-                # repository lint script must stay out of the home directory.
+                # repository syntax tools must stay out of the home directory.
                 self.assertTrue((home / "load-api-keys.sh").is_symlink())
                 self.assertFalse(os.path.lexists(home / "check-syntax.py"))
+                self.assertFalse(os.path.lexists(home / "config_syntax.py"))
+                # gpg warns about a homedir open to group or others, and ssh
+                # keys live next to the linked config.
+                for directory, tracked in ((".ssh", "config"), (".gnupg", "gpg-agent.conf")):
+                    private = home / directory
+                    self.assertTrue(private.is_dir() and not private.is_symlink(), directory)
+                    self.assertEqual(stat.S_IMODE(private.lstat().st_mode), 0o700, directory)
+                    self.assertTrue((private / tracked).is_symlink(), directory)
                 self.assertEqual((repo / "themes/out/.theme-name").read_text(), "mocha-peach\n")
                 for path in ("alacritty/theme.toml", "hypr/lua/theme.lua", "waybar/config.jsonc",
                              "awesome/themes/powerarrow/colors.lua", "btop/themes/themectl.theme"):

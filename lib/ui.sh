@@ -7,6 +7,7 @@ fi
 _UI_SH_LOADED=1
 
 source "$(dirname "${BASH_SOURCE[0]}")/logging.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/validation.sh"
 
 UI_MODE="${UI_MODE:-plain}"
 
@@ -36,7 +37,7 @@ ui_initialize() {
     case "${response,,}" in
         y|yes)
             if command_exists sudo; then
-                if sudo pacman -S --needed gum && command_exists gum; then
+                if validate_sudo_access && sudo pacman -S --needed gum && command_exists gum; then
                     UI_MODE=gum
                     return 0
                 fi
