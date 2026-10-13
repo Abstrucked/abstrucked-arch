@@ -31,6 +31,17 @@ qt6ct
 # gtk-bookmarks reads the Documents, Downloads, ... folders from xdg-user-dir
 xdg-user-dirs
 
+# Yazi file manager and its preview dependencies: 7zip for archives, zoxide for
+# jumps, resvg for SVG, poppler for PDF, imagemagick for HEIC/AVIF/JXL, and
+# chafa as the image fallback in terminals without the Kitty protocol (Alacritty)
+yazi
+7zip
+zoxide
+resvg
+chafa
+poppler
+imagemagick
+
 # System monitoring
 btop
 

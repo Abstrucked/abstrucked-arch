@@ -1,0 +1,40 @@
+# Overrides on top of Yazi's built-in defaults (26.9.1). Colors and flavors are
+# rendered by themectl into theme.toml, so none are set here.
+#:schema https://yazi-rs.github.io/schemas/yazi.json
+
+[mgr]
+# Preview gets half the window (default is 1:4:3 = 37%) so images have room.
+ratio          = [ 1, 3, 4 ]
+sort_by        = "natural"
+sort_dir_first = true
+linemode       = "size"
+show_hidden    = false
+
+[preview]
+# Sized for Ghostty (Kitty graphics protocol) with the preview pane at half of
+# a 2560px-wide (1440p) window: 1280px wide covers the pane at 1:1, 1440px
+# high covers the full window height. Anything larger would only be scaled down
+# by the terminal while growing the cache. The 900px default looks soft once
+# stretched to the pane. Quality 85 with lanczos3 is visibly sharper than the
+# 75/triangle defaults, and a JPEG at this size is a few hundred KB per image.
+max_width     = 1280
+max_height    = 1440
+image_quality = 85
+image_filter  = "lanczos3"
+
+[opener]
+# Text opens in $EDITOR (nvim as the fallback, not vi) and Yazi waits for it.
+edit = [
+	{ run = '${EDITOR:-nvim} %s', desc = "$EDITOR", for = "unix", block = true },
+]
+
+# git.yazi: show Git status in the file list. Needs the setup call in init.lua.
+[[plugin.prepend_fetchers]]
+url   = "*"
+run   = "git"
+group = "git"
+
+[[plugin.prepend_fetchers]]
+url   = "*/"
+run   = "git"
+group = "git"

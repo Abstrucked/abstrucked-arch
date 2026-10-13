@@ -21,7 +21,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PRIVATE_HOME_SNAPSHOT = {name: (S_IFDIR | 0o700, None) for name in (".ssh", ".gnupg")}
 COMMON_STOW_PACKAGES = (
     "ssh", "alacritty", "btop", "nvim", "pcmanfm", "scripts", "ghostty", "gnupg",
-    "xsession",
+    "xsession", "yazi",
 )
 STOW_PACKAGES = ("awesome", "picom", *COMMON_STOW_PACKAGES)
 STOW_PACKAGES_BY_WM = {
@@ -47,7 +47,7 @@ if name == "sudo" and len(sys.argv) > 1:
     if args[0] == "-v":
         sys.exit(0)
     os.execvp(args[0], args)
-if name not in ("git", "yay", "stow", "nvim", "chsh", "zsh", "systemctl"):
+if name not in ("git", "yay", "stow", "nvim", "chsh", "zsh", "systemctl", "ya"):
     sys.exit("Unexpected external command: " + name)
 '''
 
@@ -228,6 +228,32 @@ class InstallerTests(unittest.TestCase):
                     *[["stow", "--no-folding", "-d", str(self.repo), "-t", str(self.home), pkg]
                       for pkg in expected_packages],
                 ])
+
+    def stow_yazi_run(self):
+        # The mocked Stow links nothing, so create the link a real one would.
+        manifest = self.home / ".config/yazi/package.toml"
+        manifest.parent.mkdir(parents=True)
+        manifest.symlink_to(self.repo / "yazi/.config/yazi/package.toml")
+        return self.run_script(args=("-y", "--only", "stow", "--skip", "shell", "--wm", "hyprland"), code=0)
+
+    def add_fake_ya(self):
+        self.write(self.bin / "ya", f"#!{sys.executable}\n" + MOCK)
+        (self.bin / "ya").chmod(0o755)
+
+    def test_yazi_plugins_install_with_fake_ya_after_stow(self):
+        self.add_fake_ya()
+        self.stow_yazi_run()
+        self.assertEqual(self.calls()[-1], ["ya", "pkg", "install"])
+
+    def test_yazi_plugins_skipped_without_ya(self):
+        self.stow_yazi_run()
+        self.assertNotIn("ya", [call[0] for call in self.calls()])
+
+    def test_yazi_plugin_failure_never_fails_install(self):
+        self.add_fake_ya()
+        self.env["FAIL_COMMAND"] = "ya"
+        result = self.stow_yazi_run()
+        self.assertIn("ya pkg install failed", result.stdout)
 
     def test_window_manager_controls_package_manifests(self):
         manifests = {

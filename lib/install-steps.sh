@@ -12,7 +12,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/validation.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/cleanup.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/args.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/components.sh"
-declare -agr COMMON_STOW_PACKAGES=(ssh alacritty btop nvim pcmanfm scripts ghostty gnupg xsession)
+declare -agr COMMON_STOW_PACKAGES=(ssh alacritty btop nvim pcmanfm scripts ghostty gnupg xsession yazi)
 # Older installs ran Stow without --no-folding and may have turned these into
 # links into the checkout. .config is absent on purpose: the ghostty migration
 # below handles a folded ~/.config.
@@ -190,6 +190,19 @@ secure_private_home_dirs() {
     done
 }
 
+# Fetch the plugins package.toml pins. Best effort: the network may be down, and
+# a missing plugin only disables a Yazi feature. `ya pkg` writes through the
+# package.toml symlink Stow created (the link stays and the repository's file is
+# edited), so `ya pkg add/upgrade` changes tracked content; `install` does not.
+install_yazi_plugins() {
+    local manifest="${XDG_CONFIG_HOME:-$HOME/.config}/yazi/package.toml"
+    command_exists ya || return 0
+    [[ -L "$manifest" ]] || return 0
+    log_info "Installing Yazi plugins..."
+    (export YAZI_CONFIG_HOME="${manifest%/*}"; execute ya pkg install) || log_warn "ya pkg install failed; run it manually"
+    return 0
+}
+
 install_stow() {
     reject_folded_home_dirs
     progress_step "Setting up symlinks with GNU Stow"
@@ -247,6 +260,7 @@ install_stow() {
         die "Failed to generate theme colors (themectl apply); rerun the installer"
     fi
     execute "$DOTFILES_DIR/scripts/.local/bin/gtk-bookmarks" || log_warn "gtk-bookmarks failed; run it manually"
+    install_yazi_plugins
     progress_complete "done"
 }
 
