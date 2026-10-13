@@ -30,6 +30,24 @@ class GhosttyWindowTests(unittest.TestCase):
         # The fake logs "<cwd>|<arg>|<arg>..." per call. +new-window fails when
         # NEW_WINDOW_STATUS is non-zero, and a plain launch exits with
         # PLAIN_STATUS.
+        self.owner = self.root / "owner"
+        self.owner.touch()
+        # busctl answers the NameHasOwner query from the owner file; NO_BUS
+        # simulates an unreachable session bus.
+        self.tool(
+            "busctl",
+            '[ -z "${NO_BUS:-}" ] || exit 1\n'
+            f'if [ -e "{self.owner}" ]; then echo "b true"; else echo "b false"; fi',
+        )
+        # setsid logs its argv and TMUX state, then (unless NEVER_OWNS) acts as
+        # the started instance acquiring the bus name.
+        self.tool(
+            "setsid",
+            'printf "setsid" >> "$CALL_LOG"\n'
+            'for arg do printf "|%s" "$arg" >> "$CALL_LOG"; done\n'
+            'printf "|TMUX=%s|TMUX_PANE=%s\\n" "${TMUX-unset}" "${TMUX_PANE-unset}" >> "$CALL_LOG"\n'
+            f'[ -n "${{NEVER_OWNS:-}}" ] || touch "{self.owner}"',
+        )
         self.fake(
             'printf "%s" "$PWD" >> "$CALL_LOG"\n'
             'for arg do printf "|%s" "$arg" >> "$CALL_LOG"; done\n'
@@ -39,7 +57,10 @@ class GhosttyWindowTests(unittest.TestCase):
         )
 
     def fake(self, body):
-        path = self.bin / "ghostty"
+        self.tool("ghostty", body)
+
+    def tool(self, name, body):
+        path = self.bin / name
         path.write_text("#!/bin/sh\n" + body + "\n")
         path.chmod(0o755)
 
@@ -98,6 +119,48 @@ class GhosttyWindowTests(unittest.TestCase):
         self.assertEqual(self.run_wrapper(env={"PLAIN_STATUS": "7"}).returncode, 0)
         result = self.run_wrapper(env={"NEW_WINDOW_STATUS": "1", "PLAIN_STATUS": "7"})
         self.assertEqual(result.returncode, 7)
+
+    RESIDENT = (
+        "ghostty|--gtk-single-instance=true|--initial-window=false"
+        "|--quit-after-last-window-closed=false"
+    )
+
+    def test_existing_owner_spawns_no_instance(self):
+        self.run_wrapper("-e", "true")
+        self.assertFalse([c for c in self.calls() if c.startswith("setsid")])
+
+    def test_no_owner_starts_resident_without_tmux_then_opens_window(self):
+        self.owner.unlink()
+        result = self.run_wrapper(
+            "-e", "nvim", "file name",
+            env={"TMUX": "/tmp/tmux-1/default,1,0", "TMUX_PANE": "%3"},
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(
+            self.calls(),
+            [
+                f"setsid|{self.RESIDENT}|TMUX=unset|TMUX_PANE=unset",
+                f"{self.cwd}|+new-window|-e|nvim|file name",
+            ],
+        )
+
+    def test_owner_that_never_appears_falls_back(self):
+        self.owner.unlink()
+        result = self.run_wrapper("-e", "a b", env={"NEVER_OWNS": "1"})
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(
+            self.calls(),
+            [
+                f"setsid|{self.RESIDENT}|TMUX=unset|TMUX_PANE=unset",
+                f"{self.cwd}|-e|a b",
+            ],
+        )
+
+    def test_unreachable_bus_goes_straight_to_plain_ghostty(self):
+        self.owner.unlink()
+        result = self.run_wrapper("-e", "a b", env={"NO_BUS": "1"})
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.calls(), [f"{self.cwd}|-e|a b"])
 
     def test_missing_ghostty_fails(self):
         (self.bin / "ghostty").unlink()
