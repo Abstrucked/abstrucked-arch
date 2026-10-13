@@ -91,15 +91,21 @@ def helper_snapshot(path: Path) -> str:
         return ""
 
 
+def display_dependencies() -> list[str]:
+    """Fixed utilities the helper's list branch runs; a seam so tests need no desktop tools."""
+    dependencies = ["/bin/bash", "/usr/bin/sort", "/usr/bin/column", "/usr/bin/readlink"]
+    dependencies += (["/usr/bin/hyprctl", "/usr/bin/jq"] if os.environ.get("HYPRLAND_INSTANCE_SIGNATURE")
+                     else ["/usr/bin/xrandr", "/usr/bin/awk"])
+    return dependencies
+
+
 def display_snapshot() -> str:
     """Trust the fixed helper and the root-owned dependencies its list branch uses."""
     helper = REPOSITORY / "scripts/.local/bin/display-detect"
     fingerprint = helper_snapshot(helper)
     if not fingerprint:
         return ""
-    dependencies = ["/bin/bash", "/usr/bin/sort", "/usr/bin/column", "/usr/bin/readlink"]
-    dependencies += (["/usr/bin/hyprctl", "/usr/bin/jq"] if os.environ.get("HYPRLAND_INSTANCE_SIGNATURE")
-                     else ["/usr/bin/xrandr", "/usr/bin/awk"])
+    dependencies = display_dependencies()
     fields = [fingerprint]
     try:
         for name in dependencies:

@@ -1,6 +1,7 @@
 """CLI tests use fixtures/mocks, never live model or desktop actions."""
 
 import io
+import os
 import re
 import json
 from pathlib import Path
@@ -12,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "os-assistant/.local/share/os-assistant"))
 
 from os_assistant import cli
+from os_assistant.filesystem import human_bytes
 
 
 @pytest.fixture(autouse=True)
@@ -19,6 +21,18 @@ def isolated_user(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
     monkeypatch.setattr(cli.os, "geteuid", lambda: 1000)
+
+
+def _allocated(root: Path) -> str:
+    """Expected allocation text from the real filesystem, not an assumed block size.
+
+    Directory blocks differ by filesystem (0 on tmpfs, one block on ext4), so sum
+    st_blocks over the fixture root and everything inside it, as the scanner does.
+    """
+    total = root.lstat().st_blocks * 512
+    for parent, names, files in os.walk(root):
+        total += sum((Path(parent) / name).lstat().st_blocks * 512 for name in names + files)
+    return human_bytes(total)
 
 
 def test_help_does_not_contact_model(capsys):
@@ -332,7 +346,7 @@ def test_chat_sizes_alias_then_absolute_path_without_constructing_model(monkeypa
     output = output_stream.getvalue()
     flat = _flat(output)
     assert flat.count("-- result · directory_usage") == 2
-    assert flat.count(str(root) + ": 4.0 KiB allocated (filtered view).") == 2
+    assert flat.count(f"{root}: {_allocated(root)} allocated (filtered view).") == 2
     assert "logical file size" not in output
     assert 'tool: "directory_usage"' not in output and "arguments:" not in output and "argv:" not in output
     assert "experimental model routing" not in capsys.readouterr().err
@@ -358,7 +372,7 @@ def test_chat_clarifies_multiple_roots_then_sizes_bare_approved_name(monkeypatch
     assert cli.main(["--allow-root", str(first), "--allow-root", str(chosen), "chat"]) == 0
     output = output_stream.getvalue()
     assert "-- assistant Which approved folder should I measure?" in _flat(output)
-    assert _flat(output).count(str(chosen) + ": 4.0 KiB allocated (filtered view).") == 1
+    assert _flat(output).count(f"{chosen}: {_allocated(chosen)} allocated (filtered view).") == 1
     assert "I measured" not in output
 
 
@@ -477,7 +491,7 @@ def test_local_size_requests_around_generic_chat_construct_client_once(monkeypat
     assert cli.main(["--allow-root", str(root), "chat"]) == 0
     output = output_stream.getvalue()
     assert len(clients) == 1 and len(clients[0].calls) == 1
-    assert _flat(output).count(str(root) + ": 4.0 KiB allocated (filtered view).") == 2
+    assert _flat(output).count(f"{root}: {_allocated(root)} allocated (filtered view).") == 2
     assert _flat(output).count("· no tools ran Generic answer from fake client") == 1
     assert 'tool: "directory_usage"' not in output
 

@@ -97,14 +97,23 @@ class SystemStatusTests(_Base):
         write(self.proc / "loadavg", "0.10 0.20 0.30 1/234 56789\n")
         write(self.sys / "class/power_supply/BAT0/capacity", "88\n")
         write(self.sys / "class/power_supply/BAT0/status", "Discharging\n")
-        result = self.status()
+        # Real filesystems reserve blocks (total != used + free) and change between
+        # reads, so assert the mapping against fixed figures rather than live state.
+        usage = types.SimpleNamespace(total=1000, used=300, free=600)
+        with mock.patch.object(diagnostics.shutil, "disk_usage", return_value=usage) as disk_usage:
+            result = self.status()
+        disk_usage.assert_called_once_with(self.disk)
         self.assertEqual(result["memory_bytes"], {"total": 2048 * 1024, "available": 1024 * 1024})
         self.assertEqual(result["load_average"], {"1min": 0.1, "5min": 0.2, "15min": 0.3})
         self.assertEqual(result["battery"], [{"name": "BAT0", "capacity": 88, "status": "Discharging"}])
         disk = result["disk_bytes"]
+        self.assertEqual(disk, {"total": 1000, "used": 300, "free": 600})
         self.assertTrue(all(type(value) is int for value in disk.values()))
-        self.assertEqual(disk["total"], disk["used"] + disk["free"])
         json.dumps(result)
+        # The unpatched call still returns plain integers for the real filesystem.
+        live = self.status()["disk_bytes"]
+        self.assertEqual(set(live), {"total", "used", "free"})
+        self.assertTrue(all(type(value) is int and value >= 0 for value in live.values()))
 
     def test_missing_metrics_are_unavailable(self):
         result = self.status(disk_path=self.tmp / "absent")

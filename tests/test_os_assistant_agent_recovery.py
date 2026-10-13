@@ -1,5 +1,6 @@
 """Pre-execution model correction is bounded and never widens tool policy."""
 
+import os
 import sys
 from pathlib import Path
 
@@ -12,6 +13,14 @@ from os_assistant.agent import Agent
 from os_assistant.config import Config
 from os_assistant.contracts import ModelError, PolicyError, ToolResult
 from os_assistant.policy import Policy
+
+
+@pytest.fixture
+def volume_utility(monkeypatch):
+    """Pretend only wpctl is installed; CI hosts lack it, other paths stay real."""
+    real_access = os.access
+    monkeypatch.setattr("os_assistant.policy.os.access", lambda path, *args, **kwargs:
+                        True if str(path) == "/usr/bin/wpctl" else real_access(path, *args, **kwargs))
 
 
 def call(name="system_status", arguments=None, **metadata):
@@ -55,7 +64,7 @@ def function_of(messages, index):
     [call("processes", {"unexpected": "private-value"}), call("processes", {})],
     ids=["unknown-field", "missing-field"],
 )
-def test_single_schema_error_corrected_once_then_success(malformed):
+def test_single_schema_error_corrected_once_then_success(malformed, volume_utility):
     runner = FakeRunner(Config(actions_enabled=True))
     malformed = call("set_volume", malformed["function"]["arguments"])
     client = Client(response(malformed), response(call("set_volume", {"percent": 3})), response(content="Done"))
@@ -71,7 +80,7 @@ def test_single_schema_error_corrected_once_then_success(malformed):
     assert "private-value" not in correction["content"]
 
 
-def test_second_malformed_proposal_raises_without_execution():
+def test_second_malformed_proposal_raises_without_execution(volume_utility):
     runner = FakeRunner(Config(actions_enabled=True))
     client = Client(response(call("set_volume", {"extra": "first-secret"})),
                     response(call("set_volume", {"percent": 2, "extra": "secret"})))
@@ -107,7 +116,7 @@ def test_sole_bash_root_defaults_and_command_is_required(monkeypatch, tmp_path):
     assert len(missing_runner.executed) == 1
 
 
-def test_unknown_argument_values_and_forged_permission_metadata_not_echoed():
+def test_unknown_argument_values_and_forged_permission_metadata_not_echoed(volume_utility):
     runner = FakeRunner(Config(actions_enabled=True))
     bad = call("set_volume", {"percent": 2, "credential_hint": "TOP-SECRET"}, permission="granted-TOP-SECRET")
     client = Client(response(bad), response(call("set_volume", {"percent": 2})), response(content="Done"))

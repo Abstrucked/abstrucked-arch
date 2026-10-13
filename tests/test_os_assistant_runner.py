@@ -22,6 +22,33 @@ import os_assistant.runner as execution
 
 
 @pytest.fixture
+def disposable_checkout(monkeypatch, tmp_path):
+    """A private Git checkout as REPOSITORY, so results never depend on the host's real clone.
+
+    CI checkouts live under runner-owned, differently-permissioned directories that
+    git_snapshot rightly rejects, and linked worktrees are rejected on purpose.
+    """
+    repo = tmp_path / "checkout"
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    subprocess.run(("/usr/bin/git", "init", "--quiet", "--initial-branch=main", str(repo)), check=True,
+                   stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                   env=execution.git_environment())
+    monkeypatch.setattr(status, "REPOSITORY", repo)
+    return repo
+
+
+@pytest.fixture
+def display_dependencies(monkeypatch):
+    """Limit the helper's trusted dependencies to coreutils-level tools present on any host.
+
+    The real list names xrandr/column/awk (or hyprctl/jq), which a CI runner lacks.
+    """
+    monkeypatch.setattr(status, "display_dependencies", lambda: ["/bin/bash", "/usr/bin/sort"])
+
+
+@pytest.fixture
 def policy(monkeypatch):
     monkeypatch.setattr("os_assistant.policy.os.access", lambda *args: True)
     return Policy(Config(actions_enabled=True))
@@ -95,7 +122,7 @@ def test_read_only_output_is_bounded_and_discards_failed_or_warning_output(monke
     assert Runner(Policy(Config())).read_only_output(("/usr/bin/git",)) == expected
 
 
-def test_display_status_freezes_and_uses_the_fixed_read_only_helper(monkeypatch, tmp_path):
+def test_display_status_freezes_and_uses_the_fixed_read_only_helper(monkeypatch, tmp_path, display_dependencies):
     repo = tmp_path / "checkout"
     helper = repo / "scripts/.local/bin/display-detect"
     helper.parent.mkdir(parents=True)
@@ -115,7 +142,7 @@ def test_display_status_freezes_and_uses_the_fixed_read_only_helper(monkeypatch,
     assert calls[0][1]["WALLPAPER_SET"] and "/usr/bin:/bin" == calls[0][1]["PATH"]
 
 
-def test_display_helper_changes_invalidate_a_prepared_status_request(monkeypatch, tmp_path):
+def test_display_helper_changes_invalidate_a_prepared_status_request(monkeypatch, tmp_path, display_dependencies):
     helper = tmp_path / "scripts/.local/bin/display-detect"
     helper.parent.mkdir(parents=True)
     helper.write_text("#!/bin/sh\n")
@@ -138,7 +165,7 @@ def test_headless_display_status_never_executes_a_helper(monkeypatch):
     assert runner.run(runner.policy.prepare("display_status", {})).data["monitors"] == "unavailable"
 
 
-def test_dotfiles_status_preflights_filters_and_uses_only_hardened_git_commands(monkeypatch):
+def test_dotfiles_status_preflights_filters_and_uses_only_hardened_git_commands(monkeypatch, disposable_checkout):
     calls = []
     def capture(argv, timeout, *, environment):
         calls.append((argv, environment))
@@ -160,7 +187,7 @@ def test_dotfiles_status_preflights_filters_and_uses_only_hardened_git_commands(
 
 
 @pytest.mark.parametrize("config_key", ["filter.fixture.clean", "include.path", "includeif.gitdir:fixture.path"])
-def test_configured_git_filters_or_includes_block_status_before_they_can_run_or_be_read(monkeypatch, config_key):
+def test_configured_git_filters_or_includes_block_status_before_they_can_run_or_be_read(monkeypatch, disposable_checkout, config_key):
     calls = []
     monkeypatch.setattr(execution, "run_captured", lambda argv, timeout, *, environment:
                         calls.append(argv) or (0, config_key + "\n", ""))
