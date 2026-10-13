@@ -96,6 +96,13 @@ class YaziPackageTests(unittest.TestCase):
         # Hex would ignore the palette the terminal gets from themectl.
         self.assertNotRegex((CONFIG / "init.lua").read_text(), r"#[0-9a-fA-F]{3,8}\b")
 
+    def test_linemode_checks_hover_before_colouring(self):
+        init = (CONFIG / "init.lua").read_text()
+        body = init.split("function Linemode:size_mtime()", 1)[1].split("\nend\n", 1)[0]
+        hover = body.index("self._file.is_hovered")
+        self.assertLess(hover, body.index(':fg("cyan")'))
+        self.assertLess(hover, body.index(':fg("blue")'))
+
     def test_packages_list_has_preview_tools(self):
         packages = (ROOT / "packages.list").read_text().split()
         for name in ("glow", "duckdb", "mediainfo", "ouch"):

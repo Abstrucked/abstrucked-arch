@@ -56,11 +56,14 @@ function Linemode:size_mtime()
 		time = os.date("%b %d  %Y", time)
 	end
 
-	local size = self._file:size()
-	return ui.Line {
-		ui.Span(size and ya.readable_size(size) or "-"):fg("cyan"),
-		ui.Span("  " .. time):fg("blue"),
-	}
+	local size = ui.Span(self._file:size() and ya.readable_size(self._file:size()) or "-")
+	local date = ui.Span("  " .. time)
+	-- The hovered row sits on the selection pill; explicit colours would
+	-- override th.indicator.current's fg and be unreadable there.
+	if not self._file.is_hovered then
+		size, date = size:fg("cyan"), date:fg("blue")
+	end
+	return ui.Line { size, date }
 end
 
 -- Powerlevel10k-style git header.
