@@ -30,11 +30,12 @@ def configuration(root, *, writes=True, **values):
 @functools.cache
 def sandbox_problem() -> str:
     """Return why this host cannot run the real Bash sandbox, or "" when it can."""
-    try:
-        for helper in ("/usr/bin/bash", "/usr/bin/bwrap", "/usr/bin/prlimit", "/usr/bin/python3"):
+    for helper in ("/usr/bin/bash", "/usr/bin/bwrap", "/usr/bin/prlimit", "/usr/bin/python3"):
+        try:
             bash._trusted_executable(helper)
-    except PolicyError:
-        return "host lacks trusted root-owned /usr/bin/{bash,bwrap,prlimit,python3} (install bubblewrap)"
+        except PolicyError as error:
+            # Name the failing helper so CI's skip summary (-rs) shows the cause.
+            return f"host trust check failed for {helper}: {error}"
     try:
         with tempfile.TemporaryDirectory() as staged:
             argv = bash.sandbox_argv(staged, bash.CommandPlan(staged, ".", ()))
