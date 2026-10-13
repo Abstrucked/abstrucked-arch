@@ -26,7 +26,17 @@ jobs:
         # Ubuntu 24.04 blocks unprivileged user namespaces via AppArmor.
         # The os-assistant Bash sandbox tests (bubblewrap) need them.
         run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - name: Show bubblewrap sandbox diagnostics
+        # Informational only: explains any skipped real-sandbox tests.
+        run: |
+          bwrap --version || true
+          ls -ld /usr /usr/bin /usr/bin/bwrap /usr/bin/prlimit /usr/bin/bash || true
+          readlink -f /usr/bin/python3 || true
+          ls -ld "$(readlink -f /usr/bin/python3)" || true
+          sysctl kernel.apparmor_restrict_unprivileged_userns kernel.unprivileged_userns_clone user.max_user_namespaces || true
+          bwrap --unshare-all --ro-bind /usr /usr --symlink usr/lib /lib --symlink usr/lib64 /lib64 --symlink usr/bin /bin --proc /proc --dev /dev /usr/bin/true \
+            && echo "bwrap exit 0" || echo "bwrap exit $?"
       - name: Lint and validate syntax
         run: python3 -B scripts/check-syntax.py
       - name: Run isolated regression tests
-        run: python3 -B -m pytest tests -q -p no:cacheprovider
+        run: python3 -B -m pytest tests -q -p no:cacheprovider -rs
