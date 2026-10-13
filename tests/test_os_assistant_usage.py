@@ -250,6 +250,8 @@ def test_du_does_not_silently_use_snapshot_or_unknown_semantics(tmp_path, comman
 
 
 def test_home_aliases_canonicalize_but_never_grant_home_or_parent_access(tmp_path, monkeypatch):
+    # Alias handling is host-independent: do not require bubblewrap or root-owned /usr/bin tools here.
+    monkeypatch.setattr(bash, "_trusted_executable", lambda path: (path, path, "host-independent fixture"))
     monkeypatch.setenv("HOME", str(tmp_path))
     root = tmp_path / ".dotfiles"
     root.mkdir()

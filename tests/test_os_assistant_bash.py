@@ -3,9 +3,11 @@
 from dataclasses import FrozenInstanceError, replace
 import io
 import json
+import functools
 import os
 from pathlib import Path
 import sys
+import tempfile
 
 import pytest
 
@@ -23,6 +25,49 @@ import os_assistant.runner as execution
 def configuration(root, *, writes=True, **values):
     return replace(Config(), **{"bash_enabled": True, "bash_roots": (str(root),),
                                 "bash_allow_writes": writes, "actions_enabled": writes, **values})
+
+
+@functools.cache
+def sandbox_problem() -> str:
+    """Return why this host cannot run the real Bash sandbox, or "" when it can."""
+    try:
+        for helper in ("/usr/bin/bash", "/usr/bin/bwrap", "/usr/bin/prlimit", "/usr/bin/python3"):
+            bash._trusted_executable(helper)
+    except PolicyError:
+        return "host lacks trusted root-owned /usr/bin/{bash,bwrap,prlimit,python3} (install bubblewrap)"
+    try:
+        with tempfile.TemporaryDirectory() as staged:
+            argv = bash.sandbox_argv(staged, bash.CommandPlan(staged, ".", ()))
+            code, _, stderr = run_captured((*argv[:-5], "/usr/bin/true"), 10, environment={"PATH": "/usr/bin"})
+    except (AssistantError, OSError) as error:
+        return f"bubblewrap sandbox did not start: {error}"
+    return "" if code == 0 else f"bubblewrap cannot create a sandbox here (unprivileged user namespaces?): {stderr.strip()[:200]}"
+
+
+def host_trust(path):
+    """Stand-in for the host executable trust check; reports the same shape without touching the host."""
+    return (path, path, "host-independent fixture")
+
+
+@pytest.fixture(autouse=True)
+def trusted_host_tools(request, monkeypatch):
+    """Keep policy/parsing tests independent of what the CI image installs.
+
+    Tests that need the genuine sandbox request ``real_sandbox``: they keep the
+    production trust check and skip, with a reason, when the host cannot run
+    bubblewrap. Everything else swaps only the host-ownership probe; the real
+    argv, snapshot, approval and file-operation logic still runs.
+    """
+    if "real_sandbox" in request.fixturenames:
+        return
+    monkeypatch.setattr(bash, "_trusted_executable", host_trust)
+
+
+@pytest.fixture
+def real_sandbox():
+    problem = sandbox_problem()
+    if problem:
+        pytest.skip(problem)
 
 
 @pytest.fixture
@@ -282,7 +327,7 @@ def test_mixed_pipeline_copies_real_contents_instead_of_reading_metadata_proxies
     assert not (destination / "sub/code.py").exists()
 
 
-def test_pure_stdin_pipeline_does_not_scan_the_source_folder(workspace, monkeypatch):
+def test_pure_stdin_pipeline_does_not_scan_the_source_folder(real_sandbox, workspace, monkeypatch):
     original_scandir = bash.os.scandir
     def no_scan(path):
         if isinstance(path, int) and os.readlink(f"/proc/self/fd/{path}") == str(workspace):
@@ -344,7 +389,9 @@ def test_mixed_implicit_and_explicit_patterns_are_refused(workspace, command):
         Policy(configuration(workspace)).prepare("bash", {"root": str(workspace), "command": command})
 
 
-def test_pipe_rg_reads_pipeline_input_instead_of_searching_the_whole_tree(workspace):
+def test_pipe_rg_reads_pipeline_input_instead_of_searching_the_whole_tree(real_sandbox, workspace):
+    if not os.access("/usr/bin/rg", os.X_OK):
+        pytest.skip("ripgrep is not installed at /usr/bin/rg")
     runner = Runner(Policy(configuration(workspace, writes=False)))
     result = runner.run(runner.policy.prepare("bash", {"root": str(workspace), "command": "echo alpha | rg alpha | wc -l"}))
     assert result.status == "ok", result.data
@@ -363,7 +410,7 @@ def test_a_linked_working_directory_is_refused(workspace, tmp_path):
         Policy(configuration(workspace)).prepare("bash", {"root": str(workspace), "command": "ls", "cwd": "linked"})
 
 
-def test_subfolder_paths_are_mapped_without_changing_host_cwd(workspace):
+def test_subfolder_paths_are_mapped_without_changing_host_cwd(real_sandbox, workspace):
     runner = Runner(Policy(configuration(workspace, writes=False)))
     result = runner.run(runner.policy.prepare("bash", {"root": str(workspace), "command": "cat code.py", "cwd": "sub"}))
     assert result.status == "ok" and result.data["stdout"] == "print('alpha')\n"
@@ -403,7 +450,7 @@ def test_only_true_from_the_terminal_approval_callback_grants_file_changes(works
     assert result.status == "denied" and not (workspace / "new").exists()
 
 
-def test_real_sandbox_cannot_connect_to_a_host_loopback_listener(workspace, tmp_path):
+def test_real_sandbox_cannot_connect_to_a_host_loopback_listener(real_sandbox, workspace, tmp_path):
     import socket
     with socket.socket() as listener:
         listener.bind(("127.0.0.1", 0))
@@ -494,7 +541,7 @@ def test_mutations_never_follow_leaf_links_even_with_approval(workspace, tmp_pat
     assert outside.read_text() == "untouched"
 
 
-def test_live_disposable_read_only_pipeline_is_isolated(workspace):
+def test_live_disposable_read_only_pipeline_is_isolated(real_sandbox, workspace):
     runner = Runner(Policy(configuration(workspace, writes=False)))
     call = runner.policy.prepare("bash", {"root": str(workspace), "command": "grep alpha readme.txt | wc -l"})
     result = runner.run(call)
@@ -502,7 +549,7 @@ def test_live_disposable_read_only_pipeline_is_isolated(workspace):
     assert result.data["stdout"].strip() == "2" and result.data["persistent_host_writes"] is False
 
 
-def test_real_sandbox_blocks_host_paths_writes_environment_and_network(workspace, tmp_path):
+def test_real_sandbox_blocks_host_paths_writes_environment_and_network(real_sandbox, workspace, tmp_path):
     secret = tmp_path / "not-visible.txt"
     secret.write_text("not-visible")
     staged = tmp_path / "staged"
@@ -526,7 +573,7 @@ def _cli_config(tmp_path, workspace):
     return str(config)
 
 
-def test_cli_bash_read_needs_no_terminal_confirmation_or_model(workspace, tmp_path, monkeypatch, capsys):
+def test_cli_bash_read_needs_no_terminal_confirmation_or_model(real_sandbox, workspace, tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(cli, "confirm", lambda call: pytest.fail("Automatic read asked for approval"))
     monkeypatch.setattr(cli, "OllamaClient", lambda config: pytest.fail("Direct Bash tool contacted model"))
     arguments = json.dumps({"root": str(workspace), "command": "grep alpha readme.txt"})
