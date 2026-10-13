@@ -6,3 +6,12 @@ shell-integration = detect
 # Remote tmux can copy via OSC 52; paste explicitly with Ctrl+Shift+V.
 clipboard-write = allow
 clipboard-read = deny
+
+# Match the Alacritty font setup.
+font-family = JetBrainsMono Nerd Font
+font-family-italic = JetBrains Mono
+font-size = 10
+
+# At size 10 Ghostty's cell is 8x17 px while Alacritty's is 8x18 px on this
+# machine; one extra pixel of height gives the same 8x18 grid.
+adjust-cell-height = 1

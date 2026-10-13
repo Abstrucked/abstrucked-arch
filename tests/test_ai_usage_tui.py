@@ -88,8 +88,8 @@ class AiUsageTuiTests(unittest.TestCase):
     def calls(self):
         return self.log.read_text().splitlines() if self.log.exists() else []
 
-    def test_default_alacritty_launch_and_forwards_arguments_unchanged(self):
-        self.terminal(self.bin / "alacritty")
+    def test_default_ghostty_window_launch_and_forwards_arguments_unchanged(self):
+        self.terminal(self.bin / "ghostty-window")
         result = self.run_tui("--provider", "name with spaces")
         self.assertEqual(result.returncode, 0, result.stderr)
         calls = self.calls()

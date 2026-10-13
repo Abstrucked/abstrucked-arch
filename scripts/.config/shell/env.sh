@@ -7,12 +7,14 @@ DOTFILES_DEV_DIR=${DOTFILES_DEV_DIR:-$HOME/_dev}
 export XDG_CONFIG_HOME DOTFILES_CONFIG_DIR DOTFILES_DEV_DIR
 
 EDITOR=${EDITOR:-nvim}
+# Generic terminal for launchers; the wrapper reuses the resident Ghostty.
+TERMINAL=${TERMINAL:-ghostty-window}
 VISUAL=${VISUAL:-$EDITOR}
 N_PREFIX=${N_PREFIX:-$HOME/n}
 ASDF_DATA_DIR=${ASDF_DATA_DIR:-$HOME/.asdf}
 PNPM_HOME=${PNPM_HOME:-$HOME/.local/share/pnpm}
 THEME_BG_DIR=${THEME_BG_DIR:-$HOME/.backgrounds}
-export EDITOR VISUAL N_PREFIX ASDF_DATA_DIR PNPM_HOME THEME_BG_DIR
+export EDITOR VISUAL TERMINAL N_PREFIX ASDF_DATA_DIR PNPM_HOME THEME_BG_DIR
 
 # Assemble the managed prefix in order, suppressing exact duplicates even when
 # caller-provided runtime directories overlap.

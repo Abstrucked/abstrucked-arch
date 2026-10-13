@@ -21,3 +21,16 @@ alias perf="\"\$HOME/.local/bin/perf-mode.sh\""
 alias checkmode='sensors | grep -E "Tctl|Tdie|Package" && grep MHz /proc/cpuinfo | head -1'
 
 alias _omen="\"\$HOME/.local/bin/tailscale-ssh\""
+
+# Yazi wrapper: cd to the directory Yazi was in when it exits (q; Q skips this).
+y() {
+    y_cwd_file=$(mktemp -t yazi-cwd.XXXXXX) || return 1
+    yazi "$@" --cwd-file="$y_cwd_file"
+    y_status=$?
+    if y_cwd=$(cat -- "$y_cwd_file") && [ -n "$y_cwd" ] && [ "$y_cwd" != "$PWD" ]; then
+        cd -- "$y_cwd" || y_status=1
+    fi
+    rm -f -- "$y_cwd_file"
+    unset y_cwd_file y_cwd
+    return "$y_status"
+}

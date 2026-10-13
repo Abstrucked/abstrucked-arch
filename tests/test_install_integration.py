@@ -22,7 +22,7 @@ class InstallIntegrationTests(unittest.TestCase):
                 path.mkdir()
             prefixes = ("lib/", "themes/", "plugins/", "awesome/", "hyprland/",
                         "ssh/", "alacritty/", "btop/", "nvim/", "pcmanfm/", "scripts/",
-                        "ghostty/", "gnupg/", "xsession/", "picom/")
+                        "ghostty/", "gnupg/", "xsession/", "yazi/", "picom/")
             # Include new first-party inputs before staging, but no ignored
             # theme output, caches or state.
             names = subprocess.check_output(

@@ -395,6 +395,19 @@ class ThemeTests(unittest.TestCase):
             with self.subTest(name=name):
                 self.run_tool("themectl", "render", "--colors", name)
 
+    def test_yazi_theme_is_valid_toml_for_every_palette(self):
+        for palette in sorted((self.themes / "palettes").glob("[!_]*.lua")):
+            with self.subTest(palette=palette.stem):
+                rendered = self.render(palette, "yazi-theme.toml.tpl")
+                self.assertNotIn("{{", rendered)
+                theme = tomllib.loads(rendered)
+                self.assertIn("rules", theme["filetype"])
+                self.assertIn(palette.stem, rendered.splitlines()[0])
+
+    def test_yazi_target_maps_to_the_user_theme(self):
+        targets = (ROOT / "themes/targets.conf").read_text().splitlines()
+        self.assertIn("yazi-theme.toml | ~/.config/yazi/theme.toml |", [t.rstrip() for t in targets])
+
     def test_powerarrow_segment_text_is_readable(self):
         def luminance(hex_color):
             def channel(c):

@@ -6,6 +6,6 @@ if [ -n "${GUI_EDITOR:-}" ]; then
     exec sh -c "$GUI_EDITOR"
 fi
 
-terminal=${TERMINAL:-alacritty}
+terminal=${TERMINAL:-ghostty-window}
 editor=${EDITOR:-nvim}
 exec "$terminal" -e "$editor"

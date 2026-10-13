@@ -56,6 +56,7 @@ awesome/.config/awesome/themes/powerarrow/colors.lua
 btop/.config/btop/themes/themectl.theme
 ghostty/.config/ghostty/theme
 ghossty/.config/ghostty/theme
+yazi/.config/yazi/theme.toml
 hyprland/.config/hypr/lua/theme.lua
 hyprland/.config/hypr/theme.conf
 hyprland/.config/rofi/config.rasi
@@ -83,3 +84,8 @@ themes/.apply.lock
 # that add their own autostart entries write them here; keep only ours.
 picom/.config/autostart/*
 !picom/.config/autostart/picom.desktop
+
+# `ya pkg install` writes plugins and flavors next to package.toml; they would
+# land here if ~/.config/yazi were ever a folded Stow link.
+yazi/.config/yazi/plugins/
+yazi/.config/yazi/flavors/

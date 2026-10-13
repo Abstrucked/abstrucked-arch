@@ -13,7 +13,7 @@ widget, and two small scripts.
 
 - `ai-usagebar-bin` from the AUR, which installs `ai-usagebar` and
   `ai-usagebar-tui`. `ai-usagebar` builds the same thing from source.
-- `jq`, and `alacritty` for the TUI window.
+- `jq`, and a terminal for the TUI window (`ghostty-window` by default, or `$TERMINAL`).
 - It is not in `packages.list`: plugins are opt-in, so their dependencies are
   installed with the plugin rather than on every machine.
 

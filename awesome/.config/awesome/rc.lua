@@ -111,7 +111,7 @@ local theme_layout = require("theme-layout")
 local chosen_theme = theme_layout.get()
 local modkey = "Mod4"
 local altkey = "Mod1"
-local terminal = os.getenv("TERMINAL") or "alacritty"
+local terminal = os.getenv("TERMINAL") or "ghostty-window"
 local vi_focus = false -- vi-like client focus - https://github.com/lcpz/awesome-copycats/issues/275
 local cycle_prev = true -- cycle trough all previous client or just the first -- https://github.com/lcpz/awesome-copycats/issues/274
 local editor = os.getenv("EDITOR") or "nvim"
@@ -620,6 +620,9 @@ local globalkeys = my_table.join(
 	awful.key({ modkey, "Shift" }, "w", function()
 		awful.spawn({ terminal, "-e", ide })
 	end, { description = "run ide", group = "launcher" }),
+	awful.key({ modkey }, "e", function()
+		awful.spawn({ terminal, "-e", "yazi" })
+	end, { description = "open yazi", group = "launcher" }),
 	-- Default
 	--[[ dmenu
     awful.key({ modkey }, "x", function ()
@@ -906,6 +909,10 @@ local autorun_apps = {
 	-- picom package's own XDG autostart entry is hidden (picom/.config/autostart)
 	-- so dex does not start a second copy.
 	{ "picom", "-b", when = "detect-gpu" },
+	-- Resident Ghostty that ghostty-window opens windows in. Started here so it
+	-- inherits the session environment (a D-Bus/systemd-activated instance would
+	-- not). It must outlive its last window or the next window is a cold start.
+	{ "ghostty", "--gtk-single-instance=true", "--initial-window=false", "--quit-after-last-window-closed=false" },
 	-- { "/usr/bin/pcmanfm", "-d" },
 	-- { "smbnetfs", "net/" },
 	-- { "/bin/lightdmxrand.sh" },

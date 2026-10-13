@@ -59,6 +59,10 @@ return function(p, mix)
     selection = mix(p.surface, p.fg, 0.15),
     -- Readable text on an accent-filled block (the tmux session name).
     on_accent = on(p.accent),
+    -- The same for the status colours yazi fills (counts, modes, errors).
+    on_red = on(p.red),
+    on_green = on(p.green),
+    on_yellow = on(p.yellow),
 
     -- Roles the terminal and editor templates ask for by name.
     cursor = p.fg,

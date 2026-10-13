@@ -1,0 +1,60 @@
+#!/bin/bash
+# Open a Ghostty window in the resident instance, which is much faster than a
+# cold start. +new-window passes the caller's working directory along and
+# accepts --working-directory, --command, --title, and -e like the plain CLI.
+#
+# The session normally starts the resident instance (so it inherits the full
+# session environment). If nothing owns the Ghostty bus name, +new-window would
+# D-Bus-activate the systemd unit, whose reduced environment lacks PATH entries
+# and the exports from env.sh, and that instance would then persist. So when the
+# name is unowned this script starts the instance itself, from the caller's
+# environment, and waits for it. The ownership query (NameHasOwner) never
+# activates anything. With no reachable session bus, or if anything else fails,
+# it starts a standalone Ghostty with the same arguments.
+set -euo pipefail
+
+declare -r bus_name=com.mitchellh.ghostty
+
+# Prints true or false; fails when the session bus is unreachable.
+name_has_owner() {
+    local reply
+    reply=$(busctl --user call org.freedesktop.DBus /org/freedesktop/DBus \
+        org.freedesktop.DBus NameHasOwner s "$bus_name" 2>/dev/null) || return 1
+    [[ $reply == "b true" ]]
+}
+
+# Distinguish "no owner" from "no bus": the query itself must succeed.
+owner_state() {
+    local reply
+    reply=$(busctl --user call org.freedesktop.DBus /org/freedesktop/DBus \
+        org.freedesktop.DBus NameHasOwner s "$bus_name" 2>/dev/null) || {
+        echo nobus
+        return 0
+    }
+    if [[ $reply == "b true" ]]; then echo owned; else echo unowned; fi
+}
+
+state=$(owner_state)
+if [[ $state == nobus ]]; then
+    exec ghostty "$@"
+fi
+
+if [[ $state == unowned ]]; then
+    # Same argv as the autostart entries, so their pgrep -fx guards match. TMUX
+    # is dropped so shells in new windows do not think they are inside tmux.
+    env -u TMUX -u TMUX_PANE setsid ghostty --gtk-single-instance=true \
+        --initial-window=false --quit-after-last-window-closed=false \
+        </dev/null >/dev/null 2>&1 &
+    for _ in {1..30}; do
+        name_has_owner && break
+        sleep 0.1
+    done
+    if ! name_has_owner; then
+        exec ghostty "$@"
+    fi
+fi
+
+if ghostty +new-window "$@"; then
+    exit 0
+fi
+exec ghostty "$@"
