@@ -104,9 +104,14 @@ class ShellDefaultsTests(unittest.TestCase):
                     str(self.home / ".local/bin"), str(custom / "node/bin"),
                     str(custom / "asdf/shims"), str(custom / "pnpm"), "/usr/bin"]))
 
-                wrapper = self.root / ("bash-wrapper.sh" if name == "bash" else "zsh-wrapper.zsh")
-                source = (ROOT / ("bash/.config/bash/aliases.sh" if name == "bash"
-                                  else "zsh/.config/zsh/aliases.zsh")).read_text()
+                # The bash and zsh wrappers use the non-POSIX "source" builtin,
+                # which dash (/bin/sh on Debian/Ubuntu) lacks. A plain POSIX sh
+                # user sources the shared helper directly instead.
+                wrapper_source = {"sh": "scripts/.config/shell/aliases.sh",
+                                  "bash": "bash/.config/bash/aliases.sh",
+                                  "zsh": "zsh/.config/zsh/aliases.zsh"}[name]
+                wrapper = self.root / ("wrapper.zsh" if name == "zsh" else "wrapper.sh")
+                source = (ROOT / wrapper_source).read_text()
                 wrapper.write_text(source)
                 with wrapper.open("a") as wrapper_file:
                     wrapper_file.write("\nalias yrs='custom-override'\n")

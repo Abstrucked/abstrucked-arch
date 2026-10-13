@@ -1,5 +1,6 @@
 """Parse the full config in an isolated tmux server and run its project commands."""
 from pathlib import Path
+import re
 import shlex
 import shutil
 import subprocess
@@ -8,6 +9,20 @@ import unittest
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def decode_tmux_string(text):
+    r"""Undo the double-quoting that `tmux list-keys` applies to a command.
+
+    tmux 3.4 (Ubuntu 24.04) double-escapes `$` when listing keys (`\\$HOME`),
+    which tmux itself rejects when re-parsed ("invalid environment variable"),
+    while newer releases emit `\$HOME`. The configured commands contain no
+    literal backslashes, so after removing one level of quoting any leftover
+    `\$` is that quirk and means a plain `$`.
+    """
+    if len(text) > 1 and text[0] == text[-1] == '"':
+        text = re.sub(r"\\(.)", r"\1", text[1:-1])
+    return text.replace("\\$", "$")
 
 
 class TmuxProjectBindingsTests(unittest.TestCase):
@@ -43,28 +58,32 @@ class TmuxProjectBindingsTests(unittest.TestCase):
                    "DOTFILES_DEV_DIR": str(root / "initial-dev")}
 
             def run(*args, check=True):
-                return subprocess.run([tmux, "-S", str(socket), "-f", str(config), *args],
-                                      env=env, capture_output=True, text=True, check=check, timeout=10)
+                result = subprocess.run([tmux, "-S", str(socket), "-f", str(config), *args],
+                                        env=env, capture_output=True, text=True, timeout=10)
+                if check and result.returncode:
+                    self.fail(f"{tmux} {' '.join(args)} exited {result.returncode}\n"
+                              f"stdout: {result.stdout}\nstderr: {result.stderr}")
+                return result
 
             try:
                 run("new-session", "-d", "-s", "fixture", "sleep 30")
                 bindings = [(line, shlex.split(line))
                             for line in run("list-keys", "-T", "prefix").stdout.splitlines()]
                 for key, variable in (("C", "DOTFILES_CONFIG_DIR"), ("D", "DOTFILES_DEV_DIR")):
-                    line, parsed = next((line, parts) for line, parts in bindings if "run-shell" in parts
-                                        and parts[parts.index("run-shell") - 1] == key)
-                    command = parsed[parsed.index("run-shell") + 1]
+                    line = next(line for line, parts in bindings if "run-shell" in parts
+                                and parts[parts.index("run-shell") - 1] == key)
+                    command = decode_tmux_string(line.split(" run-shell ", 1)[1])
                     self.assertIn("${" + variable, command)
+                    self.assertNotIn("\\", command)
                     # Change the environment after loading: expansion must be
                     # deferred to the shell, not frozen during config parsing.
                     chosen = str(root / f"chosen {key} with ' & [glob] $HOME")
                     run("set-environment", "-t", "fixture", variable, chosen)
                     log.unlink(missing_ok=True)
-                    # list-keys emits tmux syntax, not shell syntax: let tmux
-                    # decode its own quoting rather than stripping escapes.
-                    invoke = root / "invoke.conf"
-                    invoke.write_text("run-shell " + line.split(" run-shell ", 1)[1] + "\n")
-                    run("source-file", str(invoke))
+                    # Pass the decoded command as an argument instead of
+                    # re-sourcing list-keys output, which not every tmux
+                    # release prints in a form its own parser accepts.
+                    run("run-shell", "-t", "fixture", command)
                     self.assertEqual(log.read_bytes(), chosen.encode() + b"\0")
             finally:
                 run("kill-server", check=False)
