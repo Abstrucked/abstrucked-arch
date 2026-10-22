@@ -2,6 +2,9 @@
 # templates/tmux-colors.conf.tpl in ~/.dotfiles/themes instead.
 # config/tmux/theme.conf reads these through #{@thm_*}, so sourcing this file
 # alone recolours every running session.
+# Pin tmux 3.8's theme colour set to the palette's variant rather than the
+# terminal's reported background, which popups and menus would follow otherwise.
+set -g theme '{{variant}}'
 set -g @thm_bg '{{bg_alt}}'
 set -g @thm_fg '{{fg}}'
 set -g @thm_dim '{{fg_dim}}'
