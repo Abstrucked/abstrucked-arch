@@ -585,6 +585,39 @@ resident instance (awesome's `run_once`, Hyprland's `exec-once`), and
 stays for the Hyprland dropdown terminal and the `nmtui` popup. The Ghostty
 config sets JetBrainsMono Nerd Font at size 10.
 
+### PhotoCraft MCP
+
+`scripts/.local/bin/photocraft-mcp` starts PhotoCraft's MCP server
+(`photocraft-cli mcp`, stdio) with one stable command. If the PhotoCraft app's
+control server is listening on `127.0.0.1:47800` and the token file exists, it
+bridges to the running app; otherwise it starts the headless engine and says so
+on stderr. The token is passed to `photocraft-cli` by file path only.
+
+The control server only runs when the app is launched with a control port. The
+token file is created on first use, so port and token stay stable:
+
+```bash
+photocraft --control 47800 \
+    --control-token-file ~/.config/photocraft/control.token \
+    --automation-read-root ~ --automation-write-root ~/Pictures
+```
+
+Setting `PHOTOCRAFT_CONTROL_PORT` and `PHOTOCRAFT_CONTROL_TOKEN_FILE` in the
+app's environment does the same. (The app's `instance.json` is its
+single-instance socket, not the control server.) Then register the wrapper:
+
+```bash
+claude mcp add --scope user photocraft -- ~/.local/bin/photocraft-mcp
+```
+
+Variables the wrapper reads:
+- `PHOTOCRAFT_CONTROL_PORT` (default `47800`)
+- `PHOTOCRAFT_CONTROL_TOKEN_FILE` (default `~/.config/photocraft/control.token`,
+  under `PHOTOCRAFT_CONFIG_DIR` or `XDG_CONFIG_HOME` when set)
+- `PHOTOCRAFT_MCP_READ_ROOT` (default `$HOME`) and `PHOTOCRAFT_MCP_WRITE_ROOT`
+  (default `$HOME/Pictures`, created if missing): file tools only work beneath
+  these roots.
+
 ### Yazi
 - `yazi/.config/yazi/` - `yazi.toml`, `keymap.toml`, `init.lua` and `package.toml`.
   Mod+e opens Yazi in the default terminal.

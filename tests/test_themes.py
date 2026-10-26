@@ -466,6 +466,12 @@ class ThemeTests(unittest.TestCase):
                                 reverse=True)
                 self.assertGreaterEqual((hi + 0.05) / (lo + 0.05), 4.5)
 
+    def test_tmux_colors_pin_theme_to_palette_variant(self):
+        for name, variant in (("kanagawa", "dark"), ("flexoki-light", "light")):
+            with self.subTest(palette=name):
+                rendered = self.render(self.themes / "palettes" / f"{name}.lua", "tmux-colors.conf.tpl")
+                self.assertIn(f"set -g theme '{variant}'\n", rendered)
+
     def render(self, palette, template):
         return subprocess.run(["lua", str(self.themes / "render.lua"), str(palette),
                                str(self.themes / "templates" / template)],

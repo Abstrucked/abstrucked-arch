@@ -1,0 +1,49 @@
+#!/bin/bash
+# Start PhotoCraft's MCP server (stdio) for an MCP client such as Claude Code.
+#
+# The bridge only exists when the GUI is launched with a control port, e.g.
+#   photocraft --control 47800 \
+#       --control-token-file ~/.config/photocraft/control.token \
+#       --automation-read-root ~ --automation-write-root ~/Pictures
+# (or with PHOTOCRAFT_CONTROL_PORT / PHOTOCRAFT_CONTROL_TOKEN_FILE set). The
+# token file is created on first use, so port and token stay stable across
+# launches. When that server is listening this wrapper bridges to it; otherwise
+# it falls back to the headless engine.
+#
+# Do not use instance.json: it is the GUI's single-instance socket (used to
+# hand files to an open window), not the control server, and bridging to it
+# fails with "connection closed by the app".
+#
+# stdout is the MCP JSON-RPC channel, so this script never writes to it. The
+# token file is passed by path only; its contents are never read here.
+set -euo pipefail
+
+declare -r config_dir=${PHOTOCRAFT_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/photocraft}
+declare -r port=${PHOTOCRAFT_CONTROL_PORT:-47800}
+declare -r token_file=${PHOTOCRAFT_CONTROL_TOKEN_FILE:-$config_dir/control.token}
+declare -r read_root=${PHOTOCRAFT_MCP_READ_ROOT:-$HOME}
+declare -r write_root=${PHOTOCRAFT_MCP_WRITE_ROOT:-$HOME/Pictures}
+
+# photocraft-cli errors when given a token flag and the env var together, so
+# it never inherits either.
+unset PHOTOCRAFT_CONTROL_TOKEN PHOTOCRAFT_CONTROL_TOKEN_FILE
+
+mkdir -p "$write_root"
+roots=(--automation-read-root "$read_root" --automation-write-root "$write_root")
+
+# Ask the kernel instead of connecting, so the app never sees a probe.
+listening() {
+    local line
+    line=$(ss -Hltn "sport = :$port" 2>/dev/null) || return 1
+    grep -q "127\.0\.0\.1:$port\b" <<<"$line"
+}
+
+if ! listening; then
+    echo "photocraft-mcp: no control server on 127.0.0.1:$port, starting the headless engine" >&2
+elif [[ ! -r $token_file ]]; then
+    echo "photocraft-mcp: token file $token_file is missing or unreadable, starting the headless engine" >&2
+else
+    exec photocraft-cli mcp --bridge "127.0.0.1:$port" \
+        --control-token-file "$token_file" "${roots[@]}" "$@"
+fi
+exec photocraft-cli mcp "${roots[@]}" "$@"
