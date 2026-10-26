@@ -87,5 +87,7 @@ picom/.config/autostart/*
 
 # `ya pkg install` writes plugins and flavors next to package.toml; they would
 # land here if ~/.config/yazi were ever a folded Stow link.
-yazi/.config/yazi/plugins/
+# zen.yazi is first-party and tracked; everything else there is installed.
+yazi/.config/yazi/plugins/*
+!yazi/.config/yazi/plugins/zen.yazi/
 yazi/.config/yazi/flavors/
