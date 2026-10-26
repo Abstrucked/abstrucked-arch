@@ -29,4 +29,4 @@ jobs:
       - name: Lint and validate syntax
         run: python3 -B scripts/check-syntax.py
       - name: Run isolated regression tests
-        run: python3 -B -m pytest tests -q -p no:cacheprovider
+        run: python3 -B -m pytest tests -q -p no:cacheprovider -rs
