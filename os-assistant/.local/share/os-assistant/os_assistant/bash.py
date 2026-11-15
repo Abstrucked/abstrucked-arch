@@ -436,13 +436,15 @@ def prepare(config, arguments: dict) -> tuple[dict, bool, tuple[str, ...], str]:
 
 
 def sandbox_argv(snapshot: str, command: CommandPlan, timeout: int = 5) -> tuple[str, ...]:
+    # Debian/Ubuntu keep the ELF loader in /usr/lib64 (Arch: usr/lib64 -> lib); fall back to usr/lib without it.
+    lib64 = "usr/lib64" if os.path.exists("/usr/lib64") else "usr/lib"
     return ("/usr/bin/prlimit", "--as=134217728", "--nofile=64", "--core=0",
             "--fsize=" + str(SNAPSHOT_BYTES), "--cpu=" + str(timeout), "--",
             "/usr/bin/bwrap", "--unshare-all", "--unshare-user", "--disable-userns", "--assert-userns-disabled",
             "--die-with-parent", "--new-session", "--cap-drop", "ALL", "--clearenv",
             "--setenv", "PATH", "/usr/bin", "--setenv", "LC_ALL", "C", "--setenv", "HOME", "/nonexistent",
             "--ro-bind", "/usr", "/usr", "--tmpfs", "/usr/local", "--remount-ro", "/usr/local",
-            "--symlink", "usr/bin", "/bin", "--symlink", "usr/lib", "/lib", "--symlink", "usr/lib", "/lib64",
+            "--symlink", "usr/bin", "/bin", "--symlink", "usr/lib", "/lib", "--symlink", lib64, "/lib64",
             "--proc", "/proc", "--dev", "/dev", "--size", str(SNAPSHOT_BYTES), "--tmpfs", "/tmp",
             "--ro-bind", snapshot, "/work", "--remount-ro", "/", "--chdir", str(PurePosixPath("/work") / command.cwd),
             *command.argv)
