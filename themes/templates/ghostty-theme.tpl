@@ -5,7 +5,7 @@ foreground = {{fg}}
 cursor-color = {{cursor}}
 cursor-text = {{bg}}
 selection-background = {{selection}}
-selection-foreground = {{bg}}
+selection-foreground = {{on_selection}}
 palette = 0={{ansi.normal.black}}
 palette = 1={{ansi.normal.red}}
 palette = 2={{ansi.normal.green}}

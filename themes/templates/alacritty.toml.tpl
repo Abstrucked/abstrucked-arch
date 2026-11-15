@@ -35,7 +35,7 @@ foreground = "{{bg}}"
 background = "{{muted}}"
 
 [colors.selection]
-text = "{{bg}}"
+text = "{{on_selection}}"
 background = "{{selection}}"
 
 [colors.normal]

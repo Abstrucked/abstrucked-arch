@@ -12,6 +12,7 @@ import unittest
 
 
 ROOT = Path(__file__).resolve().parents[1]
+ICON_ROLES = ("red", "orange", "yellow", "green", "cyan", "blue", "magenta", "fg", "fg_dim")
 AWESOME_RESTART = 'require("theme-session").restart()\n'
 
 # Test double for awesome-client: evaluates the chunk the way awful.remote
@@ -403,6 +404,65 @@ class ThemeTests(unittest.TestCase):
                 theme = tomllib.loads(rendered)
                 self.assertIn("rules", theme["filetype"])
                 self.assertIn(palette.stem, rendered.splitlines()[0])
+
+    def palettes(self):
+        return sorted((self.themes / "palettes").glob("[!_]*.lua"))
+
+    @staticmethod
+    def hex_pairs(table, path=""):
+        """Yield (path, fg, bg) for every nested table with hex fg and bg."""
+        if not isinstance(table, dict):
+            return
+        fg, bg = table.get("fg"), table.get("bg")
+        if all(isinstance(c, str) and re.fullmatch(r"#[0-9a-fA-F]{6}", c) for c in (fg, bg)):
+            yield path, fg, bg
+        for key, value in table.items():
+            yield from ThemeTests.hex_pairs(value, f"{path}.{key}" if path else key)
+
+    def test_yazi_text_is_readable_on_its_background_for_every_palette(self):
+        # marker_* are solid bars (fg == bg) and progress_normal is a gauge
+        # (fill on track); neither is text.
+        bars = {"mgr.marker_copied", "mgr.marker_cut", "mgr.marker_marked",
+                "mgr.marker_selected", "status.progress_normal"}
+        for palette in self.palettes():
+            theme = tomllib.loads(self.render(palette, "yazi-theme.toml.tpl"))
+            pairs = [pair for pair in self.hex_pairs(theme) if pair[0] not in bars]
+            self.assertTrue(pairs)
+            for path, fg, bg in pairs:
+                with self.subTest(palette=palette.stem, key=path):
+                    self.assertGreaterEqual(contrast(fg, bg), 4.5, f"{fg} on {bg}")
+
+    def test_terminal_selection_is_readable_for_every_palette(self):
+        for palette in self.palettes():
+            ghostty = dict(re.findall(r"^(selection-\w+) = (#\w{6})$",
+                                      self.render(palette, "ghostty-theme.tpl"), re.M))
+            alacritty = tomllib.loads(self.render(palette, "alacritty.toml.tpl"))["colors"]["selection"]
+            with self.subTest(palette=palette.stem, terminal="ghostty"):
+                self.assertGreaterEqual(contrast(ghostty["selection-foreground"],
+                                                 ghostty["selection-background"]), 4.5)
+            with self.subTest(palette=palette.stem, terminal="alacritty"):
+                self.assertGreaterEqual(contrast(alacritty["text"], alacritty["background"]), 4.5)
+
+    def test_yazi_icons_take_their_colours_from_the_palette(self):
+        template = (self.themes / "templates/yazi-theme.toml.tpl").read_text()
+        icon_block = template[template.index("# BEGIN yazi-icons"):]
+        self.assertNotRegex(icon_block, r"#[0-9a-fA-F]{6}", "preset hex left in the icon block")
+        for palette in self.palettes():
+            with self.subTest(palette=palette.stem):
+                rendered = self.render(palette, "yazi-theme.toml.tpl")
+                self.assertNotIn("{{", rendered)
+                icon = tomllib.loads(rendered)["icon"]
+                allowed = {self.role_color(palette, role) for role in ICON_ROLES}
+                rules = [rule for key in ("dirs", "files", "exts", "conds") for rule in icon[key]]
+                self.assertGreater(len(rules), 500)
+                for rule in rules:
+                    self.assertIn(rule["fg"], allowed)
+
+    def role_color(self, palette, role):
+        template = self.root / "role.tpl"
+        template.write_text("{{%s}}" % role)
+        return subprocess.run(["lua", str(self.themes / "render.lua"), str(palette), str(template)],
+                              capture_output=True, text=True, check=True).stdout.strip()
 
     def test_yazi_target_maps_to_the_user_theme(self):
         targets = (ROOT / "themes/targets.conf").read_text().splitlines()
